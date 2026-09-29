@@ -83,6 +83,17 @@ function placementEqual(a, b) {
     a.transform.scale === b.transform.scale;
 }
 
+function encodeDomainSegment(value) {
+  return encodeURIComponent(String(value));
+}
+
+function defaultLayerDomainId(placeId, layerId) {
+  const placeSegment = typeof placeId === "number"
+    ? `~n:${encodeDomainSegment(placeId)}`
+    : encodeDomainSegment(placeId);
+  return `${placeSegment}:${encodeDomainSegment(layerId)}`;
+}
+
 function typedIdKey(id) {
   return `${typeof id}:${String(id)}`;
 }
@@ -496,7 +507,7 @@ export class PlaceRegistry {
     const layerDomains = new Map();
     const suppliedLayerDomains = input.layerDomains ?? {};
     for (const layer of definition.layers) {
-      const domainId = suppliedLayerDomains[layer.id] ?? `${String(input.id)}:${layer.id}`;
+      const domainId = suppliedLayerDomains[layer.id] ?? defaultLayerDomainId(input.id, layer.id);
       assertStringId(domainId, `layerDomains.${layer.id}`);
       const existing = this.#domainBindings.get(domainId);
       if (existing) throw new Error(`domain ${domainId} is already bound to ${String(existing.instanceId)}:${existing.layerId}`);
