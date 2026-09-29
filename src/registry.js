@@ -1150,15 +1150,48 @@ export class PlaceRegistry {
         );
       }
 
+      const previousState = Object.fromEntries(
+        PORTAL_STATE_KEYS.map((key) => [key, dynamic[key]])
+      );
       for (const key of PORTAL_STATE_KEYS) {
         dynamic[key] = prospectiveState[key];
       }
 
       this.#reindexInstancePortals(instance, definition);
       const resolved = this.resolvePortal(instanceId, portalId);
-      this.#touchState({ travel: before.traversable !== resolved.traversable });
-      this.#bridge?.syncPortalState?.(instance, dynamic, resolved);
-      this.emit("portal-state-changed", { placeId: instanceId, portalId, state: cloneState(resolved) });
+
+      try {
+        this.#bridge?.syncPortalState?.(instance, dynamic, resolved);
+      } catch (error) {
+        for (const key of PORTAL_STATE_KEYS) {
+          dynamic[key] = previousState[key];
+        }
+        this.#reindexInstancePortals(instance, definition);
+
+        let rollbackError = null;
+        try {
+          this.#bridge?.syncPortalState?.(instance, dynamic, before);
+        } catch (restoreError) {
+          rollbackError = restoreError;
+        }
+
+        if (rollbackError) {
+          throw new AggregateError(
+            [error, rollbackError],
+            `failed to update dynamic portal ${portalId} and restore bridge state`
+          );
+        }
+        throw error;
+      }
+
+      this.#touchState({
+        travel: before.traversable !== resolved.traversable
+      });
+      this.emit("portal-state-changed", {
+        placeId: instanceId,
+        portalId,
+        state: cloneState(resolved)
+      });
       return resolved;
     }
 
@@ -1198,12 +1231,41 @@ export class PlaceRegistry {
       );
     }
 
+    const previousOverride = instance.getPortalOverride(portalId);
     instance.setPortalOverride(portalId, next);
     this.#reindexInstancePortals(instance, definition);
     const resolved = this.resolvePortal(instanceId, portalId);
-    this.#touchState({ travel: before.traversable !== resolved.traversable });
-    this.#bridge?.syncPortalState?.(instance, base, resolved);
-    this.emit("portal-state-changed", { placeId: instanceId, portalId, state: cloneState(resolved) });
+
+    try {
+      this.#bridge?.syncPortalState?.(instance, base, resolved);
+    } catch (error) {
+      instance.setPortalOverride(portalId, previousOverride);
+      this.#reindexInstancePortals(instance, definition);
+
+      let rollbackError = null;
+      try {
+        this.#bridge?.syncPortalState?.(instance, base, before);
+      } catch (restoreError) {
+        rollbackError = restoreError;
+      }
+
+      if (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `failed to update portal ${portalId} and restore bridge state`
+        );
+      }
+      throw error;
+    }
+
+    this.#touchState({
+      travel: before.traversable !== resolved.traversable
+    });
+    this.emit("portal-state-changed", {
+      placeId: instanceId,
+      portalId,
+      state: cloneState(resolved)
+    });
     return resolved;
   }
 
@@ -1302,22 +1364,71 @@ export class PlaceRegistry {
 
     instance.addDynamicPortal(portal);
     this.#reindexInstancePortals(instance, definition);
+    const resolved = this.resolvePortal(instanceId, portal.id);
+
+    try {
+      this.#bridge?.syncDynamicPortal?.(instance, portal, resolved);
+    } catch (error) {
+      let rollbackError = null;
+      try {
+        this.#bridge?.removeDynamicPortal?.(instance, resolved);
+      } catch (restoreError) {
+        rollbackError = restoreError;
+      }
+
+      instance.removeDynamicPortal(portal.id);
+      this.#reindexInstancePortals(instance, definition);
+
+      if (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `failed to add dynamic portal ${portal.id} and restore bridge state`
+        );
+      }
+      throw error;
+    }
+
     this.#touchState({ travel: true });
-    this.#bridge?.syncDynamicPortal?.(instance, portal, this.resolvePortal(instanceId, portal.id));
-    this.emit("portal-added", { placeId: instanceId, portalId: portal.id });
-    return this.resolvePortal(instanceId, portal.id);
+    this.emit("portal-added", {
+      placeId: instanceId,
+      portalId: portal.id
+    });
+    return resolved;
   }
 
   removeInstancePortal(instanceId, portalId) {
     const instance = this.#instances.get(instanceId);
     if (!instance || !instance.dynamicPortals.has(portalId)) return false;
     const resolved = this.resolvePortal(instanceId, portalId);
-    this.#bridge?.removeDynamicPortal?.(instance, resolved);
+    const dynamic = instance.dynamicPortals.get(portalId);
+
+    try {
+      this.#bridge?.removeDynamicPortal?.(instance, resolved);
+    } catch (error) {
+      let rollbackError = null;
+      try {
+        this.#bridge?.syncDynamicPortal?.(instance, dynamic, resolved);
+      } catch (restoreError) {
+        rollbackError = restoreError;
+      }
+
+      if (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `failed to remove dynamic portal ${portalId} and restore bridge state`
+        );
+      }
+      throw error;
+    }
+
     instance.removeDynamicPortal(portalId);
     const definition = this.#definitions.get(instance.definitionId);
     this.#reindexInstancePortals(instance, definition);
     this.#touchState({ travel: true });
-    this.emit("portal-removed", { placeId: instanceId, portalId });
+    this.emit("portal-removed", {
+      placeId: instanceId,
+      portalId
+    });
     return true;
   }
 
