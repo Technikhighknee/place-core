@@ -1024,6 +1024,13 @@ export class PlaceRegistry {
         layerId: endpoint.layerId ?? null
       };
     };
+    const transitionCost = spec.transitionCost ?? 0;
+    if (!Number.isFinite(transitionCost) || transitionCost < 0) {
+      throw new RangeError(
+        `dynamic portal ${spec.id} transitionCost must be a finite number >= 0`
+      );
+    }
+
     const portal = {
       id: spec.id,
       kind: spec.kind ?? "portal",
@@ -1031,7 +1038,7 @@ export class PlaceRegistry {
       a: normalizeResolved(spec.a, "portal.a"),
       b: normalizeResolved(spec.b, "portal.b"),
       bidirectional: spec.bidirectional !== false,
-      transitionCost: Number.isFinite(spec.transitionCost) ? Math.max(0, spec.transitionCost) : 0,
+      transitionCost,
       enabled: spec.enabled !== false,
       open: spec.open !== false,
       locked: spec.locked === true,
