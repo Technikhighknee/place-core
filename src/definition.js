@@ -11,6 +11,7 @@ import {
   canonicalStringify,
   cloneJson,
   deepFreeze,
+  normalizeStringList,
   sha256
 } from "./utils.js";
 
@@ -55,9 +56,20 @@ function normalizeNavigationSpec(spec, label) {
       id: road.id, from: road.from, to: road.to,
       shape: road.shape ? Object.freeze(road.shape.map(cloneVec2)) : undefined,
       width: road.width, surface: road.surface, bidirectional: road.bidirectional,
-      enabled: road.enabled, allowedProfiles: road.allowedProfiles ? Object.freeze([...road.allowedProfiles]) : road.allowedProfiles,
-      blockedProfiles: road.blockedProfiles ? Object.freeze([...road.blockedProfiles]) : undefined,
-      tags: road.tags ? Object.freeze([...road.tags]) : undefined
+      enabled: road.enabled,
+      allowedProfiles: normalizeStringList(
+        road.allowedProfiles,
+        `${label}.road(${road.id}).allowedProfiles`,
+        { allowNull: true }
+      ),
+      blockedProfiles: normalizeStringList(
+        road.blockedProfiles,
+        `${label}.road(${road.id}).blockedProfiles`
+      ),
+      tags: normalizeStringList(
+        road.tags,
+        `${label}.road(${road.id}).tags`
+      )
     });
   });
   uniqueById(roads, `${label}.road`);
@@ -88,7 +100,7 @@ function normalizeLayer(layer, definitionId) {
   return deepFreeze({
     id: layer.id,
     kind: layer.kind ?? "spatial-layer",
-    tags: [...new Set(layer.tags ?? [])],
+    tags: normalizeStringList(layer.tags, `layer(${layer.id}).tags`, { defaultValue: [] }),
     topologyId,
     navigation,
     metadata: cloneJson(layer.metadata ?? null)
@@ -104,11 +116,17 @@ function normalizeSpace(space, layersById) {
     id: space.id,
     layerId: space.layerId,
     kind: space.kind ?? "space",
-    tags: [...new Set(space.tags ?? [])],
+    tags: normalizeStringList(space.tags, `space(${space.id}).tags`, { defaultValue: [] }),
     geometry,
     parentSpaceId: space.parentSpaceId ?? null,
     defaultAnchorId: space.defaultAnchorId ?? null,
-    priority: Number.isFinite(space.priority) ? space.priority : 0,
+    priority: (() => {
+      const value = space.priority ?? 0;
+      if (!Number.isFinite(value)) {
+        throw new TypeError(`space(${space.id}).priority must be a finite number`);
+      }
+      return value;
+    })(),
     metadata: cloneJson(space.metadata ?? null)
   });
 }
@@ -126,7 +144,7 @@ function normalizeBoundary(boundary, layersById) {
     id: boundary.id,
     layerId: boundary.layerId,
     kind: boundary.kind ?? "wall",
-    tags: [...new Set(boundary.tags ?? [])],
+    tags: normalizeStringList(boundary.tags, `boundary(${boundary.id}).tags`, { defaultValue: [] }),
     a: cloneVec2(boundary.a),
     b: cloneVec2(boundary.b),
     enabled: boundary.enabled !== false,
@@ -198,7 +216,7 @@ function normalizePortal(portal, layersById, spacesById) {
   return deepFreeze({
     id: portal.id,
     kind: portal.kind ?? "portal",
-    tags: [...new Set(portal.tags ?? [])],
+    tags: normalizeStringList(portal.tags, `portal(${portal.id}).tags`, { defaultValue: [] }),
     a,
     b,
     bidirectional: portal.bidirectional !== false,
@@ -236,7 +254,7 @@ function normalizeAnchor(anchor, layersById, spacesById) {
     spaceId: anchor.spaceId ?? null,
     position,
     nodeId: anchor.nodeId ?? null,
-    tags: [...new Set(anchor.tags ?? [])],
+    tags: normalizeStringList(anchor.tags, `anchor(${anchor.id}).tags`, { defaultValue: [] }),
     kind: anchor.kind ?? "anchor",
     metadata: cloneJson(anchor.metadata ?? null)
   });
@@ -609,7 +627,7 @@ export function compilePlace(input, options = {}) {
   return new CompiledPlaceDefinition({
     id: blueprint.id,
     kind: blueprint.kind ?? "place",
-    tags: Object.freeze([...new Set(blueprint.tags ?? [])]),
+    tags: normalizeStringList(blueprint.tags, "place.tags", { defaultValue: [] }),
     revision: blueprint.revision ?? 1,
     contentHash,
     defaultAnchorId: blueprint.defaultAnchorId ?? null,
