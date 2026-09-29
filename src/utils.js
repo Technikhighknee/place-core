@@ -1,17 +1,10 @@
 import { createHash } from "node:crypto";
 
-const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
-
 export function assertId(id, label = "id") {
-  const validString =
-    typeof id === "string" &&
-    id.length > 0 &&
-    !CONTROL_CHARACTER.test(id);
+  const validString = typeof id === "string" && id.length > 0;
   const validNumber = typeof id === "number" && Number.isFinite(id);
   if (!validString && !validNumber) {
-    throw new TypeError(
-      `${label} must be a non-empty string or finite number; string IDs cannot contain control characters`
-    );
+    throw new TypeError(`${label} must be a non-empty string or finite number`);
   }
   return id;
 }
@@ -20,12 +13,17 @@ export function assertStringId(id, label = "id") {
   if (typeof id !== "string" || id.length === 0) {
     throw new TypeError(`${label} must be a non-empty string`);
   }
-  if (CONTROL_CHARACTER.test(id)) {
-    throw new TypeError(
-      `${label} must be a non-empty string without control characters`
-    );
-  }
   return id;
+}
+
+export function tupleKey(...parts) {
+  let key = "";
+  for (const part of parts) {
+    const type = typeof part;
+    const value = String(part);
+    key += `${type.length}:${type}${value.length}:${value}`;
+  }
+  return key;
 }
 
 function isPlainObject(value) {

@@ -2,7 +2,8 @@ import { squaredDistance } from "./geometry.js";
 import { isPortalTraversable } from "./registry.js";
 import {
   cloneJson,
-  deepFreeze
+  deepFreeze,
+  tupleKey
 } from "./utils.js";
 
 import {
@@ -232,7 +233,11 @@ function localRoute(bridge, mobility, from, destination, options, cache, cachePr
   }
   if (destination.nodeId == null) return null;
 
-  const key = `${cachePrefix}\u0000${destination.domainId}\u0000${destination.nodeId}`;
+  const key = tupleKey(
+    cachePrefix,
+    destination.domainId,
+    destination.nodeId
+  );
   if (cache.has(key)) return cache.get(key);
 
   const plan = bridge.planLocalRoute({
@@ -403,11 +408,13 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
 
 
 function domainPathKey(domains) {
-  return domains.join("\u0000");
+  return tupleKey(...domains);
 }
 
 function exclusionSetKey(excludedPairs) {
-  return [...excludedPairs].sort().join("\u0001");
+  return tupleKey(
+    ...[...excludedPairs].sort()
+  );
 }
 
 function shortestDomainPathCandidates(
@@ -488,7 +495,10 @@ function shortestDomainPathCandidates(
 }
 
 function anchorTargetKey(anchor) {
-  return `${typeof anchor.placeId}:${String(anchor.placeId)}\u0000${anchor.id}`;
+  return tupleKey(
+    travelTargetIdKey(anchor.placeId),
+    anchor.id
+  );
 }
 
 function planNearestTaggedAnchor(registry, bridge, entity, target, options = {}) {

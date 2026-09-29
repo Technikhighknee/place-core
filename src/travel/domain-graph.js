@@ -1,5 +1,8 @@
 import { isPortalTraversable } from "../registry.js";
-import { assertStringId } from "../utils.js";
+import {
+  assertStringId,
+  tupleKey
+} from "../utils.js";
 import { normalizeDomainPathOptions } from "./input.js";
 
 const EMPTY_SET = new Set();
@@ -49,11 +52,14 @@ function compareQueue(a, b) {
 }
 
 export function pairKey(a, b) {
-  return `${a}\u0000${b}`;
+  return tupleKey(a, b);
 }
 
 export function transitionKey(edge) {
-  return `${edge.portal.key}\u0000${edge.side}`;
+  return tupleKey(
+    edge.portal.key,
+    edge.side
+  );
 }
 
 export function transitionsFrom(registry, domainId, options = {}) {

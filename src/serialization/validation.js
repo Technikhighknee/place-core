@@ -5,7 +5,8 @@ import {
   canonicalStringify,
   cloneJson,
   normalizeBoolean,
-  normalizeStringList
+  normalizeStringList,
+  tupleKey
 } from "../utils.js";
 import {
   validatePersistedTravelOptions,
@@ -574,8 +575,10 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         );
       }
 
-      const membershipKey =
-        `${idKey(membership.parentPlaceId)}\u0000${membership.kind}`;
+      const membershipKey = tupleKey(
+        idKey(membership.parentPlaceId),
+        membership.kind
+      );
       if (membershipKeys.has(membershipKey)) {
         throw new Error(
           `instance ${String(item.id)} has duplicate semantic membership ${membership.kind} -> ${String(membership.parentPlaceId)}`

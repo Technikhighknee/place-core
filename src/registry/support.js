@@ -4,7 +4,8 @@ import {
   assertStringId,
   canonicalStringify,
   cloneJson,
-  deepFreeze
+  deepFreeze,
+  tupleKey
 } from "../utils.js";
 
 export const PORTAL_STATE_KEYS = ["enabled", "open", "locked", "blocked", "destroyed"];
@@ -202,7 +203,10 @@ export function typedIdKey(id) {
 }
 
 export function membershipKey(parentPlaceId, kind) {
-  return `${typedIdKey(parentPlaceId)}\u0000${kind}`;
+  return tupleKey(
+    typedIdKey(parentPlaceId),
+    kind
+  );
 }
 
 export function normalizeMembership(value, label = "membership") {
@@ -235,7 +239,10 @@ export function normalizeMembership(value, label = "membership") {
 }
 
 export function makeSpaceKey(instanceId, spaceId) {
-  return `${typedIdKey(instanceId)}\u0000${spaceId}`;
+  return tupleKey(
+    typedIdKey(instanceId),
+    spaceId
+  );
 }
 
 export function cloneState(state) {

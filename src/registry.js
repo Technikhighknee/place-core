@@ -17,7 +17,8 @@ import {
   cloneJson,
   deepFreeze,
   normalizeBoolean,
-  normalizeStringList
+  normalizeStringList,
+  tupleKey
 } from "./utils.js";
 import { PlaceInstance } from "./registry/place-instance.js";
 import { OccupancyIndex } from "./registry/occupancy-index.js";
@@ -2098,7 +2099,7 @@ export class PlaceRegistry {
         if (!this.#portalsByDomain.get(domainId)?.has(key)) {
           throw new Error(`portal record ${key} missing domain adjacency`);
         }
-        const endpointKey = `${key}\u0000${side}`;
+        const endpointKey = tupleKey(key, side);
         const endpointRecord = this.#portalEndpointRecords.get(endpointKey);
         if (!endpointRecord ||
             endpointRecord.portalKey !== key ||
@@ -2180,7 +2181,12 @@ export class PlaceRegistry {
     this.#indexedExteriorDomains.delete(instance.id);
   }
 
-  #portalKey(instanceId, portalId) { return `${typedIdKey(instanceId)}\u0000${portalId}`; }
+  #portalKey(instanceId, portalId) {
+    return tupleKey(
+      typedIdKey(instanceId),
+      portalId
+    );
+  }
 
   #removeInstancePortals(instanceId) {
     const keys = this.#instancePortalKeys.get(instanceId);
@@ -2208,7 +2214,7 @@ export class PlaceRegistry {
         set?.delete(key);
         if (set?.size === 0) this.#portalsByDomain.delete(domainId);
 
-        const endpointKey = `${key}\u0000${side}`;
+        const endpointKey = tupleKey(key, side);
         const endpointIndex = this.#portalEndpointIndexes.get(domainId);
         endpointIndex?.delete(endpointKey);
         if (endpointIndex?.size === 0) {
@@ -2260,7 +2266,7 @@ export class PlaceRegistry {
       }
 
       for (const [side, endpoint] of [["a", record.a], ["b", record.b]]) {
-        const endpointKey = `${key}\u0000${side}`;
+        const endpointKey = tupleKey(key, side);
         this.#portalEndpointRecords.set(endpointKey, {
           portalKey: key,
           side,

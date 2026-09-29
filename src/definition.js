@@ -13,7 +13,8 @@ import {
   deepFreeze,
   normalizeBoolean,
   normalizeStringList,
-  sha256
+  sha256,
+  tupleKey
 } from "./utils.js";
 
 const DEFAULT_SPACE_INDEX_CELL_SIZE = 8;
@@ -800,7 +801,10 @@ export function compilePlace(input, options = {}) {
             (connectsForward && road.bidirectional);
         }
 
-        const ownerKey = `${binding.layerId}\u0000${binding.roadId}`;
+        const ownerKey = tupleKey(
+          binding.layerId,
+          binding.roadId
+        );
         const owner = sameDomainPortalRoadOwners.get(ownerKey);
         if (owner != null && owner !== portal.id) {
           throw new Error(
