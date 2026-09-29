@@ -363,14 +363,17 @@ export function compilePlace(input, options = {}) {
   const portalsById = new Map(portals.map((x) => [x.id, x]));
 
   const navigationNodeMaps = new Map();
-  const navigationRoadSets = new Map();
+  const navigationRoadMaps = new Map();
   for (const layer of layers) {
     if (!layer.navigation) continue;
     navigationNodeMaps.set(
       layer.id,
       new Map(layer.navigation.nodes.map((node) => [node.id, node]))
     );
-    navigationRoadSets.set(layer.id, new Set(layer.navigation.roads.map((road) => road.id)));
+    navigationRoadMaps.set(
+      layer.id,
+      new Map(layer.navigation.roads.map((road) => [road.id, road]))
+    );
   }
 
   const assertNodePosition = (kind, id, layerId, nodeId, position) => {
@@ -411,14 +414,46 @@ export function compilePlace(input, options = {}) {
       );
     }
     for (const binding of portal.roadBindings) {
-      const roadIds = navigationRoadSets.get(binding.layerId);
-      if (roadIds && !roadIds.has(binding.roadId)) throw new Error(`portal ${portal.id} references unknown navigation road ${binding.roadId}`);
+      const roads = navigationRoadMaps.get(binding.layerId);
+      if (roads && !roads.has(binding.roadId)) {
+        throw new Error(
+          `portal ${portal.id} references unknown navigation road ${binding.roadId}`
+        );
+      }
+    }
+
+    if (
+      portal.a.kind === "local" &&
+      portal.b.kind === "local" &&
+      portal.a.layerId === portal.b.layerId &&
+      portal.a.nodeId != null &&
+      portal.b.nodeId != null
+    ) {
+      for (const binding of portal.roadBindings) {
+        if (binding.layerId !== portal.a.layerId) continue;
+        const road = navigationRoadMaps
+          .get(binding.layerId)
+          ?.get(binding.roadId);
+        if (!road) continue;
+        const connectsEndpoints =
+          (road.from === portal.a.nodeId && road.to === portal.b.nodeId) ||
+          (road.from === portal.b.nodeId && road.to === portal.a.nodeId);
+        if (!connectsEndpoints) {
+          throw new Error(
+            `portal ${portal.id} road binding ${binding.roadId} does not connect its endpoint nodes`
+          );
+        }
+      }
     }
   }
   for (const boundary of boundaries) {
-    const roadIds = navigationRoadSets.get(boundary.layerId);
+    const roads = navigationRoadMaps.get(boundary.layerId);
     for (const binding of boundary.roadBindings) {
-      if (roadIds && !roadIds.has(binding.roadId)) throw new Error(`boundary ${boundary.id} references unknown navigation road ${binding.roadId}`);
+      if (roads && !roads.has(binding.roadId)) {
+        throw new Error(
+          `boundary ${boundary.id} references unknown navigation road ${binding.roadId}`
+        );
+      }
     }
   }
 
