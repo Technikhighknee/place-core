@@ -243,7 +243,21 @@ function neighborDomains(edges, direction) {
   return [...set].sort();
 }
 
-export function findDomainPortalPath(registry, startDomainId, targetDomainId, options = {}) {
+export function findDomainPortalPath(
+  registry,
+  startDomainId,
+  targetDomainId,
+  options = {}
+) {
+  assertStringId(startDomainId, "startDomainId");
+  assertStringId(targetDomainId, "targetDomainId");
+
+  const pathOptions =
+    options.excludedPairs instanceof Set ||
+    options.excludedPortalKeys instanceof Set
+      ? options
+      : normalizeDomainPathOptions(options);
+
   if (startDomainId === targetDomainId) return [];
 
   const forwardVisited = new Map([[startDomainId, null]]);
@@ -261,7 +275,7 @@ export function findDomainPortalPath(registry, startDomainId, targetDomainId, op
     if (expandForward) {
       const next = new Set();
       for (const domainId of [...forwardFrontier].sort()) {
-        const neighbors = neighborDomains(transitionsFrom(registry, domainId, options), "out");
+        const neighbors = neighborDomains(transitionsFrom(registry, domainId, pathOptions), "out");
         for (const neighbor of neighbors) {
           if (forwardVisited.has(neighbor)) continue;
           forwardVisited.set(neighbor, domainId);
@@ -278,7 +292,7 @@ export function findDomainPortalPath(registry, startDomainId, targetDomainId, op
     } else {
       const next = new Set();
       for (const domainId of [...backwardFrontier].sort()) {
-        const predecessors = neighborDomains(transitionsInto(registry, domainId, options), "in");
+        const predecessors = neighborDomains(transitionsInto(registry, domainId, pathOptions), "in");
         for (const predecessor of predecessors) {
           if (backwardVisited.has(predecessor)) continue;
           backwardVisited.set(predecessor, domainId);
@@ -318,7 +332,7 @@ export function findDomainPortalPath(registry, startDomainId, targetDomainId, op
   const domains = [...prefix, ...suffix];
   const edges = [];
   for (let i = 0; i < domains.length - 1; i += 1) {
-    const candidates = transitionsFrom(registry, domains[i], options)
+    const candidates = transitionsFrom(registry, domains[i], pathOptions)
       .filter((edge) => edge.to.domainId === domains[i + 1]);
     if (!candidates.length) throw new Error("domain path references missing portal transition");
     edges.push(candidates[0]);
@@ -1098,6 +1112,61 @@ function normalizePortalEntryTolerance(value) {
   return tolerance;
 }
 
+function normalizeStringIterable(value, label) {
+  if (value == null) return Object.freeze([]);
+  if (typeof value === "string" ||
+      typeof value?.[Symbol.iterator] !== "function") {
+    throw new TypeError(
+      `${label} must be an iterable of non-empty strings`
+    );
+  }
+
+  const result = [];
+  const seen = new Set();
+  let index = 0;
+  for (const item of value) {
+    assertStringId(item, `${label}[${index}]`);
+    if (!seen.has(item)) {
+      seen.add(item);
+      result.push(item);
+    }
+    index += 1;
+  }
+  return Object.freeze(result);
+}
+
+function assertTravelOptionKeys(options, allowed, label) {
+  assertPlainObject(options, label);
+  const allowedSet = new Set(allowed);
+  for (const key of Object.keys(options)) {
+    if (!allowedSet.has(key)) {
+      throw new Error(`${label} contains unknown field ${key}`);
+    }
+  }
+}
+
+function normalizeDomainPathOptions(options = {}) {
+  assertTravelOptionKeys(
+    options,
+    ["excludedPortalKeys", "excludedDomainPairs"],
+    "domain path options"
+  );
+  return {
+    excludedPortalKeys: new Set(
+      normalizeStringIterable(
+        options.excludedPortalKeys,
+        "excludedPortalKeys"
+      )
+    ),
+    excludedPairs: new Set(
+      normalizeStringIterable(
+        options.excludedDomainPairs,
+        "excludedDomainPairs"
+      )
+    )
+  };
+}
+
 function normalizePositiveInteger(value, label, defaultValue) {
   const normalized = value ?? defaultValue;
   if (!Number.isInteger(normalized) || normalized < 1) {
@@ -1124,8 +1193,46 @@ function normalizeDeltaSeconds(value, defaultValue = 0) {
 }
 
 function normalizePlanningOptions(options = {}) {
-  return {
+  assertTravelOptionKeys(
+    options,
+    [
+      "bridge",
+      "journeyOptions",
+      "excludedPortalKeys",
+      "excludedDomainPairs",
+      "maxDomainPathAttempts",
+      "maxShortestDomainPaths",
+      "allowPartialShortestPathSearch",
+      "maxConcreteStatesPerLayer",
+      "maxNearestTargetExpansions",
+      "maxCost",
+      "anchorPredicate",
+      "worldChangePolicy",
+      "portalEntryTolerance",
+      "deltaSeconds"
+    ],
+    "travel options"
+  );
+
+  if (options.bridge != null &&
+      typeof options.bridge !== "object") {
+    throw new TypeError("travel options.bridge must be an object");
+  }
+  if (options.anchorPredicate != null &&
+      typeof options.anchorPredicate !== "function") {
+    throw new TypeError("anchorPredicate must be a function");
+  }
+
+  const normalized = {
     ...options,
+    excludedPortalKeys: normalizeStringIterable(
+      options.excludedPortalKeys,
+      "excludedPortalKeys"
+    ),
+    excludedDomainPairs: normalizeStringIterable(
+      options.excludedDomainPairs,
+      "excludedDomainPairs"
+    ),
     maxDomainPathAttempts: normalizePositiveInteger(
       options.maxDomainPathAttempts,
       "maxDomainPathAttempts",
@@ -1151,8 +1258,22 @@ function normalizePlanningOptions(options = {}) {
       "maxNearestTargetExpansions",
       250_000
     ),
-    maxCost: normalizeMaxCost(options.maxCost)
+    maxCost: normalizeMaxCost(options.maxCost),
+    worldChangePolicy: normalizeWorldChangePolicy(
+      options.worldChangePolicy
+    ),
+    portalEntryTolerance: normalizePortalEntryTolerance(
+      options.portalEntryTolerance
+    )
   };
+
+  if (options.deltaSeconds !== undefined) {
+    normalized.deltaSeconds = normalizeDeltaSeconds(
+      options.deltaSeconds
+    );
+  }
+
+  return normalized;
 }
 
 function captureTravelOptions(options = {}) {
@@ -1167,15 +1288,11 @@ function captureTravelOptions(options = {}) {
   if (normalized.journeyOptions !== undefined) {
     captured.journeyOptions = cloneJson(normalized.journeyOptions);
   }
-  if (normalized.excludedPortalKeys !== undefined) {
-    captured.excludedPortalKeys = Object.freeze(
-      [...normalized.excludedPortalKeys]
-    );
+  if (options.excludedPortalKeys !== undefined) {
+    captured.excludedPortalKeys = normalized.excludedPortalKeys;
   }
-  if (normalized.excludedDomainPairs !== undefined) {
-    captured.excludedDomainPairs = Object.freeze(
-      [...normalized.excludedDomainPairs]
-    );
+  if (options.excludedDomainPairs !== undefined) {
+    captured.excludedDomainPairs = normalized.excludedDomainPairs;
   }
 
   for (const key of [
@@ -1193,9 +1310,6 @@ function captureTravelOptions(options = {}) {
   }
 
   if (normalized.anchorPredicate !== undefined) {
-    if (typeof normalized.anchorPredicate !== "function") {
-      throw new TypeError("anchorPredicate must be a function");
-    }
     captured.anchorPredicate = normalized.anchorPredicate;
   }
 
