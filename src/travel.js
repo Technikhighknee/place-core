@@ -11,6 +11,8 @@ import {
   effectiveTravelOptions,
   normalizeDomainPathOptions,
   normalizeEffectiveStepOptions,
+  normalizeDeltaSeconds,
+  normalizePortalEntryTolerance,
   normalizePlanningOptions,
   normalizeStopOptions,
   validatePersistedTravelOptions,

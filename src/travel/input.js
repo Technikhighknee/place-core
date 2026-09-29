@@ -133,7 +133,7 @@ function normalizeWorldChangePolicy(value) {
   return policy;
 }
 
-function normalizePortalEntryTolerance(value) {
+export function normalizePortalEntryTolerance(value) {
   const tolerance = value ?? 0.25;
   if (!Number.isFinite(tolerance) || tolerance < 0) {
     throw new RangeError("portalEntryTolerance must be a finite number >= 0");
@@ -213,7 +213,7 @@ function normalizeMaxCost(value) {
   return value;
 }
 
-function normalizeDeltaSeconds(value, defaultValue = 0) {
+export function normalizeDeltaSeconds(value, defaultValue = 0) {
   const normalized = value ?? defaultValue;
   if (!Number.isFinite(normalized) || normalized < 0) {
     throw new RangeError("deltaSeconds must be a finite number >= 0");
