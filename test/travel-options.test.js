@@ -694,3 +694,20 @@ test("delta-only step overrides preserve the travel's retained world-change poli
     "no-route-after-world-change"
   );
 });
+
+
+test("public domain path API cannot bypass validation with internal option names", () => {
+  const { places, place } = twoLayerRuntime();
+  const a = place.layerDomains.get("a");
+  const b = place.layerDomains.get("b");
+
+  assert.throws(
+    () => findDomainPortalPath(
+      places,
+      a,
+      b,
+      { excludedPairs: new Set() }
+    ),
+    /domain path options contains unknown field excludedPairs/
+  );
+});
