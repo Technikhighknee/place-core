@@ -195,3 +195,118 @@ test("placement rejects unknown containment modes", () => {
     }
   }), /placement\.containment/);
 });
+
+
+test("nested placements follow moving parent frames", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(roomDefinition());
+
+  places.createPlace({
+    id: "ship",
+    definitionId: "room-box",
+    placement: {
+      domainId: "harbor",
+      transform: { x: 100, y: 50, rotation: Math.PI / 2, scale: 2 },
+      containment: "footprint"
+    }
+  });
+
+  places.createPlace({
+    id: "deck-stall",
+    definitionId: "room-box",
+    placement: {
+      parentPlaceId: "ship",
+      transform: { x: 10, y: 0, scale: 0.5 },
+      containment: "footprint"
+    }
+  });
+
+  const resolved = places.getResolvedPlacement("deck-stall");
+  assert.equal(resolved.domainId, "harbor");
+  assert.ok(Math.abs(resolved.transform.x - 100) < 1e-9);
+  assert.ok(Math.abs(resolved.transform.y - 70) < 1e-9);
+  assert.ok(Math.abs(resolved.transform.rotation - Math.PI / 2) < 1e-9);
+  assert.ok(Math.abs(resolved.transform.scale - 1) < 1e-9);
+
+  assert.ok(places.placesAt("harbor", { x: 95, y: 75 }).some((place) => place.id === "deck-stall"));
+
+  places.setPlacement("ship", {
+    domainId: "harbor",
+    transform: { x: 200, y: 100, rotation: 0, scale: 1 },
+    containment: "footprint"
+  });
+
+  assert.equal(places.placesAt("harbor", { x: 95, y: 75 }).some((place) => place.id === "deck-stall"), false);
+  assert.ok(places.placesAt("harbor", { x: 212.5, y: 2.5 + 100 }).some((place) => place.id === "deck-stall"));
+});
+
+test("placement DAG rejects cycles independently of semantic hierarchy", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(roomDefinition());
+
+  places.createPlace({
+    id: "a",
+    definitionId: "room-box",
+    placement: {
+      domainId: "world",
+      transform: { x: 0, y: 0 },
+      containment: "footprint"
+    }
+  });
+  places.createPlace({
+    id: "b",
+    definitionId: "room-box",
+    placement: {
+      parentPlaceId: "a",
+      transform: { x: 10, y: 0 },
+      containment: "footprint"
+    }
+  });
+
+  assert.throws(() => places.setPlacement("a", {
+    parentPlaceId: "b",
+    transform: { x: 0, y: 0 },
+    containment: "footprint"
+  }), /placement cycle/);
+
+  assert.equal(places.getResolvedPlacement("a").domainId, "world");
+  places.assertInternalConsistency();
+});
+
+test("nested placement frames survive snapshot restore", async () => {
+  const {
+    serializePlaceCore,
+    deserializePlaceCore,
+    computePlaceCoreStateHash
+  } = await import("../src/index.js");
+
+  const places = new PlaceRegistry();
+  places.registerDefinition(roomDefinition());
+  places.createPlace({
+    id: "ship",
+    definitionId: "room-box",
+    placement: {
+      domainId: "harbor",
+      transform: { x: 50, y: 20, rotation: 0.25, scale: 1.5 },
+      containment: "footprint"
+    }
+  });
+  places.createPlace({
+    id: "cargo-shelter",
+    definitionId: "room-box",
+    placement: {
+      parentPlaceId: "ship",
+      transform: { x: 4, y: 3, rotation: 0.5, scale: 0.75 },
+      containment: "footprint"
+    }
+  });
+
+  const beforePlacement = places.getResolvedPlacement("cargo-shelter");
+  const beforeHash = computePlaceCoreStateHash(places);
+  const restored = deserializePlaceCore(JSON.parse(JSON.stringify(serializePlaceCore(places))));
+  const afterPlacement = restored.getResolvedPlacement("cargo-shelter");
+
+  assert.deepEqual(afterPlacement, beforePlacement);
+  assert.equal(computePlaceCoreStateHash(restored), beforeHash);
+  restored.assertInternalConsistency();
+});
