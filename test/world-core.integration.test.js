@@ -1,12 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  compilePlace,
-  PlaceRegistry,
-  WorldCoreBridge,
-  startTravel,
-  stepPlaceSimulation
-} from "../src/index.js";
+
 import {
   World,
   Navigation,
@@ -17,98 +11,147 @@ import {
   stepSimulation
 } from "world-core";
 
-test("real world-core moves Hans through house, street, tavern and cellar", () => {
-  const world = new World();
+import {
+  PlaceRegistry,
+  WorldCoreBridge,
+  planTravel,
+  startTravel,
+  stepPlaceSimulation
+} from "../src/index.js";
+import { tavernBlueprint } from "./fixtures.js";
+
+function buildIntegratedWorld() {
+  const world = new World({ domains: [{ id: "street" }] });
   const navigation = new NavigationRegistry();
 
   const street = new Navigation();
-  street.addNode({ id: "home-exit", x: 10, y: 0 });
-  street.addNode({ id: "inn-entry", x: 50, y: 0 });
-  street.addRoad({ id: "street", from: "home-exit", to: "inn-entry", width: 4 });
+  street.addNode({ id: "street-home", x: 0, y: 0 });
+  street.addNode({ id: "street-goose", x: 40, y: 0 });
+  street.addRoad({
+    id: "street-main",
+    from: "street-home",
+    to: "street-goose",
+    width: 5,
+    surface: "road"
+  });
   navigation.registerTopology("street", street);
-  navigation.setDefaultTopology("street");
+  navigation.bindDomain("street", "street");
 
-  const bridge = new WorldCoreBridge({ world, navigation, startJourney, stopJourney, Navigation });
-  const places = new PlaceRegistry({ bridge, captureEvents: true });
-
-  const house = compilePlace({
-    id: "house",
-    defaultAnchorId: "bed",
-    layers: [{
-      id: "ground",
-      navigation: {
-        nodes: [{ id: "front", x: 0, y: 5 }, { id: "bed", x: 8, y: 5 }],
-        roads: [{ id: "hall", from: "front", to: "bed", width: 2 }]
-      }
-    }],
-    spaces: [{ id: "room", layerId: "ground", geometry: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 10 }, defaultAnchorId: "bed" }],
-    portals: [{
-      id: "front",
-      a: { kind: "external", slot: "street" },
-      b: { kind: "local", layerId: "ground", spaceId: "room", position: { x: 0, y: 5 }, nodeId: "front" }
-    }],
-    anchors: [{ id: "bed", layerId: "ground", spaceId: "room", position: { x: 8, y: 5 }, nodeId: "bed" }]
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    Navigation,
+    startJourney,
+    stopJourney
   });
 
-  const tavern = compilePlace({
-    id: "tavern",
-    defaultAnchorId: "barrel",
-    layers: [
-      { id: "ground", navigation: {
-        nodes: [{ id: "front", x: 0, y: 10 }, { id: "stairs", x: 15, y: 10 }],
-        roads: [{ id: "taproom", from: "front", to: "stairs", width: 3 }]
-      }},
-      { id: "cellar", navigation: {
-        nodes: [{ id: "stairs", x: 5, y: 5 }, { id: "barrel", x: 15, y: 5 }],
-        roads: [{ id: "cellar", from: "stairs", to: "barrel", width: 2 }]
-      }}
-    ],
-    spaces: [
-      { id: "taproom", layerId: "ground", geometry: { type: "aabb", minX: 0, minY: 0, maxX: 20, maxY: 20 } },
-      { id: "cellar", layerId: "cellar", geometry: { type: "aabb", minX: 0, minY: 0, maxX: 20, maxY: 10 }, defaultAnchorId: "barrel" }
-    ],
-    portals: [
-      {
-        id: "front",
-        a: { kind: "external", slot: "street" },
-        b: { kind: "local", layerId: "ground", spaceId: "taproom", position: { x: 0, y: 10 }, nodeId: "front" }
-      },
-      {
-        id: "stairs",
-        a: { kind: "local", layerId: "ground", spaceId: "taproom", position: { x: 15, y: 10 }, nodeId: "stairs" },
-        b: { kind: "local", layerId: "cellar", spaceId: "cellar", position: { x: 5, y: 5 }, nodeId: "stairs" }
+  const places = new PlaceRegistry();
+  places.attachWorldCoreBridge(bridge);
+  places.registerDefinition(tavernBlueprint());
+
+  const home = places.createPlace({
+    id: "home",
+    definitionId: "tavern",
+    externalBindings: {
+      street: {
+        domainId: "street",
+        position: { x: 0, y: 0 },
+        nodeId: "street-home"
       }
-    ],
-    anchors: [{ id: "barrel", layerId: "cellar", spaceId: "cellar", position: { x: 15, y: 5 }, nodeId: "barrel" }]
+    }
   });
 
-  places.registerDefinition(house);
-  places.registerDefinition(tavern);
-  places.createPlace({ id: "home", definitionId: "house", attachments: {
-    street: { domainId: "default", position: { x: 10, y: 0 }, nodeId: "home-exit" }
-  }});
-  places.createPlace({ id: "inn", definitionId: "tavern", attachments: {
-    street: { domainId: "default", position: { x: 50, y: 0 }, nodeId: "inn-entry" }
-  }});
+  const goose = places.createPlace({
+    id: "golden-goose",
+    definitionId: "tavern",
+    externalBindings: {
+      street: {
+        domainId: "street",
+        position: { x: 40, y: 0 },
+        nodeId: "street-goose"
+      }
+    }
+  });
 
   world.addEntity({
     id: "hans",
-    domainId: "home:ground",
-    position: { x: 8, y: 5 },
+    domainId: home.layerDomains.get("ground"),
+    position: { x: 5, y: 0 },
+    body: { radius: 0.3 },
     mobility: mobilityProfile("pedestrian")
   });
-  places.syncEntityOccupancy(world.getEntity("hans"));
-  assert.ok(startTravel(places, "hans", { placeId: "inn", anchorId: "barrel" }));
+  places.updateEntityOccupancy(world.getEntity("hans"));
 
-  for (let i = 0; i < 2_000 && places.activeTravels.has("hans"); i += 1) {
-    stepSimulation(world, navigation, 0.25);
-    stepPlaceSimulation(places);
+  return { world, navigation, bridge, places, home, goose };
+}
+
+test("real world-core executes cross-domain travel through shared interiors", () => {
+  const { world, navigation, bridge, places, goose } = buildIntegratedWorld();
+
+  assert.equal(navigation.topologies.size, 3);
+  assert.equal(navigation.domainBindings.size, 5);
+  assert.equal(places.definitions.size, 1);
+  assert.equal(places.instances.size, 2);
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans",
+    { placeId: "golden-goose", anchorId: "barrel" }
+  );
+
+  assert.ok(plan);
+  assert.deepEqual(
+    plan.legs.map((leg) => leg.type),
+    ["journey", "portal", "journey", "portal", "journey", "portal", "journey"]
+  );
+
+  const state = startTravel(
+    places,
+    bridge,
+    "hans",
+    { placeId: "golden-goose", anchorId: "barrel" }
+  );
+  assert.ok(state);
+
+  let ticks = 0;
+  while (places.activeTravels?.has("hans") && ticks < 300) {
+    stepSimulation(world, navigation, 1);
+    stepPlaceSimulation(places, bridge, 1);
+    ticks += 1;
   }
 
+  assert.ok(ticks < 300, "travel should complete");
   const hans = world.getEntity("hans");
+  assert.equal(hans.domainId, goose.layerDomains.get("cellar"));
+  assert.ok(Math.abs(hans.position.x - 6) < 1e-6);
+  assert.ok(Math.abs(hans.position.y) < 1e-6);
+
+  const context = places.locateEntity(hans);
+  assert.equal(context.placeId, "golden-goose");
+  assert.equal(context.deepestSpace.id, "cellar-room");
+});
+
+test("locked portal invalidates an active plan and deterministic replan fails cleanly", () => {
+  const { world, navigation, bridge, places } = buildIntegratedWorld();
+
+  const state = startTravel(
+    places,
+    bridge,
+    "hans",
+    { placeId: "golden-goose", anchorId: "barrel" }
+  );
+  assert.ok(state);
+
+  places.setPortalState("golden-goose", "cellar-stairs", { locked: true });
+
+  stepSimulation(world, navigation, 1);
+  stepPlaceSimulation(places, bridge, 1);
+
   assert.equal(places.activeTravels.has("hans"), false);
-  assert.equal(hans.domainId, "inn:cellar");
-  assert.ok(Math.hypot(hans.position.x - 15, hans.position.y - 5) < 0.01);
-  assert.equal(places.getEntityLocation("hans").spaces.at(-1).spaceId, "cellar");
-  assert.ok(places.drainEvents().some((event) => event.type === "travel-complete"));
+  const events = places.drainEvents();
+  assert.ok(events.some((event) =>
+    event.type === "travel-failed" &&
+    event.reason === "no-route-after-world-change"
+  ));
 });
