@@ -2,7 +2,8 @@ import {
   StaticGeometryIndex,
   cloneVec2,
   geometryBounds,
-  normalizeGeometry
+  normalizeGeometry,
+  pointInGeometry
 } from "./geometry.js";
 import {
   assertStringId,
@@ -126,14 +127,29 @@ function normalizeEndpoint(endpoint, portalId, layersById, spacesById) {
   if (kind === "local") {
     assertStringId(endpoint.layerId, `portal(${portalId}).endpoint.layerId`);
     if (!layersById.has(endpoint.layerId)) throw new Error(`portal ${portalId} references unknown layer ${endpoint.layerId}`);
-    if (endpoint.spaceId != null && !spacesById.has(endpoint.spaceId)) {
-      throw new Error(`portal ${portalId} references unknown space ${endpoint.spaceId}`);
+    let space = null;
+    if (endpoint.spaceId != null) {
+      space = spacesById.get(endpoint.spaceId);
+      if (!space) {
+        throw new Error(`portal ${portalId} references unknown space ${endpoint.spaceId}`);
+      }
+      if (space.layerId !== endpoint.layerId) {
+        throw new Error(
+          `portal ${portalId} endpoint space ${endpoint.spaceId} is on another layer`
+        );
+      }
+    }
+    const position = cloneVec2(endpoint.position);
+    if (space && !pointInGeometry(position, space.geometry)) {
+      throw new Error(
+        `portal ${portalId} endpoint is outside space ${endpoint.spaceId}`
+      );
     }
     return deepFreeze({
       kind: "local",
       layerId: endpoint.layerId,
       spaceId: endpoint.spaceId ?? null,
-      position: cloneVec2(endpoint.position),
+      position,
       nodeId: endpoint.nodeId ?? null,
       metadata: cloneJson(endpoint.metadata ?? null)
     });
@@ -182,12 +198,23 @@ function normalizeAnchor(anchor, layersById, spacesById) {
   assertStringId(anchor.id, "anchor.id");
   assertStringId(anchor.layerId, `anchor(${anchor.id}).layerId`);
   if (!layersById.has(anchor.layerId)) throw new Error(`anchor ${anchor.id} references unknown layer ${anchor.layerId}`);
-  if (anchor.spaceId != null && !spacesById.has(anchor.spaceId)) throw new Error(`anchor ${anchor.id} references unknown space ${anchor.spaceId}`);
+  let space = null;
+  if (anchor.spaceId != null) {
+    space = spacesById.get(anchor.spaceId);
+    if (!space) throw new Error(`anchor ${anchor.id} references unknown space ${anchor.spaceId}`);
+    if (space.layerId !== anchor.layerId) {
+      throw new Error(`anchor ${anchor.id} space ${anchor.spaceId} is on another layer`);
+    }
+  }
+  const position = cloneVec2(anchor.position);
+  if (space && !pointInGeometry(position, space.geometry)) {
+    throw new Error(`anchor ${anchor.id} is outside space ${anchor.spaceId}`);
+  }
   return deepFreeze({
     id: anchor.id,
     layerId: anchor.layerId,
     spaceId: anchor.spaceId ?? null,
-    position: cloneVec2(anchor.position),
+    position,
     nodeId: anchor.nodeId ?? null,
     tags: [...new Set(anchor.tags ?? [])],
     kind: anchor.kind ?? "anchor",
@@ -326,30 +353,62 @@ export function compilePlace(input, options = {}) {
       const anchor = anchorsById.get(space.defaultAnchorId);
       if (!anchor) throw new Error(`space ${space.id} references unknown default anchor ${space.defaultAnchorId}`);
       if (anchor.layerId !== space.layerId) throw new Error(`space ${space.id} default anchor is on another layer`);
+      if (!pointInGeometry(anchor.position, space.geometry)) {
+        throw new Error(`space ${space.id} default anchor is outside the space geometry`);
+      }
     }
   }
 
   const portals = Object.freeze(portalsInput.map((x) => normalizePortal(x, layersById, spacesById)));
   const portalsById = new Map(portals.map((x) => [x.id, x]));
 
-  const navigationNodeSets = new Map();
+  const navigationNodeMaps = new Map();
   const navigationRoadSets = new Map();
   for (const layer of layers) {
     if (!layer.navigation) continue;
-    navigationNodeSets.set(layer.id, new Set(layer.navigation.nodes.map((node) => node.id)));
+    navigationNodeMaps.set(
+      layer.id,
+      new Map(layer.navigation.nodes.map((node) => [node.id, node]))
+    );
     navigationRoadSets.set(layer.id, new Set(layer.navigation.roads.map((road) => road.id)));
   }
-  for (const anchor of anchors) {
-    const nodeIds = navigationNodeSets.get(anchor.layerId);
-    if (nodeIds && anchor.nodeId != null && !nodeIds.has(anchor.nodeId)) {
-      throw new Error(`anchor ${anchor.id} references unknown navigation node ${anchor.nodeId}`);
+
+  const assertNodePosition = (kind, id, layerId, nodeId, position) => {
+    if (nodeId == null) return;
+    const nodes = navigationNodeMaps.get(layerId);
+    if (!nodes) return;
+    const node = nodes.get(nodeId);
+    if (!node) {
+      throw new Error(`${kind} ${id} references unknown navigation node ${nodeId}`);
     }
+    const dx = Math.abs(node.x - position.x);
+    const dy = Math.abs(node.y - position.y);
+    if (dx > 1e-9 || dy > 1e-9) {
+      throw new Error(
+        `${kind} ${id} position does not match navigation node ${nodeId}`
+      );
+    }
+  };
+
+  for (const anchor of anchors) {
+    assertNodePosition(
+      "anchor",
+      anchor.id,
+      anchor.layerId,
+      anchor.nodeId,
+      anchor.position
+    );
   }
   for (const portal of portals) {
     for (const endpoint of [portal.a, portal.b]) {
       if (endpoint.kind !== "local" || endpoint.nodeId == null) continue;
-      const nodeIds = navigationNodeSets.get(endpoint.layerId);
-      if (nodeIds && !nodeIds.has(endpoint.nodeId)) throw new Error(`portal ${portal.id} references unknown navigation node ${endpoint.nodeId}`);
+      assertNodePosition(
+        "portal",
+        portal.id,
+        endpoint.layerId,
+        endpoint.nodeId,
+        endpoint.position
+      );
     }
     for (const binding of portal.roadBindings) {
       const roadIds = navigationRoadSets.get(binding.layerId);
