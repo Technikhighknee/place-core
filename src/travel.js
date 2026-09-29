@@ -1283,6 +1283,29 @@ function normalizeStepOptions(options = {}) {
   };
 }
 
+function normalizeStopOptions(options = {}) {
+  assertTravelOptionKeys(
+    options,
+    ["bridge", "reason"],
+    "stop travel options"
+  );
+
+  if (options.bridge != null &&
+      typeof options.bridge !== "object") {
+    throw new TypeError(
+      "stop travel options.bridge must be an object"
+    );
+  }
+  if (options.reason != null) {
+    assertStringId(options.reason, "stop travel options.reason");
+  }
+
+  return {
+    bridge: options.bridge ?? null,
+    reason: options.reason ?? "cancelled"
+  };
+}
+
 function captureTravelOptions(options = {}) {
   const normalized = normalizePlanningOptions(options);
   const captured = {
@@ -1676,23 +1699,37 @@ export function stepTravel(registry, a, b, c) {
 
 export function stepPlaceSimulation(registry, a = {}, b = 0, c = {}) {
   let bridge;
-  let deltaSeconds;
   let options;
 
-  if (a && typeof a === "object" && typeof a.getEntity === "function" && typeof a.planLocalRoute === "function") {
+  if (a &&
+      typeof a === "object" &&
+      typeof a.getEntity === "function" &&
+      typeof a.planLocalRoute === "function") {
     bridge = a;
-    deltaSeconds = normalizeDeltaSeconds(b);
-    options = c ?? {};
+    const runtimeOptions = normalizeStepOptions(c ?? {});
+    options = {
+      ...runtimeOptions,
+      deltaSeconds: normalizeDeltaSeconds(b)
+    };
   } else {
-    options = a ?? {};
+    options = normalizeStepOptions(a ?? {});
     bridge = options.bridge ?? registry.bridge;
-    deltaSeconds = normalizeDeltaSeconds(options.deltaSeconds);
   }
 
-  if (!bridge) throw new Error("stepPlaceSimulation requires a WorldCoreBridge");
+  if (!bridge) {
+    throw new Error(
+      "stepPlaceSimulation requires a WorldCoreBridge"
+    );
+  }
+
   const ids = [...registry.activeTravels.keys()];
   for (const entityId of ids) {
-    stepTravel(registry, bridge, entityId, { ...options, deltaSeconds });
+    stepTravel(
+      registry,
+      bridge,
+      entityId,
+      options
+    );
   }
   return registry.activeTravels.size;
 }
@@ -1702,24 +1739,27 @@ export function stopTravel(registry, a, b, c = {}) {
   let entityId;
   let options;
 
-  if (a && typeof a === "object" && typeof a.getEntity === "function") {
+  if (a &&
+      typeof a === "object" &&
+      typeof a.getEntity === "function") {
     bridge = a;
     entityId = b;
-    options = c ?? {};
+    options = normalizeStopOptions(c ?? {});
   } else {
     entityId = a;
-    options = b ?? {};
+    options = normalizeStopOptions(b ?? {});
     bridge = options.bridge ?? registry.bridge;
   }
 
   const state = registry.activeTravels.get(entityId);
   if (!state) return false;
+
   bridge?.stopLocalJourney?.(entityId);
   registry.activeTravels.delete(entityId);
   state.status = "cancelled";
   registry.emit("travel-cancelled", {
     entityId,
-    reason: options.reason ?? "cancelled"
+    reason: options.reason
   });
   return true;
 }
