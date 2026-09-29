@@ -310,3 +310,27 @@ test("nested placement frames survive snapshot restore", async () => {
   assert.equal(computePlaceCoreStateHash(restored), beforeHash);
   restored.assertInternalConsistency();
 });
+
+
+test("semantic child index follows reparenting and removal guards", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(roomDefinition());
+  places.createPlace({ id: "a", definitionId: "room-box" });
+  places.createPlace({ id: "b", definitionId: "room-box" });
+  places.createPlace({
+    id: "child",
+    definitionId: "room-box",
+    parentId: "a"
+  });
+
+  assert.throws(() => places.removePlace("a"), /while child child exists/);
+
+  places.setParent("child", "b");
+
+  assert.equal(places.removePlace("a"), true);
+  assert.throws(() => places.removePlace("b"), /while child child exists/);
+
+  places.setParent("child", null);
+  assert.equal(places.removePlace("b"), true);
+  assert.equal(places.removePlace("child"), true);
+});
