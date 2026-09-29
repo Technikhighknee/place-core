@@ -231,14 +231,76 @@ export class WorldCoreBridge {
     const domains = [...instance.layerDomains.values()];
     for (const domainId of domains) {
       const domain = this.world.getDomain?.(domainId);
-      if (domain?.entityCount > 0) throw new Error(`cannot remove occupied world-core domain ${domainId}`);
+      if (domain?.entityCount > 0) {
+        throw new Error(`cannot remove occupied world-core domain ${domainId}`);
+      }
     }
-    for (const portal of definition.portals) this.clearPortalEffects(instance, portal);
-    for (const boundary of definition.boundaries) this.clearBoundaryEffects(instance, boundary);
-    for (const domainId of domains.reverse()) {
-      this.navigation.clearDomainOverrides?.(domainId);
-      this.navigation.unbindDomain?.(domainId);
-      this.world.removeDomain?.(domainId);
+
+    try {
+      for (const portal of definition.portals) {
+        this.clearPortalEffects(instance, portal);
+      }
+      for (const dynamicPortal of instance.dynamicPortals?.values?.() ?? []) {
+        this.clearPortalEffects(instance, dynamicPortal);
+      }
+      for (const boundary of definition.boundaries) {
+        this.clearBoundaryEffects(instance, boundary);
+      }
+
+      for (const domainId of [...domains].reverse()) {
+        this.navigation.clearDomainOverrides?.(domainId);
+        this.navigation.unbindDomain?.(domainId);
+        this.world.removeDomain?.(domainId);
+      }
+    } catch (error) {
+      let rollbackError = null;
+      try {
+        this.#restorePlaceMaterialization(instance, definition);
+      } catch (restoreError) {
+        rollbackError = restoreError;
+      }
+
+      if (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `failed to remove place ${String(instance.id)} and restore bridge state`
+        );
+      }
+      throw error;
+    }
+  }
+
+  #restorePlaceMaterialization(instance, definition) {
+    for (const layer of definition.layers) {
+      this.ensureLayerTopology(definition, layer);
+      const domainId = instance.layerDomains.get(layer.id);
+      if (!this.world.getDomain?.(domainId)) {
+        this.world.addDomain({ id: domainId });
+      }
+      if (layer.topologyId != null) {
+        this.navigation.bindDomain?.(domainId, layer.topologyId);
+      }
+    }
+
+    for (const boundary of definition.boundaries) {
+      const resolved =
+        this.#registry?.getBoundary?.(instance.id, boundary.id) ??
+        boundary;
+      this.syncBoundaryState(instance, resolved);
+    }
+
+    for (const portal of definition.portals) {
+      const resolved =
+        this.#registry?.resolvePortal?.(instance.id, portal.id) ??
+        portal;
+      this.syncPortalState(instance, portal, resolved);
+    }
+
+    for (const dynamicPortal of instance.dynamicPortals?.values?.() ?? []) {
+      const resolved =
+        this.#registry?.resolvePortal?.(instance.id, dynamicPortal.id) ??
+        dynamicPortal;
+      this.syncDynamicPortal(instance, dynamicPortal, resolved);
     }
   }
 
