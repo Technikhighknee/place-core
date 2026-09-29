@@ -4,11 +4,13 @@ import assert from "node:assert/strict";
 import {
   PlaceRegistry,
   deserializePlaceCore,
+  findDomainPortalPath,
   planTravel,
   serializePlaceCore,
   startTravel,
   stepPlaceSimulation,
-  stepTravel
+  stepTravel,
+  stopTravel
 } from "../src/index.js";
 
 function twoLayerDefinition() {
@@ -458,5 +460,202 @@ test("explicit Infinity maxCost remains snapshot-safe by collapsing to the defau
 
   assert.doesNotThrow(() =>
     JSON.stringify(serializePlaceCore(places))
+  );
+});
+
+
+test("travel options reject unknown fields and string-like exclusion lists", () => {
+  const { places, bridge } = twoLayerRuntime();
+
+  for (const call of [
+    () => planTravel(
+      places,
+      bridge,
+      "hans",
+      { placeId: "house", anchorId: "target" },
+      { maxDomianPathAttempts: 3 }
+    ),
+    () => startTravel(
+      places,
+      bridge,
+      "hans",
+      { placeId: "house", anchorId: "target" },
+      { maxDomianPathAttempts: 3 }
+    )
+  ]) {
+    assert.throws(
+      call,
+      /travel options contains unknown field maxDomianPathAttempts/
+    );
+  }
+
+  for (const [key, value] of [
+    ["excludedPortalKeys", "portal-key"],
+    ["excludedDomainPairs", "domain-pair"],
+    ["excludedPortalKeys", [123]],
+    ["excludedDomainPairs", [null]]
+  ]) {
+    assert.throws(
+      () => planTravel(
+        places,
+        bridge,
+        "hans",
+        { placeId: "house", anchorId: "target" },
+        { [key]: value }
+      ),
+      new RegExp(key)
+    );
+  }
+});
+
+test("planning and start options reject deltaSeconds instead of silently ignoring it", () => {
+  const { places, bridge } = twoLayerRuntime();
+
+  assert.throws(
+    () => planTravel(
+      places,
+      bridge,
+      "hans",
+      { placeId: "house", anchorId: "target" },
+      { deltaSeconds: 1 }
+    ),
+    /travel options contains unknown field deltaSeconds/
+  );
+
+  assert.throws(
+    () => startTravel(
+      places,
+      bridge,
+      "hans",
+      { placeId: "house", anchorId: "target" },
+      { deltaSeconds: 1 }
+    ),
+    /travel options contains unknown field deltaSeconds/
+  );
+});
+
+test("step options accept deltaSeconds but reject unknown fields even without active travel", () => {
+  const { places, bridge } = twoLayerRuntime();
+
+  assert.equal(
+    stepTravel(
+      places,
+      bridge,
+      "missing",
+      { deltaSeconds: 0.5 }
+    ),
+    null
+  );
+
+  assert.throws(
+    () => stepTravel(
+      places,
+      bridge,
+      "missing",
+      { deltSeconds: 0.5 }
+    ),
+    /travel step options contains unknown field deltSeconds/
+  );
+
+  assert.throws(
+    () => stepPlaceSimulation(
+      places,
+      bridge,
+      0.5,
+      { deltSeconds: 1 }
+    ),
+    /travel step options contains unknown field deltSeconds/
+  );
+});
+
+test("domain path API has its own strict exclusion-only option contract", () => {
+  const { places, place } = twoLayerRuntime();
+  const a = place.layerDomains.get("a");
+  const b = place.layerDomains.get("b");
+  const portal = places.getPortalsForDomain(a)[0];
+
+  assert.ok(
+    findDomainPortalPath(
+      places,
+      a,
+      b
+    )
+  );
+
+  assert.equal(
+    findDomainPortalPath(
+      places,
+      a,
+      b,
+      {
+        excludedPortalKeys: new Set([portal.key])
+      }
+    ),
+    null
+  );
+
+  assert.equal(
+    findDomainPortalPath(
+      places,
+      a,
+      b,
+      {
+        excludedDomainPairs: new Set([
+          `${a}\u0000${b}`
+        ])
+      }
+    ),
+    null
+  );
+
+  assert.throws(
+    () => findDomainPortalPath(
+      places,
+      a,
+      b,
+      { maxCost: 5 }
+    ),
+    /domain path options contains unknown field maxCost/
+  );
+
+  assert.throws(
+    () => findDomainPortalPath(
+      places,
+      a,
+      b,
+      { excludedPortalKeys: portal.key }
+    ),
+    /excludedPortalKeys must be an iterable of non-empty strings/
+  );
+});
+
+test("stopTravel accepts only bridge and a non-empty reason", () => {
+  const { places, bridge } = twoLayerRuntime();
+
+  assert.throws(
+    () => stopTravel(
+      places,
+      "missing",
+      { deltaSeconds: 1 }
+    ),
+    /stop travel options contains unknown field deltaSeconds/
+  );
+
+  assert.throws(
+    () => stopTravel(
+      places,
+      "missing",
+      { reason: "" }
+    ),
+    /reason must be a non-empty string/
+  );
+
+  assert.equal(
+    stopTravel(
+      places,
+      "missing",
+      { reason: "cancelled-by-test" }
+    ),
+    false
   );
 });
