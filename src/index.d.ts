@@ -424,11 +424,32 @@ export class PlaceRegistry {
     position: Vec2,
     options?: { tag?: string; kind?: string; spaceId?: string }
   ): (CompiledPlaceAnchor & { placeId: PlaceId; domainId: string; distance: number }) | null;
+  findPortalEndpointsNear(
+    domainId: string,
+    position: Vec2,
+    radius: number,
+    options?: { traversableOnly?: boolean; kind?: string; tag?: string }
+  ): Array<{
+    portal: ResolvedPortal;
+    endpoint: ResolvedPortalEndpoint;
+    side: "a" | "b";
+    distance: number;
+  }>;
   findNearestPortal(
     domainId: string,
     position: Vec2,
-    options?: { traversableOnly?: boolean; kind?: string; tag?: string }
-  ): { portal: ResolvedPortal; endpoint: ResolvedPortalEndpoint; distance: number } | null;
+    options?: {
+      traversableOnly?: boolean;
+      kind?: string;
+      tag?: string;
+      maxDistance?: number;
+    }
+  ): {
+    portal: ResolvedPortal;
+    endpoint: ResolvedPortalEndpoint;
+    side: "a" | "b";
+    distance: number;
+  } | null;
   getBoundariesForDomain(
     domainId: string,
     options?: { enabledOnly?: boolean; kind?: string; tag?: string }
@@ -475,6 +496,8 @@ export class PlaceRegistry {
     instanceCount: number;
     domainBindingCount: number;
     portalRecordCount: number;
+    portalEndpointCount: number;
+    portalEndpointDomainCount: number;
     portalOverrideCount: number;
     boundaryOverrideCount: number;
     spaceOverrideCount: number;
@@ -767,11 +790,12 @@ export class StaticGeometryIndex<T = any> {
 
 export class DynamicAabbIndex {
   constructor(cellSize?: number);
-  set(id: PlaceId, bounds: Bounds): void;
-  delete(id: PlaceId): boolean;
-  queryPoint(point: Vec2): PlaceId[];
-  queryBounds(bounds: Bounds): PlaceId[];
-  getBounds(id: PlaceId): Bounds | null;
+  set(id: PlaceId | string, bounds: Bounds): void;
+  delete(id: PlaceId | string): boolean;
+  queryPoint(point: Vec2): Array<PlaceId | string>;
+  queryBounds(bounds: Bounds): Array<PlaceId | string>;
+  getBounds(id: PlaceId | string): Bounds | null;
   readonly size: number;
+  readonly cellSize: number;
   readonly cellCount: number;
 }
