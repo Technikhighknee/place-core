@@ -71,6 +71,35 @@ function cloneJsonValue(value, path) {
   return result;
 }
 
+export function normalizeStringList(
+  value,
+  label = "value",
+  { allowNull = false, defaultValue = undefined } = {}
+) {
+  if (value === undefined) {
+    if (defaultValue === undefined) return undefined;
+    value = defaultValue;
+  }
+  if (value === null) {
+    if (allowNull) return null;
+    throw new TypeError(`${label} must be an array of non-empty strings`);
+  }
+  if (!Array.isArray(value)) {
+    throw new TypeError(`${label} must be an array of non-empty strings`);
+  }
+
+  const result = [];
+  const seen = new Set();
+  for (let i = 0; i < value.length; i += 1) {
+    const item = value[i];
+    assertStringId(item, `${label}[${i}]`);
+    if (seen.has(item)) continue;
+    seen.add(item);
+    result.push(item);
+  }
+  return Object.freeze(result);
+}
+
 export function cloneJson(value) {
   if (value === undefined) return undefined;
   return cloneJsonValue(value, "value");
