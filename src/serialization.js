@@ -509,8 +509,15 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     assertObject(ref.blueprint, `definition ${ref.id}.blueprint`);
 
     const compiled = compilePlace(ref.blueprint);
-    if (compiled.id !== ref.id) throw new Error(`definition id mismatch for ${ref.id}`);
-    if (compiled.contentHash !== ref.contentHash) throw new Error(`definition hash mismatch for ${ref.id}`);
+    if (compiled.id !== ref.id) {
+      throw new Error(`definition id mismatch for ${ref.id}`);
+    }
+    if (compiled.revision !== ref.revision) {
+      throw new Error(`definition revision mismatch for ${ref.id}`);
+    }
+    if (compiled.contentHash !== ref.contentHash) {
+      throw new Error(`definition hash mismatch for ${ref.id}`);
+    }
     definitions.set(ref.id, compiled);
   }
 
@@ -519,10 +526,31 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   for (let i = 0; i < snapshot.instances.length; i += 1) {
     const item = snapshot.instances[i];
     assertObject(item, `snapshot.instances[${i}]`);
+    assertId(item.id, `snapshot.instances[${i}].id`);
+    assertStringId(
+      item.definitionId,
+      `snapshot.instances[${i}].definitionId`
+    );
+    if (item.parentId != null) {
+      assertId(item.parentId, `snapshot.instances[${i}].parentId`);
+    }
+    if (item.metadata !== undefined) {
+      assertJsonSafe(
+        item.metadata,
+        `instance ${String(item.id)}.metadata`
+      );
+    }
+
     const key = idKey(item.id);
-    if (instances.has(key)) throw new Error(`duplicate place instance: ${String(item.id)}`);
+    if (instances.has(key)) {
+      throw new Error(`duplicate place instance: ${String(item.id)}`);
+    }
     const definition = definitions.get(item.definitionId);
-    if (!definition) throw new Error(`instance ${String(item.id)} references unknown definition ${item.definitionId}`);
+    if (!definition) {
+      throw new Error(
+        `instance ${String(item.id)} references unknown definition ${item.definitionId}`
+      );
+    }
 
     assertObject(item.layerDomains, `instance ${String(item.id)}.layerDomains`);
     assertObject(item.attachments, `instance ${String(item.id)}.attachments`);
@@ -530,6 +558,25 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     assertObject(item.boundaryOverrides ?? {}, `instance ${String(item.id)}.boundaryOverrides`);
     assertObject(item.spaceOverrides ?? {}, `instance ${String(item.id)}.spaceOverrides`);
     assertArray(item.dynamicPortals ?? [], `instance ${String(item.id)}.dynamicPortals`);
+
+    const expectedLayerIds = new Set(
+      definition.layers.map((layer) => layer.id)
+    );
+    for (const layerId of Object.keys(item.layerDomains)) {
+      if (!expectedLayerIds.has(layerId)) {
+        throw new Error(
+          `instance ${String(item.id)} has domain for unknown layer ${layerId}`
+        );
+      }
+    }
+
+    for (const [slot, attachment] of Object.entries(item.attachments)) {
+      assertStringId(slot, `instance ${String(item.id)} attachment slot`);
+      assertAttachment(
+        attachment,
+        `instance ${String(item.id)}.attachments.${slot}`
+      );
+    }
 
     for (const layer of definition.layers) {
       const domainId = item.layerDomains[layer.id];
@@ -540,30 +587,59 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       domains.add(domainId);
     }
 
-    for (const portalId of Object.keys(item.portalOverrides ?? {})) {
-      if (!definition.getPortal(portalId)) throw new Error(`instance ${String(item.id)} has orphan portal override ${portalId}`);
+    for (const [portalId, patch] of Object.entries(
+      item.portalOverrides ?? {}
+    )) {
+      if (!definition.getPortal(portalId)) {
+        throw new Error(
+          `instance ${String(item.id)} has orphan portal override ${portalId}`
+        );
+      }
+      assertBooleanPatch(
+        patch,
+        ["enabled", "open", "locked", "blocked", "destroyed"],
+        `instance ${String(item.id)}.portalOverrides.${portalId}`
+      );
     }
-    for (const boundaryId of Object.keys(item.boundaryOverrides ?? {})) {
-      if (!definition.getBoundary(boundaryId)) throw new Error(`instance ${String(item.id)} has orphan boundary override ${boundaryId}`);
+
+    for (const [boundaryId, patch] of Object.entries(
+      item.boundaryOverrides ?? {}
+    )) {
+      if (!definition.getBoundary(boundaryId)) {
+        throw new Error(
+          `instance ${String(item.id)} has orphan boundary override ${boundaryId}`
+        );
+      }
+      assertBooleanPatch(
+        patch,
+        ["enabled"],
+        `instance ${String(item.id)}.boundaryOverrides.${boundaryId}`
+      );
     }
-    for (const spaceId of Object.keys(item.spaceOverrides ?? {})) {
-      if (!definition.getSpace(spaceId)) throw new Error(`instance ${String(item.id)} has orphan space override ${spaceId}`);
+
+    for (const [spaceId, patch] of Object.entries(
+      item.spaceOverrides ?? {}
+    )) {
+      if (!definition.getSpace(spaceId)) {
+        throw new Error(
+          `instance ${String(item.id)} has orphan space override ${spaceId}`
+        );
+      }
+      assertBooleanPatch(
+        patch,
+        ["enabled"],
+        `instance ${String(item.id)}.spaceOverrides.${spaceId}`
+      );
     }
 
     const dynamicIds = new Set();
     for (const portal of item.dynamicPortals ?? []) {
-      assertObject(portal, "dynamic portal");
-      if (typeof portal.id !== "string" || !portal.id) throw new TypeError("dynamic portal id must be non-empty");
-      if (dynamicIds.has(portal.id) || definition.getPortal(portal.id)) {
-        throw new Error(`duplicate dynamic portal ${portal.id} on instance ${String(item.id)}`);
-      }
-      dynamicIds.add(portal.id);
-      for (const endpoint of [portal.a, portal.b]) {
-        if (!endpoint || typeof endpoint.domainId !== "string" || !endpoint.position ||
-            !Number.isFinite(endpoint.position.x) || !Number.isFinite(endpoint.position.y)) {
-          throw new TypeError(`dynamic portal ${portal.id} has invalid endpoint`);
-        }
-      }
+      assertDynamicPortal(
+        portal,
+        definition,
+        item,
+        dynamicIds
+      );
     }
 
     instances.set(key, item);
@@ -579,13 +655,52 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       const hasDomain = item.placement.domainId != null;
       const hasParent = item.placement.parentPlaceId != null;
       if (hasDomain === hasParent) {
-        throw new Error(`instance ${String(item.id)} placement must reference exactly one frame`);
+        throw new Error(
+          `instance ${String(item.id)} placement must reference exactly one frame`
+        );
       }
-      if (hasDomain && (typeof item.placement.domainId !== "string" || !item.placement.domainId)) {
-        throw new Error(`instance ${String(item.id)} placement has invalid domainId`);
+
+      if (hasDomain) {
+        assertStringId(
+          item.placement.domainId,
+          `instance ${String(item.id)}.placement.domainId`
+        );
       }
-      if (hasParent && !instances.has(idKey(item.placement.parentPlaceId))) {
-        throw new Error(`instance ${String(item.id)} references missing placement parent ${String(item.placement.parentPlaceId)}`);
+
+      if (hasParent) {
+        assertId(
+          item.placement.parentPlaceId,
+          `instance ${String(item.id)}.placement.parentPlaceId`
+        );
+        if (!instances.has(idKey(item.placement.parentPlaceId))) {
+          throw new Error(
+            `instance ${String(item.id)} references missing placement parent ${String(item.placement.parentPlaceId)}`
+          );
+        }
+      }
+
+      if (item.placement.containment !== "none" &&
+          item.placement.containment !== "footprint") {
+        throw new Error(
+          `instance ${String(item.id)} placement has invalid containment`
+        );
+      }
+
+      assertObject(
+        item.placement.transform,
+        `instance ${String(item.id)}.placement.transform`
+      );
+      for (const key of ["x", "y", "rotation", "scale"]) {
+        if (!Number.isFinite(item.placement.transform[key])) {
+          throw new Error(
+            `instance ${String(item.id)} placement transform ${key} must be finite`
+          );
+        }
+      }
+      if (!(item.placement.transform.scale > 0)) {
+        throw new Error(
+          `instance ${String(item.id)} placement scale must be > 0`
+        );
       }
     }
   }
