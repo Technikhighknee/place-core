@@ -483,3 +483,41 @@ test("failed place creation rolls semantic membership indexes back transactional
   );
   places.assertInternalConsistency();
 });
+
+
+test("version-1 snapshots without memberships remain backward compatible", () => {
+  const places = registry();
+
+  add(places, "city");
+  add(places, "tavern", {
+    parentId: "city"
+  });
+
+  const snapshot = serializePlaceCore(places);
+  for (const instance of snapshot.instances) {
+    delete instance.memberships;
+  }
+
+  assert.equal(
+    validatePlaceCoreSnapshot(snapshot),
+    true
+  );
+
+  const restored = deserializePlaceCore(
+    JSON.parse(JSON.stringify(snapshot))
+  );
+
+  assert.deepEqual(
+    restored.getMemberships("city"),
+    []
+  );
+  assert.deepEqual(
+    restored.getMemberships("tavern"),
+    []
+  );
+  assert.deepEqual(
+    restored.getSemanticAncestors("tavern"),
+    ["city"]
+  );
+  restored.assertInternalConsistency();
+});
