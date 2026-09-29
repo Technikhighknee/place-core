@@ -1047,59 +1047,93 @@ export function deserializePlaceCore(snapshot, options = {}) {
     registry.registerDefinition(definition);
   }
 
-  const remaining = new Map(
-    snapshot.instances.map((item) => [idKey(item.id), item])
-  );
+  const orderedInstances = [...snapshot.instances]
+    .sort((a, b) =>
+      idKey(a.id).localeCompare(idKey(b.id))
+    );
 
-  while (remaining.size) {
-    let progressed = false;
-    for (const [key, item] of [...remaining.entries()]) {
-      if (item.parentId != null &&
-          !registry.getPlace(item.parentId)) {
-        continue;
-      }
-
-      if ((item.memberships ?? []).some(
-        (membership) =>
-          !registry.getPlace(membership.parentPlaceId)
-      )) {
-        continue;
-      }
-
-      if (item.placement?.parentPlaceId != null &&
-          !registry.getPlace(item.placement.parentPlaceId)) {
-        continue;
-      }
-
-      registry.createPlace({
-        id: item.id,
-        definitionId: item.definitionId,
-        parentId: item.parentId,
-        memberships: item.memberships ?? [],
-        layerDomains: item.layerDomains,
-        attachments: item.attachments,
-        placement: item.placement,
-        metadata: item.metadata
-      });
-
-      for (const portal of item.dynamicPortals ?? []) {
-        registry.addInstancePortal(item.id, portal);
-      }
-      for (const [portalId, patch] of Object.entries(item.portalOverrides ?? {})) {
-        registry.setPortalState(item.id, portalId, patch);
-      }
-      for (const [boundaryId, patch] of Object.entries(item.boundaryOverrides ?? {})) {
-        registry.setBoundaryState(item.id, boundaryId, patch);
-      }
-      for (const [spaceId, patch] of Object.entries(item.spaceOverrides ?? {})) {
-        registry.setSpaceState(item.id, spaceId, patch);
-      }
-
-      remaining.delete(key);
-      progressed = true;
-    }
-    if (!progressed) throw new Error("could not restore place hierarchy");
+  // Restore graph-independent instance state first. Semantic containment,
+  // semantic memberships and placement are independent DAGs/trees and may
+  // legally have cross-graph dependency cycles that cannot be topologically
+  // ordered as one combined graph.
+  for (const item of orderedInstances) {
+    registry.createPlace({
+      id: item.id,
+      definitionId: item.definitionId,
+      parentId: null,
+      memberships: [],
+      layerDomains: item.layerDomains,
+      attachments: item.attachments,
+      placement: null,
+      metadata: item.metadata
+    });
   }
+
+  // Primary containment is a stable single-parent semantic chain.
+  for (const item of orderedInstances) {
+    if (item.parentId != null) {
+      registry.setParent(
+        item.id,
+        item.parentId
+      );
+    }
+  }
+
+  // Additional semantic relations form the independent membership DAG.
+  for (const item of orderedInstances) {
+    for (const membership of item.memberships ?? []) {
+      registry.addMembership(
+        item.id,
+        membership
+      );
+    }
+  }
+
+  // Placement is an independent single-parent transform graph.
+  for (const item of orderedInstances) {
+    if (item.placement != null) {
+      registry.setPlacement(
+        item.id,
+        item.placement
+      );
+    }
+  }
+
+  // Structural sparse state is restored only after all graph identities and
+  // coordinate-frame relationships exist.
+  for (const item of orderedInstances) {
+    for (const portal of item.dynamicPortals ?? []) {
+      registry.addInstancePortal(item.id, portal);
+    }
+    for (const [portalId, patch] of Object.entries(
+      item.portalOverrides ?? {}
+    )) {
+      registry.setPortalState(
+        item.id,
+        portalId,
+        patch
+      );
+    }
+    for (const [boundaryId, patch] of Object.entries(
+      item.boundaryOverrides ?? {}
+    )) {
+      registry.setBoundaryState(
+        item.id,
+        boundaryId,
+        patch
+      );
+    }
+    for (const [spaceId, patch] of Object.entries(
+      item.spaceOverrides ?? {}
+    )) {
+      registry.setSpaceState(
+        item.id,
+        spaceId,
+        patch
+      );
+    }
+  }
+
 
   const active = snapshot.activeTravels ?? [];
 
