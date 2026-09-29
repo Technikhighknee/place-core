@@ -24,6 +24,59 @@ import {
 
 const PORTAL_STATE_KEYS = ["enabled", "open", "locked", "blocked", "destroyed"];
 
+function assertVec2(value, label = "position") {
+  if (!value ||
+      typeof value !== "object" ||
+      Array.isArray(value) ||
+      !Number.isFinite(value.x) ||
+      !Number.isFinite(value.y)) {
+    throw new TypeError(`${label} must be a finite Vec2`);
+  }
+  return value;
+}
+
+function assertBounds(value, label = "bounds") {
+  if (!value ||
+      typeof value !== "object" ||
+      Array.isArray(value)) {
+    throw new TypeError(`${label} must be finite bounds`);
+  }
+
+  for (const key of ["minX", "minY", "maxX", "maxY"]) {
+    if (!Number.isFinite(value[key])) {
+      throw new TypeError(`${label}.${key} must be finite`);
+    }
+  }
+
+  if (value.minX > value.maxX || value.minY > value.maxY) {
+    throw new RangeError(
+      `${label} minimums must not exceed maximums`
+    );
+  }
+  return value;
+}
+
+function assertOptionalString(value, label) {
+  if (value == null) return null;
+  assertStringId(value, label);
+  return value;
+}
+
+function normalizeFiniteDistance(
+  value,
+  label,
+  { defaultValue = Infinity } = {}
+) {
+  if (value == null) return defaultValue;
+  if (value === Infinity) return Infinity;
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(
+      `${label} must be a finite number >= 0 or Infinity`
+    );
+  }
+  return value;
+}
+
 function normalizeAttachment(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${label} is required`);
@@ -504,6 +557,11 @@ export class PlaceRegistry {
   }
 
   findNearestAnchor(instanceId, position, options = {}) {
+    assertVec2(position, "findNearestAnchor.position");
+    assertOptionalString(options.tag, "findNearestAnchor.tag");
+    assertOptionalString(options.layerId, "findNearestAnchor.layerId");
+    assertOptionalString(options.kind, "findNearestAnchor.kind");
+    assertOptionalString(options.spaceId, "findNearestAnchor.spaceId");
     const instance = this.#instances.get(instanceId);
     if (!instance) return null;
     const definition = this.#definitions.get(instance.definitionId);
@@ -541,6 +599,10 @@ export class PlaceRegistry {
   }
 
   getAnchorsForDomain(domainId, options = {}) {
+    assertStringId(domainId, "getAnchorsForDomain.domainId");
+    assertOptionalString(options.tag, "getAnchorsForDomain.tag");
+    assertOptionalString(options.kind, "getAnchorsForDomain.kind");
+    assertOptionalString(options.spaceId, "getAnchorsForDomain.spaceId");
     const binding = this.#domainBindings.get(domainId);
     if (!binding) return [];
     const instance = this.#instances.get(binding.instanceId);
@@ -569,6 +631,8 @@ export class PlaceRegistry {
   }
 
   findNearestAnchorInDomain(domainId, position, options = {}) {
+    assertStringId(domainId, "findNearestAnchorInDomain.domainId");
+    assertVec2(position, "findNearestAnchorInDomain.position");
     let best = null;
     let bestDistanceSq = Infinity;
 
@@ -588,6 +652,15 @@ export class PlaceRegistry {
   }
 
   findPortalEndpointsNear(domainId, position, radius, options = {}) {
+    assertStringId(domainId, "findPortalEndpointsNear.domainId");
+    assertVec2(position, "findPortalEndpointsNear.position");
+    const traversableOnly = normalizeBoolean(
+      options.traversableOnly,
+      "findPortalEndpointsNear.traversableOnly",
+      { defaultValue: true }
+    );
+    assertOptionalString(options.kind, "findPortalEndpointsNear.kind");
+    assertOptionalString(options.tag, "findPortalEndpointsNear.tag");
     if (!Number.isFinite(radius) || radius < 0) {
       throw new RangeError("portal query radius must be a finite number >= 0");
     }
@@ -608,7 +681,7 @@ export class PlaceRegistry {
       if (!endpointRecord) continue;
       const portal = this.#portalRecords.get(endpointRecord.portalKey);
       if (!portal) continue;
-      if (options.traversableOnly !== false && !portal.traversable) continue;
+      if (traversableOnly && !portal.traversable) continue;
       if (options.kind != null && portal.kind !== options.kind) continue;
       if (options.tag != null && !portal.tags?.includes(options.tag)) continue;
 
@@ -634,22 +707,29 @@ export class PlaceRegistry {
   }
 
   findNearestPortal(domainId, position, options = {}) {
+    assertStringId(domainId, "findNearestPortal.domainId");
+    assertVec2(position, "findNearestPortal.position");
+    const traversableOnly = normalizeBoolean(
+      options.traversableOnly,
+      "findNearestPortal.traversableOnly",
+      { defaultValue: true }
+    );
+    assertOptionalString(options.kind, "findNearestPortal.kind");
+    assertOptionalString(options.tag, "findNearestPortal.tag");
+    const maxDistance = normalizeFiniteDistance(
+      options.maxDistance,
+      "findNearestPortal.maxDistance"
+    );
+
     const index = this.#portalEndpointIndexes.get(domainId);
     if (!index || index.size === 0) return null;
-
-    const maxDistance = options.maxDistance == null
-      ? Infinity
-      : Number(options.maxDistance);
-    if (!(maxDistance >= 0)) {
-      throw new RangeError("maxDistance must be >= 0");
-    }
 
     if (Number.isFinite(maxDistance)) {
       return this.findPortalEndpointsNear(
         domainId,
         position,
         maxDistance,
-        options
+        { ...options, traversableOnly }
       )[0] ?? null;
     }
 
@@ -668,7 +748,7 @@ export class PlaceRegistry {
       if (endpointRecord.domainId !== domainId) continue;
       const portal = this.#portalRecords.get(endpointRecord.portalKey);
       if (!portal) continue;
-      if (options.traversableOnly !== false && !portal.traversable) continue;
+      if (traversableOnly && !portal.traversable) continue;
       if (options.kind != null && portal.kind !== options.kind) continue;
       if (options.tag != null && !portal.tags?.includes(options.tag)) continue;
       const endpoint = endpointRecord.side === "a" ? portal.a : portal.b;
@@ -691,6 +771,14 @@ export class PlaceRegistry {
   }
 
   getBoundariesForDomain(domainId, options = {}) {
+    assertStringId(domainId, "getBoundariesForDomain.domainId");
+    const enabledOnly = normalizeBoolean(
+      options.enabledOnly,
+      "getBoundariesForDomain.enabledOnly",
+      { defaultValue: false }
+    );
+    assertOptionalString(options.kind, "getBoundariesForDomain.kind");
+    assertOptionalString(options.tag, "getBoundariesForDomain.tag");
     const binding = this.#domainBindings.get(domainId);
     if (!binding) return [];
     const instance = this.#instances.get(binding.instanceId);
@@ -701,7 +789,7 @@ export class PlaceRegistry {
     for (const boundary of definition.boundaries) {
       if (boundary.layerId !== binding.layerId) continue;
       const resolved = this.getBoundary(instance.id, boundary.id);
-      if (options.enabledOnly === true && !resolved.enabled) continue;
+      if (enabledOnly && !resolved.enabled) continue;
       if (options.kind != null && resolved.kind !== options.kind) continue;
       if (options.tag != null && !resolved.tags?.includes(options.tag)) continue;
       result.push({ ...resolved, placeId: instance.id, domainId });
@@ -710,11 +798,14 @@ export class PlaceRegistry {
   }
 
   boundariesIntersectingBounds(domainId, bounds, options = {}) {
+    assertBounds(bounds, "boundariesIntersectingBounds.bounds");
     return this.getBoundariesForDomain(domainId, options)
       .filter((boundary) => segmentIntersectsBounds(boundary.a, boundary.b, bounds));
   }
 
   findNearestBoundary(domainId, position, options = {}) {
+    assertStringId(domainId, "findNearestBoundary.domainId");
+    assertVec2(position, "findNearestBoundary.position");
     let best = null;
     let bestDistanceSq = Infinity;
     for (const boundary of this.getBoundariesForDomain(domainId, options)) {
@@ -729,6 +820,8 @@ export class PlaceRegistry {
   }
 
   placesInBounds(domainId, bounds) {
+    assertStringId(domainId, "placesInBounds.domainId");
+    assertBounds(bounds, "placesInBounds.bounds");
     const index = this.#exteriorIndexes.get(domainId);
     if (!index) return [];
     const result = [];
@@ -1610,6 +1703,8 @@ export class PlaceRegistry {
   getPortalRecord(key) { return this.#portalRecords.get(key) ?? null; }
 
   locate(domainId, position) {
+    assertStringId(domainId, "locate.domainId");
+    assertVec2(position, "locate.position");
     const places = [];
     const spaces = [];
     const seenPlaces = new Set();
