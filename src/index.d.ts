@@ -581,6 +581,7 @@ export interface TravelState {
   portalEntered: boolean;
   portalTransitionRemaining: number;
   graphRevision: number;
+  worldChangePolicy: "encounter" | "eager";
   status: "active" | "complete" | "failed" | "cancelled";
   failureReason: string | null;
   replans: number;
@@ -597,6 +598,7 @@ export interface TravelOptions {
   maxNearestTargetExpansions?: number;
   maxCost?: number;
   anchorPredicate?: (anchor: CompiledPlaceAnchor & { placeId: PlaceId; domainId: string }) => boolean;
+  worldChangePolicy?: "encounter" | "eager";
   deltaSeconds?: number;
 }
 
