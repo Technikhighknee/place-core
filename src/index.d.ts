@@ -520,6 +520,8 @@ export class PlaceRegistry {
     portalRecordCount: number;
     portalEndpointCount: number;
     portalEndpointDomainCount: number;
+    traversablePortalEndpointCount: number;
+    traversablePortalEndpointDomainCount: number;
     portalRoadBindingCount: number;
     portalRoadDomainCount: number;
     portalOverrideCount: number;
