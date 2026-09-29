@@ -5,7 +5,14 @@ export class WorldCoreBridge {
   #unsubscribeWorldEvents = null;
   #sameDomainPortalCrossings = new Map();
 
-  constructor({ world, navigation, startJourney, stopJourney, Navigation = null } = {}) {
+  constructor({
+    world,
+    navigation,
+    startJourney,
+    stopJourney,
+    Navigation = null,
+    existingDomainPolicy = "reject"
+  } = {}) {
     if (!world) throw new TypeError("WorldCoreBridge requires world");
     if (!navigation) throw new TypeError("WorldCoreBridge requires navigation");
     if (typeof startJourney !== "function") throw new TypeError("WorldCoreBridge requires world-core startJourney");
@@ -14,7 +21,15 @@ export class WorldCoreBridge {
     this.navigation = navigation;
     this.startJourneyFn = startJourney;
     this.stopJourneyFn = stopJourney;
+    if (existingDomainPolicy !== "reject" &&
+        existingDomainPolicy !== "adopt") {
+      throw new TypeError(
+        'existingDomainPolicy must be "reject" or "adopt"'
+      );
+    }
+
     this.NavigationClass = Navigation;
+    this.existingDomainPolicy = existingDomainPolicy;
   }
 
   attachRegistry(registry) {
@@ -185,26 +200,65 @@ export class WorldCoreBridge {
 
   materializePlace(instance, definition) {
     const addedDomains = [];
-    const boundDomains = [];
+    const newlyBoundDomains = [];
+
+    // Preflight ownership and existing bindings before mutating either core.
+    for (const layer of definition.layers) {
+      const domainId = instance.layerDomains.get(layer.id);
+      const existingDomain = this.world.getDomain?.(domainId);
+
+      if (existingDomain && this.existingDomainPolicy !== "adopt") {
+        throw new Error(
+          `world-core domain already exists and cannot be adopted: ${domainId}`
+        );
+      }
+
+      if (layer.topologyId != null) {
+        if (typeof this.navigation.bindDomain !== "function") {
+          throw new Error(
+            "world-core NavigationRegistry is required for topology-bound place layers"
+          );
+        }
+
+        const existingBinding =
+          this.navigation.domainBindings?.get?.(domainId) ??
+          null;
+        if (existingBinding != null &&
+            existingBinding !== layer.topologyId) {
+          throw new Error(
+            `world-core domain ${domainId} is already bound to incompatible topology ${existingBinding}; expected ${layer.topologyId}`
+          );
+        }
+      }
+    }
+
     try {
       for (const layer of definition.layers) {
         this.ensureLayerTopology(definition, layer);
         const domainId = instance.layerDomains.get(layer.id);
+
         if (!this.world.getDomain?.(domainId)) {
           this.world.addDomain({ id: domainId });
           addedDomains.push(domainId);
         }
+
         if (layer.topologyId != null) {
-          if (typeof this.navigation.bindDomain !== "function") {
-            throw new Error("world-core NavigationRegistry is required for topology-bound place layers");
+          const existingBinding =
+            this.navigation.domainBindings?.get?.(domainId) ??
+            null;
+          if (existingBinding == null) {
+            this.navigation.bindDomain(domainId, layer.topologyId);
+            newlyBoundDomains.push(domainId);
           }
-          this.navigation.bindDomain(domainId, layer.topologyId);
-          boundDomains.push(domainId);
         }
       }
     } catch (error) {
-      for (const domainId of boundDomains.reverse()) this.navigation.unbindDomain?.(domainId);
-      for (const domainId of addedDomains.reverse()) this.world.removeDomain?.(domainId);
+      for (const domainId of newlyBoundDomains.reverse()) {
+        this.navigation.unbindDomain?.(domainId);
+      }
+      for (const domainId of addedDomains.reverse()) {
+        this.world.removeDomain?.(domainId);
+      }
       throw error;
     }
   }
