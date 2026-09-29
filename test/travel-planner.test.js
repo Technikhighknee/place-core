@@ -510,3 +510,65 @@ test("nearest semantic target batches thousands of portal costs per domain", () 
   assert.ok(largestBatch >= count);
   assert.ok(batchCalls < 20, `expected bounded batch calls, got ${batchCalls}`);
 });
+
+
+test("all travel plan shapes expose the current travel revision", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "revision-place",
+    layers: [{ id: "inside" }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      tags: ["target"],
+      position: { x: 5, y: 0 },
+      nodeId: "target"
+    }]
+  });
+  const place = places.createPlace({
+    id: "room",
+    definitionId: "revision-place"
+  });
+
+  const entity = {
+    id: "hans",
+    domainId: place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+  const bridge = {
+    getEntity(id) {
+      return id === "hans" ? entity : null;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 5 };
+    },
+    planLocalRouteCostsToMany({ destinationNodeIds }) {
+      return new Map(
+        [...destinationNodeIds].map((id) => [id, 5])
+      );
+    },
+    startLocalJourney() { return true; },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const explicit = planTravel(
+    places,
+    bridge,
+    "hans",
+    { placeId: "room", anchorId: "target" }
+  );
+  const nearest = planTravel(
+    places,
+    bridge,
+    "hans",
+    { kind: "nearest", tag: "target" }
+  );
+
+  for (const plan of [explicit, nearest]) {
+    assert.ok(plan);
+    assert.equal(plan.travelRevision, places.travelRevision);
+    assert.equal(plan.graphRevision, places.travelRevision);
+  }
+});
