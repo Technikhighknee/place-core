@@ -115,3 +115,73 @@ test("state hash is independent of dynamic portal insertion order", () => {
     ["alpha", "beta"]
   );
 });
+
+
+test("serialized snapshots are byte-stable across irrelevant insertion order", () => {
+  const blueprint = {
+    id: "canonical-place",
+    layers: [{ id: "inside" }],
+    portals: [
+      {
+        id: "alpha-door",
+        a: { kind: "external", slot: "alpha" },
+        b: { kind: "local", layerId: "inside", position: { x: 0, y: 0 } }
+      },
+      {
+        id: "beta-door",
+        a: { kind: "external", slot: "beta" },
+        b: { kind: "local", layerId: "inside", position: { x: 1, y: 0 } }
+      }
+    ]
+  };
+
+  const build = (reverse) => {
+    const places = new PlaceRegistry();
+    places.registerDefinition(blueprint);
+
+    const alpha = {
+      domainId: "street",
+      position: { x: 10, y: 0 },
+      metadata: reverse
+        ? { b: 2, a: 1 }
+        : { a: 1, b: 2 }
+    };
+    const beta = {
+      domainId: "street",
+      position: { x: 20, y: 0 },
+      metadata: reverse
+        ? { nested: { y: 2, x: 1 }, z: 3 }
+        : { z: 3, nested: { x: 1, y: 2 } }
+    };
+
+    places.createPlace({
+      id: "house",
+      definitionId: "canonical-place",
+      attachments: reverse
+        ? { beta, alpha }
+        : { alpha, beta },
+      metadata: reverse
+        ? { z: 3, nested: { y: 2, x: 1 } }
+        : { nested: { x: 1, y: 2 }, z: 3 }
+    });
+
+    if (reverse) {
+      places.setPortalState("house", "beta-door", { locked: true });
+      places.setPortalState("house", "alpha-door", { locked: true });
+    } else {
+      places.setPortalState("house", "alpha-door", { locked: true });
+      places.setPortalState("house", "beta-door", { locked: true });
+    }
+
+    return places;
+  };
+
+  const a = build(false);
+  const b = build(true);
+
+  const aJson = JSON.stringify(serializePlaceCore(a));
+  const bJson = JSON.stringify(serializePlaceCore(b));
+
+  assert.equal(aJson, bJson);
+  assert.equal(computePlaceCoreStateHash(a), computePlaceCoreStateHash(b));
+});
