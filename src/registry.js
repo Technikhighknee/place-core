@@ -282,17 +282,37 @@ export class PlaceRegistry {
     const instance = this.#instances.get(instanceId);
     if (!instance) return null;
     const definition = this.#definitions.get(instance.definitionId);
-    const candidates = options.tag ? definition.getAnchorsByTag(options.tag) : definition.anchors;
+    const candidates = options.tag
+      ? definition.getAnchorsByTag(options.tag)
+      : definition.anchors;
+
     let best = null;
     let bestDistanceSq = Infinity;
+
     for (const anchor of candidates) {
       if (options.layerId != null && anchor.layerId !== options.layerId) continue;
-      const dx = anchor.position.x - position.x;
-      const dy = anchor.position.y - position.y;
-      const distanceSq = dx * dx + dy * dy;
-      if (distanceSq < bestDistanceSq) { best = anchor; bestDistanceSq = distanceSq; }
+      if (options.kind != null && anchor.kind !== options.kind) continue;
+      if (options.spaceId != null && anchor.spaceId !== options.spaceId) continue;
+      if (anchor.spaceId != null) {
+        const space = definition.getSpace(anchor.spaceId);
+        if (space && !this.#spaceEnabled(instance, definition, space)) continue;
+      }
+
+      const distanceSq = squaredDistance(position, anchor.position);
+      if (distanceSq < bestDistanceSq ||
+          (distanceSq === bestDistanceSq &&
+           anchor.id.localeCompare(best?.id ?? "") < 0)) {
+        best = anchor;
+        bestDistanceSq = distanceSq;
+      }
     }
-    return best ? { ...best, placeId: instanceId, domainId: instance.layerDomains.get(best.layerId), distance: Math.sqrt(bestDistanceSq) } : null;
+
+    return best ? {
+      ...best,
+      placeId: instanceId,
+      domainId: instance.layerDomains.get(best.layerId),
+      distance: Math.sqrt(bestDistanceSq)
+    } : null;
   }
 
   getAnchorsForDomain(domainId, options = {}) {
