@@ -39,6 +39,11 @@ export class WorldCoreBridge {
     existingDomainPolicy = "reject"
   } = {}) {
     if (!world) throw new TypeError("WorldCoreBridge requires world");
+    if (typeof world.subscribeEvents !== "function") {
+      throw new TypeError(
+        "WorldCoreBridge requires world-core World.subscribeEvents"
+      );
+    }
     if (!navigation) throw new TypeError("WorldCoreBridge requires navigation");
     if (typeof startJourney !== "function") throw new TypeError("WorldCoreBridge requires world-core startJourney");
     if (typeof stopJourney !== "function") throw new TypeError("WorldCoreBridge requires world-core stopJourney");
@@ -73,11 +78,23 @@ export class WorldCoreBridge {
     this.#sameDomainPortalCrossings.clear();
     this.#registry = registry;
 
-    if (typeof this.world.subscribeEvents === "function") {
-      this.#unsubscribeWorldEvents = this.world.subscribeEvents(
-        (event) => this.#handleWorldEvent(event)
-      );
-    }
+    this.#unsubscribeWorldEvents = this.world.subscribeEvents(
+      (event) => this.#handleWorldEvent(event),
+      {
+        onError: (error, event) => {
+          this.#registry?.emit(
+            "world-event-bridge-error",
+            {
+              worldEventType: event?.type ?? null,
+              message:
+                error instanceof Error
+                  ? error.message
+                  : String(error)
+            }
+          );
+        }
+      }
+    );
 
     return this;
   }
