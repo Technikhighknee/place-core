@@ -31,5 +31,5 @@ jobs:
       - run: npm run bench:luebeck
         env:
           LUEBECK_TRAVELERS: "250"
-          LUEBECK_QUERY_COUNT: "5000"
+          LUEBECK_QUERY_COUNT: "50000"
           LUEBECK_MAX_TICKS: "1200"
