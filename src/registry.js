@@ -149,7 +149,14 @@ export class PlaceRegistry {
 
     try {
       if (typeof bridge.attachRegistry === "function") {
-        bridge.attachRegistry(this);
+        bridge.attachRegistry(
+          this,
+          () => {
+            if (this.#bridge === bridge) {
+              this.#bridge = null;
+            }
+          }
+        );
         registryAttached = true;
       }
 
@@ -660,8 +667,12 @@ export class PlaceRegistry {
     const layerDomains = new Map();
     const claimedDomains = new Map();
     for (const layer of definition.layers) {
+      const suppliedDomainId =
+        Object.hasOwn(suppliedLayerDomains, layer.id)
+          ? suppliedLayerDomains[layer.id]
+          : undefined;
       const domainId =
-        suppliedLayerDomains[layer.id] ??
+        suppliedDomainId ??
         defaultLayerDomainId(input.id, layer.id);
       assertStringId(domainId, `layerDomains.${layer.id}`);
 

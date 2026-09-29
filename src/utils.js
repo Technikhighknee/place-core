@@ -1,10 +1,17 @@
 import { createHash } from "node:crypto";
 
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
+
 export function assertId(id, label = "id") {
-  const validString = typeof id === "string" && id.length > 0;
+  const validString =
+    typeof id === "string" &&
+    id.length > 0 &&
+    !CONTROL_CHARACTER.test(id);
   const validNumber = typeof id === "number" && Number.isFinite(id);
   if (!validString && !validNumber) {
-    throw new TypeError(`${label} must be a non-empty string or finite number`);
+    throw new TypeError(
+      `${label} must be a non-empty string or finite number; string IDs cannot contain control characters`
+    );
   }
   return id;
 }
@@ -12,6 +19,11 @@ export function assertId(id, label = "id") {
 export function assertStringId(id, label = "id") {
   if (typeof id !== "string" || id.length === 0) {
     throw new TypeError(`${label} must be a non-empty string`);
+  }
+  if (CONTROL_CHARACTER.test(id)) {
+    throw new TypeError(
+      `${label} must be a non-empty string without control characters`
+    );
   }
   return id;
 }
@@ -22,7 +34,16 @@ function isPlainObject(value) {
   return prototype === Object.prototype || prototype === null;
 }
 
-function cloneJsonValue(value, path) {
+function defineOwnJsonProperty(target, key, value) {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true
+  });
+}
+
+function cloneJsonValue(value, path, ancestors) {
   if (value === null) return null;
 
   switch (typeof value) {
@@ -46,10 +67,19 @@ function cloneJsonValue(value, path) {
       throw new TypeError(`${path} contains unsupported value`);
   }
 
+  if (ancestors.has(value)) {
+    throw new TypeError(`${path} contains a circular JSON structure`);
+  }
+
   if (Array.isArray(value)) {
-    return value.map((item, index) =>
-      cloneJsonValue(item, `${path}[${index}]`)
-    );
+    ancestors.add(value);
+    try {
+      return value.map((item, index) =>
+        cloneJsonValue(item, `${path}[${index}]`, ancestors)
+      );
+    } finally {
+      ancestors.delete(value);
+    }
   }
 
   if (!isPlainObject(value)) {
@@ -60,13 +90,22 @@ function cloneJsonValue(value, path) {
   }
 
   const result = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (item === undefined) {
-      throw new TypeError(
-        `${path}.${key} contains undefined, which is not JSON-safe`
+  ancestors.add(value);
+  try {
+    for (const [key, item] of Object.entries(value)) {
+      if (item === undefined) {
+        throw new TypeError(
+          `${path}.${key} contains undefined, which is not JSON-safe`
+        );
+      }
+      defineOwnJsonProperty(
+        result,
+        key,
+        cloneJsonValue(item, `${path}.${key}`, ancestors)
       );
     }
-    result[key] = cloneJsonValue(item, `${path}.${key}`);
+  } finally {
+    ancestors.delete(value);
   }
   return result;
 }
@@ -114,7 +153,7 @@ export function normalizeStringList(
 
 export function cloneJson(value) {
   if (value === undefined) return undefined;
-  return cloneJsonValue(value, "value");
+  return cloneJsonValue(value, "value", new Set());
 }
 
 export function deepFreeze(value, seen = new Set()) {
@@ -128,7 +167,7 @@ export function deepFreeze(value, seen = new Set()) {
   return Object.freeze(value);
 }
 
-export function canonicalize(value) {
+export function canonicalize(value, ancestors = new Set()) {
   if (value === null) return null;
 
   switch (typeof value) {
@@ -154,15 +193,24 @@ export function canonicalize(value) {
       throw new TypeError("unsupported value cannot be canonicalized");
   }
 
+  if (ancestors.has(value)) {
+    throw new TypeError("circular JSON structure cannot be canonicalized");
+  }
+
   if (Array.isArray(value)) {
-    return value.map((item, index) => {
-      if (item === undefined) {
-        throw new TypeError(
-          `undefined array entry at index ${index} cannot be canonicalized`
-        );
-      }
-      return canonicalize(item);
-    });
+    ancestors.add(value);
+    try {
+      return value.map((item, index) => {
+        if (item === undefined) {
+          throw new TypeError(
+            `undefined array entry at index ${index} cannot be canonicalized`
+          );
+        }
+        return canonicalize(item, ancestors);
+      });
+    } finally {
+      ancestors.delete(value);
+    }
   }
 
   if (!isPlainObject(value)) {
@@ -173,10 +221,19 @@ export function canonicalize(value) {
   }
 
   const result = {};
-  for (const key of Object.keys(value).sort()) {
-    const item = value[key];
-    if (item === undefined) continue;
-    result[key] = canonicalize(item);
+  ancestors.add(value);
+  try {
+    for (const key of Object.keys(value).sort()) {
+      const item = value[key];
+      if (item === undefined) continue;
+      defineOwnJsonProperty(
+        result,
+        key,
+        canonicalize(item, ancestors)
+      );
+    }
+  } finally {
+    ancestors.delete(value);
   }
   return result;
 }

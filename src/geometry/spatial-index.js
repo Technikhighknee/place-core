@@ -6,6 +6,34 @@ import {
   pointInGeometry
 } from "./primitives.js";
 
+function assertFiniteBounds(bounds, label = "bounds") {
+  if (!bounds ||
+      typeof bounds !== "object" ||
+      !Number.isFinite(bounds.minX) ||
+      !Number.isFinite(bounds.minY) ||
+      !Number.isFinite(bounds.maxX) ||
+      !Number.isFinite(bounds.maxY)) {
+    throw new TypeError(`${label} must contain finite bounds`);
+  }
+  if (bounds.maxX < bounds.minX ||
+      bounds.maxY < bounds.minY) {
+    throw new RangeError(`${label} must contain ordered bounds`);
+  }
+  return bounds;
+}
+
+function assertFiniteIndexPoint(point) {
+  try {
+    assertVec2(point, "point");
+  } catch (error) {
+    throw new TypeError(
+      "point must be a finite Vec2",
+      { cause: error }
+    );
+  }
+  return point;
+}
+
 export class StaticGeometryIndex {
   #cellSize;
   #cells = new Map();
@@ -69,8 +97,9 @@ export class DynamicAabbIndex {
   }
 
   set(id, bounds) {
-    this.delete(id);
+    assertFiniteBounds(bounds, "DynamicAabbIndex bounds");
     const keys = [...this.#keysForBounds(bounds)];
+    this.delete(id);
     this.#bounds.set(id, { ...bounds });
     this.#memberships.set(id, keys);
     for (const key of keys) {
@@ -95,6 +124,7 @@ export class DynamicAabbIndex {
   }
 
   queryPoint(point) {
+    assertFiniteIndexPoint(point);
     const bucket = this.#cells.get(this.#key(point.x, point.y));
     if (!bucket) return [];
     const result = [];
@@ -106,6 +136,7 @@ export class DynamicAabbIndex {
   }
 
   queryBounds(bounds) {
+    assertFiniteBounds(bounds, "DynamicAabbIndex query bounds");
     const minX = Math.floor(bounds.minX / this.#cellSize);
     const minY = Math.floor(bounds.minY / this.#cellSize);
     const maxX = Math.floor(bounds.maxX / this.#cellSize);

@@ -30,6 +30,12 @@ function assertArray(value, label) {
   if (!Array.isArray(value)) throw new TypeError(`${label} must be an array`);
 }
 
+function ownValue(object, key) {
+  return Object.hasOwn(object, key)
+    ? object[key]
+    : undefined;
+}
+
 function assertFiniteVec2(value, label) {
   assertObject(value, label);
   if (!Number.isFinite(value.x) || !Number.isFinite(value.y)) {
@@ -308,7 +314,7 @@ function assertSnapshotResolvedPortalPhysical(
 function resolveSnapshotPortalEndpoint(endpoint, item) {
   if (endpoint.kind === "local") {
     return {
-      domainId: item.layerDomains[endpoint.layerId],
+      domainId: ownValue(item.layerDomains, endpoint.layerId),
       position: endpoint.position,
       nodeId: endpoint.nodeId ?? null,
       placeId: item.id,
@@ -318,7 +324,7 @@ function resolveSnapshotPortalEndpoint(endpoint, item) {
   }
 
   if (endpoint.kind === "external") {
-    const attachment = item.attachments[endpoint.slot];
+    const attachment = ownValue(item.attachments, endpoint.slot);
     if (!attachment) return null;
     return {
       ...attachment,
@@ -623,7 +629,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     }
 
     for (const layer of definition.layers) {
-      const domainId = item.layerDomains[layer.id];
+      const domainId = ownValue(item.layerDomains, layer.id);
       if (typeof domainId !== "string" || !domainId) {
         throw new Error(`instance ${String(item.id)} missing domain for layer ${layer.id}`);
       }
@@ -692,7 +698,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
     for (const basePortal of definition.portals) {
       const override =
-        item.portalOverrides?.[basePortal.id] ??
+        ownValue(item.portalOverrides ?? {}, basePortal.id) ??
         {};
       const resolved = {
         ...basePortal,

@@ -179,31 +179,33 @@ test("layer IDs that shadow Object.prototype still receive default domains", () 
   );
 });
 
-test("semantic membership keys cannot collide on embedded separators", () => {
+test("IDs reject control characters before they can collide in composite keys", () => {
   const registry = new PlaceRegistry();
   registry.registerDefinition({
     id: "semantic-only"
   });
+  registry.createPlace({
+    id: "child",
+    definitionId: "semantic-only"
+  });
 
-  for (const id of ["a\u0000b", "a", "child"]) {
-    registry.createPlace({
-      id,
+  assert.throws(
+    () => registry.createPlace({
+      id: "a\u0000b",
       definitionId: "semantic-only"
-    });
-  }
-
-  registry.addMembership("child", {
-    parentPlaceId: "a\u0000b",
-    kind: "c"
-  });
-  registry.addMembership("child", {
-    parentPlaceId: "a",
-    kind: "b\u0000c"
-  });
-
-  assert.equal(
-    registry.getMemberships("child").length,
-    2
+    }),
+    /control characters/
   );
-  registry.assertInternalConsistency();
+
+  registry.createPlace({
+    id: "parent",
+    definitionId: "semantic-only"
+  });
+  assert.throws(
+    () => registry.addMembership("child", {
+      parentPlaceId: "parent",
+      kind: "b\u0000c"
+    }),
+    /control characters/
+  );
 });

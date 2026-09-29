@@ -29,6 +29,7 @@ export class WorldCoreBridge {
   #registry = null;
   #unsubscribeWorldEvents = null;
   #sameDomainPortalCrossings = new Map();
+  #onRegistryDispose = null;
 
   constructor({
     world,
@@ -62,27 +63,28 @@ export class WorldCoreBridge {
     this.existingDomainPolicy = existingDomainPolicy;
   }
 
-  attachRegistry(registry) {
+  attachRegistry(registry, onDispose = null) {
     if (!registry || typeof registry !== "object") {
       throw new TypeError("WorldCoreBridge registry is required");
     }
-    if (this.#registry === registry) return this;
+    if (onDispose != null && typeof onDispose !== "function") {
+      throw new TypeError("WorldCoreBridge onDispose callback must be a function");
+    }
+    if (this.#registry === registry) {
+      if (onDispose != null) this.#onRegistryDispose = onDispose;
+      return this;
+    }
     if (this.#registry && this.#registry !== registry) {
       throw new Error(
         "WorldCoreBridge is already attached to a different PlaceRegistry"
       );
     }
 
-    this.#unsubscribeWorldEvents?.();
-    this.#unsubscribeWorldEvents = null;
-    this.#sameDomainPortalCrossings.clear();
-    this.#registry = registry;
-
-    this.#unsubscribeWorldEvents = this.world.subscribeEvents(
+    const unsubscribe = this.world.subscribeEvents(
       (event) => this.#handleWorldEvent(event),
       {
         onError: (error, event) => {
-          this.#registry?.emit(
+          registry.emit?.(
             "world-event-bridge-error",
             {
               worldEventType: event?.type ?? null,
@@ -96,14 +98,44 @@ export class WorldCoreBridge {
       }
     );
 
+    this.#unsubscribeWorldEvents?.();
+    this.#sameDomainPortalCrossings.clear();
+    this.#registry = registry;
+    this.#onRegistryDispose = onDispose;
+    this.#unsubscribeWorldEvents = unsubscribe;
     return this;
   }
 
   dispose() {
-    const removed = this.#unsubscribeWorldEvents?.() ?? false;
+    let removed = false;
+    let unsubscribeError = null;
+    try {
+      removed = this.#unsubscribeWorldEvents?.() ?? false;
+    } catch (error) {
+      unsubscribeError = error;
+    }
+
+    const onDispose = this.#onRegistryDispose;
     this.#unsubscribeWorldEvents = null;
     this.#sameDomainPortalCrossings.clear();
     this.#registry = null;
+    this.#onRegistryDispose = null;
+
+    let detachError = null;
+    try {
+      onDispose?.();
+    } catch (error) {
+      detachError = error;
+    }
+
+    if (unsubscribeError && detachError) {
+      throw new AggregateError(
+        [unsubscribeError, detachError],
+        "failed to dispose WorldCoreBridge cleanly"
+      );
+    }
+    if (unsubscribeError) throw unsubscribeError;
+    if (detachError) throw detachError;
     return removed;
   }
 
@@ -600,7 +632,7 @@ export class WorldCoreBridge {
 
     for (const boundary of definition.boundaries) {
       const resolved =
-        this.#registry?.getBoundary?.(instance.id, boundary.id) ??
+        this.#registry?.resolveBoundary?.(instance.id, boundary.id) ??
         boundary;
       this.syncBoundaryState(instance, resolved);
     }
