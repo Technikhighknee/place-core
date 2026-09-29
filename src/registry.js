@@ -444,6 +444,9 @@ export class PlaceRegistry {
       throw error;
     }
 
+    this.#refreshTrackedOccupancy(
+      this.#collectTrackedEntitiesForIndexedPlaces([instance.id])
+    );
     this.emit("place-created", { placeId: instance.id, definitionId: definition.id });
     return instance;
   }
@@ -556,12 +559,14 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     const space = definition.getSpace(spaceId);
     if (!space) throw new Error(`unknown space ${spaceId} on place ${String(instanceId)}`);
+    const affectedEntities = [...(this.#entitiesByPlace.get(instanceId) ?? [])];
     const baseEnabled = true;
     const enabled = patch.enabled === undefined
       ? (instance.getSpaceOverride(spaceId)?.enabled ?? baseEnabled)
       : Boolean(patch.enabled);
     instance.setSpaceOverride(spaceId, enabled === baseEnabled ? null : { enabled });
     this.#graphRevision += 1;
+    this.#refreshTrackedOccupancy(affectedEntities);
     this.emit("space-state-changed", { placeId: instanceId, spaceId, enabled });
     return { ...space, enabled };
   }
@@ -595,6 +600,9 @@ export class PlaceRegistry {
     }
 
     const affected = this.#collectPlacementDescendants(instanceId);
+    const affectedEntities = new Set(
+      this.#collectTrackedEntitiesForIndexedPlaces(affected)
+    );
     for (const id of affected) this.#unindexExterior(this.#instances.get(id));
 
     this.#unregisterPlacementDependency(instance);
@@ -607,11 +615,17 @@ export class PlaceRegistry {
       this.#indexExterior(child, this.#definitions.get(child.definitionId));
     }
 
+    for (const entityId of this.#collectTrackedEntitiesForIndexedPlaces(affected)) {
+      affectedEntities.add(entityId);
+    }
+
     this.#graphRevision += 1;
+    this.#refreshTrackedOccupancy(affectedEntities);
     this.emit("place-placement-changed", {
       placeId: instanceId,
       placement: cloneJson(instance.placement),
-      affectedPlaceCount: affected.length
+      affectedPlaceCount: affected.length,
+      affectedEntityCount: affectedEntities.size
     });
     return instance.placement;
   }
@@ -633,10 +647,12 @@ export class PlaceRegistry {
       cursor = cursor.parentId == null ? null : this.#instances.get(cursor.parentId);
     }
     if (instance.parentId === (parentId ?? null)) return instance;
+    const affectedEntities = [...(this.#entitiesByPlace.get(instanceId) ?? [])];
     this.#unregisterSemanticDependency(instance);
     instance.parentId = parentId ?? null;
     this.#registerSemanticDependency(instance);
     this.#graphRevision += 1;
+    this.#refreshTrackedOccupancy(affectedEntities);
     this.emit("place-parent-changed", { placeId: instanceId, parentId: instance.parentId });
     return instance;
   }
@@ -883,6 +899,7 @@ export class PlaceRegistry {
       spaceOverrideCount,
       dynamicPortalCount,
       occupiedEntityCount: this.#occupancy.size,
+      occupancySpatialDomainCount: this.#occupancySpatialIndexes.size,
       graphRevision: this.#graphRevision,
       footprintIndexCells,
       eventQueueSize: this.#events.size,
@@ -1114,6 +1131,20 @@ export class PlaceRegistry {
       if (a.spaces[i].placeId !== b.spaces[i].placeId || a.spaces[i].spaceId !== b.spaces[i].spaceId) return false;
     }
     return true;
+  }
+
+  #collectTrackedEntitiesForIndexedPlaces(instanceIds) {
+    const result = new Set();
+    for (const instanceId of instanceIds) {
+      const domainId = this.#indexedExteriorDomains.get(instanceId);
+      if (domainId == null) continue;
+      const bounds = this.#exteriorIndexes.get(domainId)?.getBounds(instanceId);
+      if (!bounds) continue;
+      for (const entityId of this.#trackedEntitiesInBounds(domainId, bounds)) {
+        result.add(entityId);
+      }
+    }
+    return [...result];
   }
 
   #indexOccupancyPoint(entityId, location) {
