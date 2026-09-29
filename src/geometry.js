@@ -138,6 +138,18 @@ export function normalizeTransform(transform = {}) {
   return Object.freeze({ x, y, rotation, scale });
 }
 
+export function composeTransforms(parent, child) {
+  const a = normalizeTransform(parent);
+  const b = normalizeTransform(child);
+  const origin = transformPoint({ x: b.x, y: b.y }, a);
+  return Object.freeze({
+    x: origin.x,
+    y: origin.y,
+    rotation: a.rotation + b.rotation,
+    scale: a.scale * b.scale
+  });
+}
+
 export function transformPoint(point, transform) {
   const t = normalizeTransform(transform);
   const c = Math.cos(t.rotation);
