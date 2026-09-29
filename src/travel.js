@@ -252,11 +252,20 @@ export function findDomainPortalPath(
   assertStringId(startDomainId, "startDomainId");
   assertStringId(targetDomainId, "targetDomainId");
 
-  const pathOptions =
-    options.excludedPairs instanceof Set
-      ? options
-      : normalizeDomainPathOptions(options);
+  return findDomainPortalPathInternal(
+    registry,
+    startDomainId,
+    targetDomainId,
+    normalizeDomainPathOptions(options)
+  );
+}
 
+function findDomainPortalPathInternal(
+  registry,
+  startDomainId,
+  targetDomainId,
+  options = {}
+) {
   if (startDomainId === targetDomainId) return [];
 
   const forwardVisited = new Map([[startDomainId, null]]);
@@ -274,7 +283,7 @@ export function findDomainPortalPath(
     if (expandForward) {
       const next = new Set();
       for (const domainId of [...forwardFrontier].sort()) {
-        const neighbors = neighborDomains(transitionsFrom(registry, domainId, pathOptions), "out");
+        const neighbors = neighborDomains(transitionsFrom(registry, domainId, options), "out");
         for (const neighbor of neighbors) {
           if (forwardVisited.has(neighbor)) continue;
           forwardVisited.set(neighbor, domainId);
@@ -291,7 +300,7 @@ export function findDomainPortalPath(
     } else {
       const next = new Set();
       for (const domainId of [...backwardFrontier].sort()) {
-        const predecessors = neighborDomains(transitionsInto(registry, domainId, pathOptions), "in");
+        const predecessors = neighborDomains(transitionsInto(registry, domainId, options), "in");
         for (const predecessor of predecessors) {
           if (backwardVisited.has(predecessor)) continue;
           backwardVisited.set(predecessor, domainId);
@@ -331,7 +340,7 @@ export function findDomainPortalPath(
   const domains = [...prefix, ...suffix];
   const edges = [];
   for (let i = 0; i < domains.length - 1; i += 1) {
-    const candidates = transitionsFrom(registry, domains[i], pathOptions)
+    const candidates = transitionsFrom(registry, domains[i], options)
       .filter((edge) => edge.to.domainId === domains[i + 1]);
     if (!candidates.length) throw new Error("domain path references missing portal transition");
     edges.push(candidates[0]);
@@ -717,7 +726,7 @@ function shortestDomainPathCandidates(
 ) {
   const excludedPortalKeys = new Set(options.excludedPortalKeys ?? []);
   const baseExcludedPairs = new Set(options.excludedDomainPairs ?? []);
-  const first = findDomainPortalPath(
+  const first = findDomainPortalPathInternal(
     registry,
     startDomainId,
     targetDomainId,
@@ -755,7 +764,7 @@ function shortestDomainPathCandidates(
       if (seenExclusions.has(exclusionKey)) continue;
       seenExclusions.add(exclusionKey);
 
-      const alternate = findDomainPortalPath(
+      const alternate = findDomainPortalPathInternal(
         registry,
         startDomainId,
         targetDomainId,
@@ -1041,7 +1050,7 @@ export function planTravel(registry, a, b, c, d) {
   const maxAttempts = options.maxDomainPathAttempts;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const topological = findDomainPortalPath(
+    const topological = findDomainPortalPathInternal(
       registry,
       startDomainId,
       resolvedTarget.domainId,
