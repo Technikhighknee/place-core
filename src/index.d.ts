@@ -798,6 +798,7 @@ export function deserializePlaceCore(
 export function computePlaceCoreStateHash(registry: PlaceRegistry): string;
 
 export function geometryBounds(geometry: Geometry): Bounds;
+export function geometryContainsGeometry(parent: Geometry, child: Geometry): boolean;
 export function pointInGeometry(point: Vec2, geometry: Geometry): boolean;
 export function transformPoint(point: Vec2, transform?: Transform2D): Vec2;
 export function inverseTransformPoint(point: Vec2, transform?: Transform2D): Vec2;
