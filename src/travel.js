@@ -1,6 +1,6 @@
 import { squaredDistance } from "./geometry.js";
 import { isPortalTraversable } from "./registry.js";
-import { cloneJson, deepFreeze } from "./utils.js";
+import { cloneJson, deepFreeze, normalizeBoolean } from "./utils.js";
 
 const EMPTY_SET = new Set();
 const POSITION_EPSILON_SQ = 1e-8;
@@ -509,7 +509,7 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
       return { plan: null, failedPair: pairKey(fromDomainId, toDomainId) };
     }
 
-    const cap = options.maxConcreteStatesPerLayer ?? 128;
+    const cap = options.maxConcreteStatesPerLayer;
     if (states.length > cap) states.length = cap;
   }
 
@@ -572,10 +572,7 @@ function shortestDomainPathCandidates(
     ...first.map((edge) => edge.to.domainId)
   ];
   const minimumHops = firstDomains.length - 1;
-  const maxCandidates = options.maxShortestDomainPaths ?? 32;
-  if (!Number.isInteger(maxCandidates) || maxCandidates < 1) {
-    throw new RangeError("maxShortestDomainPaths must be a positive integer");
-  }
+  const maxCandidates = options.maxShortestDomainPaths;
 
   const pending = [{
     domains: firstDomains,
@@ -641,8 +638,8 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
   const searchOptions = { ...options, excludedPortalKeys };
   const queue = new MinHeap();
   const bestCostByState = new Map();
-  const maxExpansions = options.maxNearestTargetExpansions ?? 250_000;
-  const maxCost = Number.isFinite(options.maxCost) ? options.maxCost : Infinity;
+  const maxExpansions = options.maxNearestTargetExpansions;
+  const maxCost = options.maxCost;
 
   const start = {
     key: "start",
@@ -662,8 +659,8 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
   while (queue.size) {
     const state = queue.pop();
     if (state.cost !== bestCostByState.get(state.key)) continue;
-    if (state.cost >= maxCost) continue;
-    if (bestGoal && state.cost >= bestGoal.cost) break;
+    if (state.cost > maxCost) continue;
+    if (bestGoal && state.cost > bestGoal.cost) break;
     if (++expansions > maxExpansions) {
       throw new Error("nearest semantic target search exceeded maxNearestTargetExpansions");
     }
@@ -748,7 +745,7 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
       if (localSeconds == null) continue;
 
       const cost = state.cost + localSeconds + (edge.portal.transitionCost ?? 0);
-      if (cost > maxCost || (bestGoal && cost >= bestGoal.cost)) continue;
+      if (cost > maxCost || (bestGoal && cost > bestGoal.cost)) continue;
 
       const key = transitionKey(edge);
       const previous = bestCostByState.get(key);
@@ -802,8 +799,14 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
 }
 
 export function planTravel(registry, a, b, c, d) {
-  const { bridge, entityOrId, target, options } = resolvePlanCall(registry, a, b, c, d);
+  const {
+    bridge,
+    entityOrId,
+    target,
+    options: rawOptions
+  } = resolvePlanCall(registry, a, b, c, d);
   if (!bridge) throw new Error("planTravel requires a WorldCoreBridge");
+  const options = normalizePlanningOptions(rawOptions);
   const entity = typeof entityOrId === "object" ? entityOrId : bridge.getEntity(entityOrId);
   if (!entity) throw new Error(`unknown entity ${String(entityOrId)}`);
   if (!entity.mobility) throw new Error(`entity ${String(entity.id)} has no mobility profile`);
@@ -873,7 +876,7 @@ export function planTravel(registry, a, b, c, d) {
 
   const excludedPairs = new Set(options.excludedDomainPairs ?? []);
   for (const failedPair of failedPairs) excludedPairs.add(failedPair);
-  const maxAttempts = options.maxDomainPathAttempts ?? 32;
+  const maxAttempts = options.maxDomainPathAttempts;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const topological = findDomainPortalPath(
@@ -945,38 +948,98 @@ function normalizePortalEntryTolerance(value) {
   return tolerance;
 }
 
+function normalizePositiveInteger(value, label, defaultValue) {
+  const normalized = value ?? defaultValue;
+  if (!Number.isInteger(normalized) || normalized < 1) {
+    throw new RangeError(`${label} must be a positive integer`);
+  }
+  return normalized;
+}
+
+function normalizeMaxCost(value) {
+  if (value === undefined) return Infinity;
+  if (value === Infinity) return Infinity;
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError("maxCost must be a finite number >= 0 or Infinity");
+  }
+  return value;
+}
+
+function normalizeDeltaSeconds(value, defaultValue = 0) {
+  const normalized = value ?? defaultValue;
+  if (!Number.isFinite(normalized) || normalized < 0) {
+    throw new RangeError("deltaSeconds must be a finite number >= 0");
+  }
+  return normalized;
+}
+
+function normalizePlanningOptions(options = {}) {
+  return {
+    ...options,
+    maxDomainPathAttempts: normalizePositiveInteger(
+      options.maxDomainPathAttempts,
+      "maxDomainPathAttempts",
+      32
+    ),
+    maxShortestDomainPaths: normalizePositiveInteger(
+      options.maxShortestDomainPaths,
+      "maxShortestDomainPaths",
+      32
+    ),
+    allowPartialShortestPathSearch: normalizeBoolean(
+      options.allowPartialShortestPathSearch,
+      "allowPartialShortestPathSearch",
+      { defaultValue: false }
+    ),
+    maxConcreteStatesPerLayer: normalizePositiveInteger(
+      options.maxConcreteStatesPerLayer,
+      "maxConcreteStatesPerLayer",
+      128
+    ),
+    maxNearestTargetExpansions: normalizePositiveInteger(
+      options.maxNearestTargetExpansions,
+      "maxNearestTargetExpansions",
+      250_000
+    ),
+    maxCost: normalizeMaxCost(options.maxCost)
+  };
+}
+
 function captureTravelOptions(options = {}) {
+  const normalized = normalizePlanningOptions(options);
   const captured = {
-    worldChangePolicy: normalizeWorldChangePolicy(options.worldChangePolicy),
-    portalEntryTolerance: normalizePortalEntryTolerance(options.portalEntryTolerance)
+    worldChangePolicy: normalizeWorldChangePolicy(normalized.worldChangePolicy),
+    portalEntryTolerance: normalizePortalEntryTolerance(
+      normalized.portalEntryTolerance
+    ),
+    maxDomainPathAttempts: normalized.maxDomainPathAttempts,
+    maxShortestDomainPaths: normalized.maxShortestDomainPaths,
+    allowPartialShortestPathSearch:
+      normalized.allowPartialShortestPathSearch,
+    maxConcreteStatesPerLayer: normalized.maxConcreteStatesPerLayer,
+    maxNearestTargetExpansions: normalized.maxNearestTargetExpansions,
+    maxCost: normalized.maxCost
   };
 
-  if (options.journeyOptions !== undefined) {
-    captured.journeyOptions = cloneJson(options.journeyOptions);
+  if (normalized.journeyOptions !== undefined) {
+    captured.journeyOptions = cloneJson(normalized.journeyOptions);
   }
-  if (options.excludedPortalKeys !== undefined) {
-    captured.excludedPortalKeys = Object.freeze([...options.excludedPortalKeys]);
+  if (normalized.excludedPortalKeys !== undefined) {
+    captured.excludedPortalKeys = Object.freeze(
+      [...normalized.excludedPortalKeys]
+    );
   }
-  if (options.excludedDomainPairs !== undefined) {
-    captured.excludedDomainPairs = Object.freeze([...options.excludedDomainPairs]);
-  }
-
-  for (const key of [
-    "maxDomainPathAttempts",
-    "maxShortestDomainPaths",
-    "allowPartialShortestPathSearch",
-    "maxConcreteStatesPerLayer",
-    "maxNearestTargetExpansions",
-    "maxCost"
-  ]) {
-    if (options[key] !== undefined) captured[key] = options[key];
+  if (normalized.excludedDomainPairs !== undefined) {
+    captured.excludedDomainPairs = Object.freeze(
+      [...normalized.excludedDomainPairs]
+    );
   }
 
-  if (options.anchorPredicate !== undefined) {
-    if (typeof options.anchorPredicate !== "function") {
+  if (normalized.anchorPredicate !== undefined) {
+    if (typeof normalized.anchorPredicate !== "function") {
       throw new TypeError("anchorPredicate must be a function");
     }
-    captured.anchorPredicate = options.anchorPredicate;
+    captured.anchorPredicate = normalized.anchorPredicate;
   }
 
   return Object.freeze(captured);
@@ -1162,7 +1225,7 @@ function advance(registry, bridge, state, options = {}) {
         if (state.portalTransitionRemaining > 0) return state;
       }
 
-      const deltaSeconds = Math.max(0, options.deltaSeconds ?? 0);
+      const deltaSeconds = normalizeDeltaSeconds(options.deltaSeconds);
       if (state.portalTransitionRemaining > 0) {
         state.portalTransitionRemaining = Math.max(0, state.portalTransitionRemaining - deltaSeconds);
         if (state.portalTransitionRemaining > 0) return state;
@@ -1248,6 +1311,11 @@ export function stepTravel(registry, a, b, c) {
   if (!state) return null;
 
   const effectiveOptions = effectiveTravelOptions(state, options);
+  if (effectiveOptions.deltaSeconds !== undefined) {
+    effectiveOptions.deltaSeconds = normalizeDeltaSeconds(
+      effectiveOptions.deltaSeconds
+    );
+  }
   const worldChangePolicy = normalizeWorldChangePolicy(
     effectiveOptions.worldChangePolicy
   );
@@ -1285,12 +1353,12 @@ export function stepPlaceSimulation(registry, a = {}, b = 0, c = {}) {
 
   if (a && typeof a === "object" && typeof a.getEntity === "function" && typeof a.planLocalRoute === "function") {
     bridge = a;
-    deltaSeconds = Number.isFinite(b) ? b : 0;
+    deltaSeconds = normalizeDeltaSeconds(b);
     options = c ?? {};
   } else {
     options = a ?? {};
     bridge = options.bridge ?? registry.bridge;
-    deltaSeconds = Number.isFinite(options.deltaSeconds) ? options.deltaSeconds : 0;
+    deltaSeconds = normalizeDeltaSeconds(options.deltaSeconds);
   }
 
   if (!bridge) throw new Error("stepPlaceSimulation requires a WorldCoreBridge");
