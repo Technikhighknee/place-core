@@ -1205,8 +1205,20 @@ export class PlaceRegistry {
     const semanticChildren = this.#semanticChildren.get(instanceId);
     if (semanticChildren?.size) {
       const childId = [...semanticChildren][0];
-      throw new Error(`cannot remove place ${String(instanceId)} while child ${String(childId)} exists`);
+      throw new Error(
+        `cannot remove place ${String(instanceId)} while child ${String(childId)} exists`
+      );
     }
+
+    const membershipChildren =
+      this.#membershipChildren.get(instanceId);
+    if (membershipChildren?.size) {
+      const childId = [...membershipChildren.keys()][0];
+      throw new Error(
+        `cannot remove place ${String(instanceId)} while semantic membership child ${String(childId)} exists`
+      );
+    }
+
     const placementChildren = this.#placementChildren.get(instanceId);
     if (placementChildren?.size) {
       throw new Error(`cannot remove place ${String(instanceId)} while relative placements depend on it`);
@@ -1591,21 +1603,145 @@ export class PlaceRegistry {
         );
       }
     }
-    if (parentId === instanceId) throw new Error("place cannot parent itself");
-    let cursor = parentId == null ? null : this.#instances.get(parentId);
-    while (cursor) {
-      if (cursor.id === instanceId) throw new Error("place parent cycle");
-      cursor = cursor.parentId == null ? null : this.#instances.get(cursor.parentId);
+    if (parentId === instanceId) {
+      throw new Error("place cannot parent itself");
     }
-    if (instance.parentId === (parentId ?? null)) return instance;
+    if (parentId != null) {
+      this.#assertSemanticEdgeDoesNotCycle(
+        instanceId,
+        parentId
+      );
+    }
+    if (instance.parentId === (parentId ?? null)) {
+      return instance;
+    }
     const affectedEntities = [...(this.#entitiesByPlace.get(instanceId) ?? [])];
     this.#unregisterSemanticDependency(instance);
     instance.parentId = parentId ?? null;
     this.#registerSemanticDependency(instance);
     this.#touchState();
     this.#refreshTrackedOccupancy(affectedEntities);
-    this.emit("place-parent-changed", { placeId: instanceId, parentId: instance.parentId });
+    this.emit("place-parent-changed", {
+      placeId: instanceId,
+      parentId: instance.parentId
+    });
     return instance;
+  }
+
+  getMemberships(instanceId) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) return [];
+
+    return instance.getMemberships()
+      .slice()
+      .sort((a, b) =>
+        typedIdKey(a.parentPlaceId)
+          .localeCompare(typedIdKey(b.parentPlaceId)) ||
+        a.kind.localeCompare(b.kind)
+      );
+  }
+
+  addMembership(instanceId, input) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) {
+      throw new Error(
+        `unknown place instance: ${String(instanceId)}`
+      );
+    }
+
+    const membership = normalizeMembership(
+      input,
+      "membership"
+    );
+    if (!this.#instances.has(membership.parentPlaceId)) {
+      throw new Error(
+        `unknown membership parent place: ${String(membership.parentPlaceId)}`
+      );
+    }
+    if (membership.parentPlaceId === instanceId) {
+      throw new Error(
+        "place cannot have a semantic membership to itself"
+      );
+    }
+
+    if (instance.getMembership(
+      membership.parentPlaceId,
+      membership.kind
+    )) {
+      throw new Error(
+        `semantic membership already exists: ${membership.kind} -> ${String(membership.parentPlaceId)}`
+      );
+    }
+
+    this.#assertSemanticEdgeDoesNotCycle(
+      instanceId,
+      membership.parentPlaceId
+    );
+
+    const affectedEntities = [
+      ...(this.#entitiesByPlace.get(instanceId) ?? [])
+    ];
+
+    instance.addMembership(membership);
+    this.#registerMembershipDependency(
+      instance.id,
+      membership
+    );
+
+    this.#touchState();
+    this.#refreshTrackedOccupancy(affectedEntities);
+    this.emit("place-membership-added", {
+      placeId: instanceId,
+      membership
+    });
+    return membership;
+  }
+
+  removeMembership(
+    instanceId,
+    parentPlaceId,
+    kind = "member-of"
+  ) {
+    assertId(parentPlaceId, "parentPlaceId");
+    assertStringId(kind, "membership kind");
+
+    const instance = this.#instances.get(instanceId);
+    if (!instance) return false;
+
+    const membership = instance.getMembership(
+      parentPlaceId,
+      kind
+    );
+    if (!membership) return false;
+
+    const affectedEntities = [
+      ...(this.#entitiesByPlace.get(instanceId) ?? [])
+    ];
+
+    instance.removeMembership(parentPlaceId, kind);
+    this.#unregisterMembershipDependency(
+      instance.id,
+      membership
+    );
+
+    this.#touchState();
+    this.#refreshTrackedOccupancy(affectedEntities);
+    this.emit("place-membership-removed", {
+      placeId: instanceId,
+      membership
+    });
+    return true;
+  }
+
+  getSemanticAncestors(
+    instanceId,
+    { includeSelf = false } = {}
+  ) {
+    if (!this.#instances.has(instanceId)) return [];
+    const closure = this.#semanticClosure([instanceId]);
+    return includeSelf
+      ? closure
+      : closure.filter((id) => id !== instanceId);
   }
 
   setPortalState(instanceId, portalId, patch) {
@@ -2288,7 +2424,144 @@ export class PlaceRegistry {
     if (parentId == null) return;
     const children = this.#semanticChildren.get(parentId);
     children?.delete(instance.id);
-    if (children?.size === 0) this.#semanticChildren.delete(parentId);
+    if (children?.size === 0) {
+      this.#semanticChildren.delete(parentId);
+    }
+  }
+
+  #registerMembershipDependency(childId, membership) {
+    let children = this.#membershipChildren.get(
+      membership.parentPlaceId
+    );
+    if (!children) {
+      this.#membershipChildren.set(
+        membership.parentPlaceId,
+        children = new Map()
+      );
+    }
+
+    children.set(
+      childId,
+      (children.get(childId) ?? 0) + 1
+    );
+  }
+
+  #unregisterMembershipDependency(childId, membership) {
+    const children = this.#membershipChildren.get(
+      membership.parentPlaceId
+    );
+    if (!children) return;
+
+    const count = children.get(childId) ?? 0;
+    if (count <= 1) {
+      children.delete(childId);
+    } else {
+      children.set(childId, count - 1);
+    }
+    if (children.size === 0) {
+      this.#membershipChildren.delete(
+        membership.parentPlaceId
+      );
+    }
+  }
+
+  #registerMembershipDependencies(instance) {
+    for (const membership of instance.getMemberships()) {
+      this.#registerMembershipDependency(
+        instance.id,
+        membership
+      );
+    }
+  }
+
+  #unregisterMembershipDependencies(instance) {
+    for (const membership of instance.getMemberships()) {
+      this.#unregisterMembershipDependency(
+        instance.id,
+        membership
+      );
+    }
+  }
+
+  #semanticParentIds(instanceId) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) return [];
+
+    const parents = new Map();
+    if (instance.parentId != null) {
+      parents.set(
+        typedIdKey(instance.parentId),
+        instance.parentId
+      );
+    }
+
+    for (const membership of instance.getMemberships()) {
+      parents.set(
+        typedIdKey(membership.parentPlaceId),
+        membership.parentPlaceId
+      );
+    }
+
+    return [...parents.values()]
+      .sort((a, b) =>
+        typedIdKey(a).localeCompare(typedIdKey(b))
+      );
+  }
+
+  #assertSemanticEdgeDoesNotCycle(instanceId, parentId) {
+    const targetKey = typedIdKey(instanceId);
+    const stack = [parentId];
+    const visited = new Set();
+
+    while (stack.length) {
+      const currentId = stack.pop();
+      const currentKey = typedIdKey(currentId);
+      if (currentKey === targetKey) {
+        throw new Error("place semantic membership cycle");
+      }
+      if (visited.has(currentKey)) continue;
+      visited.add(currentKey);
+
+      const parents = this.#semanticParentIds(currentId);
+      for (let i = parents.length - 1; i >= 0; i -= 1) {
+        stack.push(parents[i]);
+      }
+    }
+  }
+
+  #semanticClosure(instanceIds) {
+    const output = [];
+    const permanent = new Set();
+    const temporary = new Set();
+
+    const visit = (instanceId) => {
+      const key = typedIdKey(instanceId);
+      if (permanent.has(key)) return;
+      if (temporary.has(key)) {
+        throw new Error("place semantic membership cycle");
+      }
+
+      const instance = this.#instances.get(instanceId);
+      if (!instance) return;
+
+      temporary.add(key);
+      for (const parentId of this.#semanticParentIds(instanceId)) {
+        visit(parentId);
+      }
+      temporary.delete(key);
+      permanent.add(key);
+      output.push(instanceId);
+    };
+
+    const roots = [...instanceIds]
+      .sort((a, b) =>
+        typedIdKey(a).localeCompare(typedIdKey(b))
+      );
+    for (const instanceId of roots) {
+      visit(instanceId);
+    }
+
+    return output;
   }
 
   #registerPlacementDependency(instance) {
