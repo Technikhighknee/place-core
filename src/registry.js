@@ -18,6 +18,7 @@ import {
   canonicalStringify,
   cloneJson,
   deepFreeze,
+  normalizeBoolean,
   normalizeStringList
 } from "./utils.js";
 
@@ -209,7 +210,11 @@ export class PlaceRegistry {
   #travelRevision = 0;
 
   constructor(options = {}) {
-    this.#captureEvents = options.captureEvents === true;
+    this.#captureEvents = normalizeBoolean(
+      options.captureEvents,
+      "captureEvents",
+      { defaultValue: false }
+    );
     this.#events = new BoundedEventQueue({
       limit: options.eventQueueLimit ?? 10_000,
       overflowPolicy: options.eventOverflowPolicy ?? "drop-newest"
@@ -826,7 +831,11 @@ export class PlaceRegistry {
     const boundary = definition.getBoundary(boundaryId);
     if (!boundary) throw new Error(`unknown boundary ${boundaryId} on place ${String(instanceId)}`);
     const currentEnabled = instance.getBoundaryOverride(boundaryId)?.enabled ?? boundary.enabled;
-    const enabled = patch.enabled === undefined ? currentEnabled : Boolean(patch.enabled);
+    const enabled = normalizeBoolean(
+      patch.enabled,
+      `boundary(${boundaryId}).enabled`,
+      { defaultValue: currentEnabled }
+    );
     const resolved = { ...boundary, enabled };
     if (enabled === currentEnabled) return resolved;
 
@@ -846,7 +855,11 @@ export class PlaceRegistry {
     const affectedEntities = [...(this.#entitiesByPlace.get(instanceId) ?? [])];
     const baseEnabled = true;
     const currentEnabled = instance.getSpaceOverride(spaceId)?.enabled ?? baseEnabled;
-    const enabled = patch.enabled === undefined ? currentEnabled : Boolean(patch.enabled);
+    const enabled = normalizeBoolean(
+      patch.enabled,
+      `space(${spaceId}).enabled`,
+      { defaultValue: currentEnabled }
+    );
     if (enabled === currentEnabled) return { ...space, enabled };
 
     instance.setSpaceOverride(spaceId, enabled === baseEnabled ? null : { enabled });
@@ -1018,9 +1031,11 @@ export class PlaceRegistry {
       const prospectiveState = {};
       let changed = false;
       for (const key of PORTAL_STATE_KEYS) {
-        const value = patch[key] === undefined
-          ? dynamic[key]
-          : Boolean(patch[key]);
+        const value = normalizeBoolean(
+          patch[key],
+          `dynamic portal(${portalId}).${key}`,
+          { defaultValue: dynamic[key] }
+        );
         prospectiveState[key] = value;
         if (value !== dynamic[key]) changed = true;
       }
@@ -1054,7 +1069,11 @@ export class PlaceRegistry {
     let changed = false;
     const next = {};
     for (const key of PORTAL_STATE_KEYS) {
-      const value = patch[key] === undefined ? current[key] : Boolean(patch[key]);
+      const value = normalizeBoolean(
+        patch[key],
+        `portal(${portalId}).${key}`,
+        { defaultValue: current[key] }
+      );
       if (value !== current[key]) changed = true;
       if (value !== base[key]) next[key] = value;
     }
@@ -1066,9 +1085,11 @@ export class PlaceRegistry {
       ...Object.fromEntries(
         PORTAL_STATE_KEYS.map((key) => [
           key,
-          patch[key] === undefined
-            ? current[key]
-            : Boolean(patch[key])
+          normalizeBoolean(
+            patch[key],
+            `portal(${portalId}).${key}`,
+            { defaultValue: current[key] }
+          )
         ])
       )
     };
@@ -1127,14 +1148,42 @@ export class PlaceRegistry {
       ),
       a: normalizeResolved(spec.a, "portal.a"),
       b: normalizeResolved(spec.b, "portal.b"),
-      bidirectional: spec.bidirectional !== false,
+      bidirectional: normalizeBoolean(
+        spec.bidirectional,
+        `dynamic portal ${spec.id}.bidirectional`,
+        { defaultValue: true }
+      ),
       transitionCost,
-      enabled: spec.enabled !== false,
-      open: spec.open !== false,
-      locked: spec.locked === true,
-      blocked: spec.blocked === true,
-      destroyed: spec.destroyed === true,
-      blocksWhenClosed: spec.blocksWhenClosed === true,
+      enabled: normalizeBoolean(
+        spec.enabled,
+        `dynamic portal ${spec.id}.enabled`,
+        { defaultValue: true }
+      ),
+      open: normalizeBoolean(
+        spec.open,
+        `dynamic portal ${spec.id}.open`,
+        { defaultValue: true }
+      ),
+      locked: normalizeBoolean(
+        spec.locked,
+        `dynamic portal ${spec.id}.locked`,
+        { defaultValue: false }
+      ),
+      blocked: normalizeBoolean(
+        spec.blocked,
+        `dynamic portal ${spec.id}.blocked`,
+        { defaultValue: false }
+      ),
+      destroyed: normalizeBoolean(
+        spec.destroyed,
+        `dynamic portal ${spec.id}.destroyed`,
+        { defaultValue: false }
+      ),
+      blocksWhenClosed: normalizeBoolean(
+        spec.blocksWhenClosed,
+        `dynamic portal ${spec.id}.blocksWhenClosed`,
+        { defaultValue: false }
+      ),
       roadBindings: (spec.roadBindings ?? []).map((binding, index) => {
         assertStringId(binding.layerId, `dynamic portal roadBindings[${index}].layerId`);
         assertStringId(binding.roadId, `dynamic portal roadBindings[${index}].roadId`);
@@ -1298,7 +1347,9 @@ export class PlaceRegistry {
     return event;
   }
 
-  setEventCapture(enabled) { this.#captureEvents = Boolean(enabled); }
+  setEventCapture(enabled) {
+    this.#captureEvents = normalizeBoolean(enabled, "event capture");
+  }
   drainEvents(target = []) { return this.#events.drain(target); }
   peekEvents() { return this.#events.peek(); }
   getEventQueueStats() {
