@@ -358,6 +358,7 @@ export class PlaceRegistry {
   #portalRecords = new Map();
   #portalsByDomain = new Map();
   #portalEndpointIndexes = new Map();
+  #traversablePortalEndpointIndexes = new Map();
   #portalEndpointRecords = new Map();
   #portalsByRoad = new Map();
   #instancePortalKeys = new Map();
@@ -668,7 +669,10 @@ export class PlaceRegistry {
       );
     }
 
-    const index = this.#portalEndpointIndexes.get(domainId);
+    const endpointIndexes = traversableOnly
+      ? this.#traversablePortalEndpointIndexes
+      : this.#portalEndpointIndexes;
+    const index = endpointIndexes.get(domainId);
     if (!index) return [];
 
     const matches = index.queryRadius(
@@ -738,7 +742,10 @@ export class PlaceRegistry {
       "findNearestPortal.maxDistance"
     );
 
-    const index = this.#portalEndpointIndexes.get(domainId);
+    const endpointIndexes = traversableOnly
+      ? this.#traversablePortalEndpointIndexes
+      : this.#portalEndpointIndexes;
+    const index = endpointIndexes.get(domainId);
     if (!index || index.size === 0) return null;
 
     const match = index.findNearest(position, {
@@ -1937,12 +1944,42 @@ export class PlaceRegistry {
           throw new Error(`portal record ${key} missing endpoint spatial record`);
         }
         if (!this.#portalEndpointIndexes.get(domainId)?.getPoint(endpointKey)) {
-          throw new Error(`portal record ${key} missing endpoint spatial index entry`);
+          throw new Error(
+            `portal record ${key} missing endpoint spatial index entry`
+          );
+        }
+
+        const traversablePoint =
+          this.#traversablePortalEndpointIndexes
+            .get(domainId)
+            ?.getPoint(endpointKey) ??
+          null;
+        if (record.traversable && !traversablePoint) {
+          throw new Error(
+            `traversable portal record ${key} missing traversable endpoint index entry`
+          );
+        }
+        if (!record.traversable && traversablePoint) {
+          throw new Error(
+            `blocked portal record ${key} leaked into traversable endpoint index`
+          );
         }
       }
     }
     if (this.#portalEndpointRecords.size !== this.#portalRecords.size * 2) {
       throw new Error("portal endpoint spatial record count drift");
+    }
+
+    let traversableEndpointCount = 0;
+    for (const index of this.#traversablePortalEndpointIndexes.values()) {
+      traversableEndpointCount += index.size;
+    }
+    let expectedTraversableEndpointCount = 0;
+    for (const record of this.#portalRecords.values()) {
+      if (record.traversable) expectedTraversableEndpointCount += 2;
+    }
+    if (traversableEndpointCount !== expectedTraversableEndpointCount) {
+      throw new Error("traversable portal endpoint index count drift");
     }
     return this.getDiagnostics();
   }
@@ -2100,7 +2137,17 @@ export class PlaceRegistry {
         const endpointKey = `${key}\u0000${side}`;
         const endpointIndex = this.#portalEndpointIndexes.get(domainId);
         endpointIndex?.delete(endpointKey);
-        if (endpointIndex?.size === 0) this.#portalEndpointIndexes.delete(domainId);
+        if (endpointIndex?.size === 0) {
+          this.#portalEndpointIndexes.delete(domainId);
+        }
+
+        const traversableIndex =
+          this.#traversablePortalEndpointIndexes.get(domainId);
+        traversableIndex?.delete(endpointKey);
+        if (traversableIndex?.size === 0) {
+          this.#traversablePortalEndpointIndexes.delete(domainId);
+        }
+
         this.#portalEndpointRecords.delete(endpointKey);
       }
       this.#portalRecords.delete(key);
@@ -2153,6 +2200,20 @@ export class PlaceRegistry {
           );
         }
         endpointIndex.set(endpointKey, endpoint.position);
+
+        if (record.traversable) {
+          let traversableIndex =
+            this.#traversablePortalEndpointIndexes.get(
+              endpoint.domainId
+            );
+          if (!traversableIndex) {
+            this.#traversablePortalEndpointIndexes.set(
+              endpoint.domainId,
+              traversableIndex = new DynamicPointIndex()
+            );
+          }
+          traversableIndex.set(endpointKey, endpoint.position);
+        }
       }
     }
     if (keys.size > 0) this.#instancePortalKeys.set(instance.id, keys);
