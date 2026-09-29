@@ -135,88 +135,122 @@ function portalTraversableState(portal) {
   return true;
 }
 
-function hasRoadBindingForDomain(instance, portal, domainId) {
-  return (portal.roadBindings ?? []).some((binding) =>
+function portalBindingsForDomain(instance, portal, domainId) {
+  return (portal.roadBindings ?? []).filter((binding) =>
     instance.layerDomains.get(binding.layerId) === domainId
   );
 }
 
-function assertSameDomainPortalEnforceable(instance, portal, label = "portal") {
-  if (!portal?.connected || !portal.a || !portal.b) return;
-  if (portal.a.domainId !== portal.b.domainId) return;
-
-  const needsPhysicalEnforcement =
-    (portal.transitionCost ?? 0) > 0 ||
-    !portalTraversableState(portal);
-
-  if (
-    needsPhysicalEnforcement &&
-    !hasRoadBindingForDomain(instance, portal, portal.a.domainId)
-  ) {
-    throw new Error(
-      `${label} requires a road binding in domain ${portal.a.domainId} for same-domain physical enforcement`
-    );
-  }
-}
-
-function validateDynamicPortalRoadBindings(
+function validateResolvedPortalRoadBindings(
   instance,
   definition,
-  portal
+  portal,
+  label = "portal"
 ) {
   for (const binding of portal.roadBindings ?? []) {
     const layer = definition.getLayer(binding.layerId);
     if (!layer) {
       throw new Error(
-        `dynamic portal ${portal.id} road binding references unknown layer ${binding.layerId}`
+        `${label} road binding references unknown layer ${binding.layerId}`
       );
     }
     if (layer.topologyId == null) {
       throw new Error(
-        `dynamic portal ${portal.id} road binding requires navigation topology on layer ${binding.layerId}`
+        `${label} road binding requires navigation topology on layer ${binding.layerId}`
       );
     }
 
-    if (layer.navigation) {
-      const road = layer.navigation.roads.find(
-        (candidate) => candidate.id === binding.roadId
+    if (layer.navigation &&
+        !layer.navigation.roads.some(
+          (road) => road.id === binding.roadId
+        )) {
+      throw new Error(
+        `${label} references unknown navigation road ${binding.roadId}`
       );
-      if (!road) {
-        throw new Error(
-          `dynamic portal ${portal.id} references unknown navigation road ${binding.roadId}`
-        );
-      }
-
-      const domainId = instance.layerDomains.get(binding.layerId);
-      if (portal.a.domainId === domainId &&
-          portal.b.domainId === domainId) {
-        if (portal.a.nodeId == null || portal.b.nodeId == null) {
-          throw new Error(
-            `dynamic same-domain portal ${portal.id} with a threshold road binding requires nodeId on both endpoints`
-          );
-        }
-
-        const forward =
-          road.from === portal.a.nodeId &&
-          road.to === portal.b.nodeId;
-        const reverse =
-          road.from === portal.b.nodeId &&
-          road.to === portal.a.nodeId;
-
-        if (!forward && !reverse) {
-          throw new Error(
-            `dynamic portal ${portal.id} road binding ${binding.roadId} does not connect its endpoint nodes`
-          );
-        }
-
-        if (portal.bidirectional === false &&
-            (!forward || road.bidirectional !== false)) {
-          throw new Error(
-            `dynamic unidirectional portal ${portal.id} requires a one-way threshold road from endpoint a to b`
-          );
-        }
-      }
     }
+  }
+
+  if (!portal?.connected || !portal.a || !portal.b) return;
+  if (portal.a.domainId !== portal.b.domainId) return;
+
+  const domainId = portal.a.domainId;
+  const thresholdBindings = portalBindingsForDomain(
+    instance,
+    portal,
+    domainId
+  );
+  const crossesSpaces =
+    portal.a.spaceId != null &&
+    portal.b.spaceId != null &&
+    portal.a.spaceId !== portal.b.spaceId;
+  const needsPhysicalEnforcement =
+    crossesSpaces ||
+    (portal.transitionCost ?? 0) > 0 ||
+    !portalTraversableState(portal);
+
+  if (needsPhysicalEnforcement && thresholdBindings.length === 0) {
+    throw new Error(
+      `${label} requires a road binding in domain ${domainId} for same-domain physical enforcement`
+    );
+  }
+
+  if (thresholdBindings.length === 0) return;
+
+  let allowsForward = false;
+  let allowsReverse = false;
+  let verifiedEmbeddedRoad = false;
+
+  for (const binding of thresholdBindings) {
+    const layer = definition.getLayer(binding.layerId);
+    if (!layer?.navigation) continue;
+
+    const road = layer.navigation.roads.find(
+      (candidate) => candidate.id === binding.roadId
+    );
+    if (!road) continue;
+    verifiedEmbeddedRoad = true;
+
+    if (portal.a.nodeId == null || portal.b.nodeId == null) {
+      throw new Error(
+        `${label} with a same-domain threshold road binding requires nodeId on both endpoints`
+      );
+    }
+
+    const forward =
+      road.from === portal.a.nodeId &&
+      road.to === portal.b.nodeId;
+    const reverse =
+      road.from === portal.b.nodeId &&
+      road.to === portal.a.nodeId;
+
+    if (!forward && !reverse) {
+      throw new Error(
+        `${label} road binding ${binding.roadId} does not connect its endpoint nodes`
+      );
+    }
+
+    allowsForward ||= forward || (reverse && road.bidirectional);
+    allowsReverse ||= reverse || (forward && road.bidirectional);
+  }
+
+  if (!verifiedEmbeddedRoad) return;
+
+  if (!allowsForward) {
+    throw new Error(
+      `${label} threshold roads do not allow traversal from endpoint a to b`
+    );
+  }
+
+  if (portal.bidirectional) {
+    if (!allowsReverse) {
+      throw new Error(
+        `${label} is bidirectional but its threshold roads do not allow traversal from endpoint b to a`
+      );
+    }
+  } else if (allowsReverse) {
+    throw new Error(
+      `${label} is unidirectional but its threshold roads allow reverse traversal`
+    );
   }
 }
 
@@ -761,8 +795,9 @@ export class PlaceRegistry {
     let materializationReceipt = null;
     try {
       for (const portal of definition.portals) {
-        assertSameDomainPortalEnforceable(
+        validateResolvedPortalRoadBindings(
           instance,
+          definition,
           this.resolvePortal(instance.id, portal.id),
           `portal ${portal.id}`
         );
@@ -1017,8 +1052,9 @@ export class PlaceRegistry {
         if (![portal.a, portal.b].some((endpoint) =>
           endpoint.kind === "external" && endpoint.slot === slot
         )) continue;
-        assertSameDomainPortalEnforceable(
+        validateResolvedPortalRoadBindings(
           instance,
+          definition,
           this.resolvePortal(instanceId, portal.id),
           `portal ${portal.id}`
         );
@@ -1242,8 +1278,9 @@ export class PlaceRegistry {
         ...prospectiveState
       };
       if (before.traversable !== portalTraversableState(prospective)) {
-        assertSameDomainPortalEnforceable(
+        validateResolvedPortalRoadBindings(
           instance,
+          definition,
           prospective,
           `dynamic portal ${portalId}`
         );
@@ -1323,8 +1360,9 @@ export class PlaceRegistry {
       )
     };
     if (before.traversable !== portalTraversableState(prospective)) {
-      assertSameDomainPortalEnforceable(
+      validateResolvedPortalRoadBindings(
         instance,
+        definition,
         prospective,
         `portal ${portalId}`
       );
@@ -1477,13 +1515,9 @@ export class PlaceRegistry {
       connected: true,
       traversable: portalTraversableState(portal)
     };
-    validateDynamicPortalRoadBindings(
+    validateResolvedPortalRoadBindings(
       instance,
       definition,
-      resolvedPortal
-    );
-    assertSameDomainPortalEnforceable(
-      instance,
       resolvedPortal,
       `dynamic portal ${portal.id}`
     );
