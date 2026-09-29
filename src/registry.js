@@ -128,6 +128,7 @@ export class PlaceRegistry {
   #exteriorIndexes = new Map();
   #indexedExteriorDomains = new Map();
   #placementChildren = new Map();
+  #semanticChildren = new Map();
   #portalRecords = new Map();
   #portalsByDomain = new Map();
   #instancePortalKeys = new Map();
@@ -424,6 +425,7 @@ export class PlaceRegistry {
     });
 
     this.#instances.set(instance.id, instance);
+    this.#registerSemanticDependency(instance);
     this.#registerPlacementDependency(instance);
     for (const [layerId, domainId] of layerDomains) {
       this.#domainBindings.set(domainId, { instanceId: instance.id, layerId });
@@ -452,8 +454,10 @@ export class PlaceRegistry {
   #removePlaceInternal(instanceId, callBridge) {
     const instance = this.#instances.get(instanceId);
     if (!instance) return false;
-    for (const child of this.#instances.values()) {
-      if (child.parentId === instanceId) throw new Error(`cannot remove place ${String(instanceId)} while child ${String(child.id)} exists`);
+    const semanticChildren = this.#semanticChildren.get(instanceId);
+    if (semanticChildren?.size) {
+      const childId = [...semanticChildren][0];
+      throw new Error(`cannot remove place ${String(instanceId)} while child ${String(childId)} exists`);
     }
     const placementChildren = this.#placementChildren.get(instanceId);
     if (placementChildren?.size) {
@@ -467,6 +471,7 @@ export class PlaceRegistry {
     this.clearEntityOccupancyForPlace(instanceId);
     for (const domainId of instance.layerDomains.values()) this.#domainBindings.delete(domainId);
     this.#unindexExterior(instance);
+    this.#unregisterSemanticDependency(instance);
     this.#unregisterPlacementDependency(instance);
     this.#removeInstancePortals(instance.id);
     this.#instances.delete(instance.id);
@@ -626,7 +631,10 @@ export class PlaceRegistry {
       if (cursor.id === instanceId) throw new Error("place parent cycle");
       cursor = cursor.parentId == null ? null : this.#instances.get(cursor.parentId);
     }
+    if (instance.parentId === (parentId ?? null)) return instance;
+    this.#unregisterSemanticDependency(instance);
     instance.parentId = parentId ?? null;
+    this.#registerSemanticDependency(instance);
     this.#graphRevision += 1;
     this.emit("place-parent-changed", { placeId: instanceId, parentId: instance.parentId });
     return instance;
@@ -877,7 +885,12 @@ export class PlaceRegistry {
     for (const instance of this.#instances.values()) {
       const definition = this.#definitions.get(instance.definitionId);
       if (!definition) throw new Error(`instance ${String(instance.id)} references missing definition`);
-      if (instance.parentId != null && !this.#instances.has(instance.parentId)) throw new Error(`instance ${String(instance.id)} references missing parent`);
+      if (instance.parentId != null) {
+        if (!this.#instances.has(instance.parentId)) throw new Error(`instance ${String(instance.id)} references missing parent`);
+        if (!this.#semanticChildren.get(instance.parentId)?.has(instance.id)) {
+          throw new Error(`instance ${String(instance.id)} missing semantic dependency index`);
+        }
+      }
       if (instance.placement?.parentPlaceId != null) {
         if (!this.#instances.has(instance.placement.parentPlaceId)) {
           throw new Error(`instance ${String(instance.id)} references missing placement parent`);
@@ -935,6 +948,22 @@ export class PlaceRegistry {
       if (index.size === 0) this.#exteriorIndexes.delete(domainId);
     }
     this.#indexedExteriorDomains.delete(instance.id);
+  }
+
+  #registerSemanticDependency(instance) {
+    const parentId = instance?.parentId;
+    if (parentId == null) return;
+    let children = this.#semanticChildren.get(parentId);
+    if (!children) this.#semanticChildren.set(parentId, children = new Set());
+    children.add(instance.id);
+  }
+
+  #unregisterSemanticDependency(instance) {
+    const parentId = instance?.parentId;
+    if (parentId == null) return;
+    const children = this.#semanticChildren.get(parentId);
+    children?.delete(instance.id);
+    if (children?.size === 0) this.#semanticChildren.delete(parentId);
   }
 
   #registerPlacementDependency(instance) {
