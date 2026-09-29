@@ -55,7 +55,7 @@ function run(seed) {
     if (step % 250 === 249) {
       places.assertInternalConsistency();
       const before = computePlaceCoreStateHash(places);
-      places = deserializePlaceCore(serializePlaceCore(places), { definitions: [definition] });
+      places = deserializePlaceCore(serializePlaceCore(places));
       assert.equal(computePlaceCoreStateHash(places), before);
     }
   }
