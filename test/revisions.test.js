@@ -106,7 +106,11 @@ test("travel-affecting mutations advance both revisions", () => {
 
   places.setBoundaryState("house", "wall", { enabled: false });
   assert.equal(places.stateRevision, ++state);
-  assert.equal(places.travelRevision, ++travel);
+  assert.equal(
+    places.travelRevision,
+    travel,
+    "boundary without road bindings is semantic state only"
+  );
 
   places.clearAttachment("house", "street");
   assert.equal(places.stateRevision, ++state);
