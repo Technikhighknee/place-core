@@ -281,3 +281,86 @@ test("overlapping spaces choose deepest then highest-priority then smallest-ID",
   located = places.locate(domain, { x: 5, y: 5 });
   assert.equal(located.deepestSpace.id, "z-low");
 });
+
+
+test("findAnchors can explicitly filter by effective nested-space availability", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "anchor-availability-place",
+    layers: [{ id: "inside" }],
+    spaces: [
+      {
+        id: "parent",
+        layerId: "inside",
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: 0,
+          maxX: 10,
+          maxY: 10
+        }
+      },
+      {
+        id: "child",
+        layerId: "inside",
+        parentSpaceId: "parent",
+        geometry: {
+          type: "aabb",
+          minX: 2,
+          minY: 2,
+          maxX: 8,
+          maxY: 8
+        }
+      }
+    ],
+    anchors: [{
+      id: "bed",
+      layerId: "inside",
+      spaceId: "child",
+      tags: ["sleep"],
+      position: { x: 5, y: 5 }
+    }]
+  });
+  places.createPlace({
+    id: "house",
+    definitionId: "anchor-availability-place"
+  });
+
+  assert.equal(
+    places.findAnchors({ tag: "sleep" }).length,
+    1,
+    "structural search includes the defined anchor"
+  );
+  assert.equal(
+    places.findAnchors({
+      tag: "sleep",
+      enabledOnly: true
+    }).length,
+    1
+  );
+
+  places.setSpaceState("house", "parent", {
+    enabled: false
+  });
+
+  assert.equal(
+    places.findAnchors({ tag: "sleep" }).length,
+    1,
+    "structural search remains definition-oriented"
+  );
+  assert.equal(
+    places.findAnchors({
+      tag: "sleep",
+      enabledOnly: true
+    }).length,
+    0,
+    "effective parent disablement hides child anchors"
+  );
+
+  assert.throws(
+    () => places.findAnchors({
+      enabledOnly: "true"
+    }),
+    /enabledOnly must be a boolean/
+  );
+});
