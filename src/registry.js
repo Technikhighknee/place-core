@@ -27,6 +27,29 @@ const PORTAL_STATE_KEYS = ["enabled", "open", "locked", "blocked", "destroyed"];
 const PLACE_INSTANCE_MUTATION_TOKEN =
   Symbol("place-core-instance-mutation");
 
+class ReadonlyMapView {
+  #map;
+
+  constructor(map) {
+    this.#map = map;
+    Object.freeze(this);
+  }
+
+  get size() { return this.#map.size; }
+  get(key) { return this.#map.get(key); }
+  has(key) { return this.#map.has(key); }
+  keys() { return this.#map.keys(); }
+  values() { return this.#map.values(); }
+  entries() { return this.#map.entries(); }
+  [Symbol.iterator]() { return this.#map[Symbol.iterator](); }
+
+  forEach(callback, thisArg = undefined) {
+    for (const [key, value] of this.#map) {
+      callback.call(thisArg, value, key, this);
+    }
+  }
+}
+
 function assertPlainObject(value, label) {
   if (!value ||
       typeof value !== "object" ||
@@ -368,20 +391,50 @@ function validateResolvedPortalRoadBindings(
 }
 
 export class PlaceInstance {
+  #id;
+  #definitionId;
+  #parentId;
+  #layerDomains;
+  #attachments;
+  #placement;
+  #metadata;
+
   #portalOverrides = new Map();
   #boundaryOverrides = new Map();
   #spaceOverrides = new Map();
   #dynamicPortals = new Map();
   #memberships = new Map();
 
+  #layerDomainsView;
+  #attachmentsView;
+  #portalOverridesView;
+  #boundaryOverridesView;
+  #spaceOverridesView;
+  #dynamicPortalsView;
+
   constructor(data) {
-    this.id = data.id;
-    this.definitionId = data.definitionId;
-    this.parentId = data.parentId ?? null;
-    this.layerDomains = new Map(data.layerDomains);
-    this.attachments = new Map(data.attachments);
-    this.placement = data.placement;
-    this.metadata = cloneJson(data.metadata ?? null);
+    this.#id = data.id;
+    this.#definitionId = data.definitionId;
+    this.#parentId = data.parentId ?? null;
+    this.#layerDomains = new Map(data.layerDomains);
+    this.#attachments = new Map(data.attachments);
+    this.#placement = data.placement;
+    this.#metadata = deepFreeze(
+      cloneJson(data.metadata ?? null)
+    );
+
+    this.#layerDomainsView =
+      new ReadonlyMapView(this.#layerDomains);
+    this.#attachmentsView =
+      new ReadonlyMapView(this.#attachments);
+    this.#portalOverridesView =
+      new ReadonlyMapView(this.#portalOverrides);
+    this.#boundaryOverridesView =
+      new ReadonlyMapView(this.#boundaryOverrides);
+    this.#spaceOverridesView =
+      new ReadonlyMapView(this.#spaceOverrides);
+    this.#dynamicPortalsView =
+      new ReadonlyMapView(this.#dynamicPortals);
 
     for (const membership of data.memberships ?? []) {
       this.#memberships.set(
@@ -392,29 +445,126 @@ export class PlaceInstance {
         membership
       );
     }
+
+    Object.preventExtensions(this);
   }
 
-  getPortalOverride(portalId) { return this.#portalOverrides.get(portalId) ?? null; }
-  setPortalOverride(portalId, override) {
-    if (override == null || Object.keys(override).length === 0) this.#portalOverrides.delete(portalId);
-    else this.#portalOverrides.set(portalId, deepFreeze({ ...override }));
+  get id() { return this.#id; }
+  get definitionId() { return this.#definitionId; }
+  get parentId() { return this.#parentId; }
+  get layerDomains() { return this.#layerDomainsView; }
+  get attachments() { return this.#attachmentsView; }
+  get placement() { return this.#placement; }
+  get metadata() { return this.#metadata; }
+  get portalOverrides() { return this.#portalOverridesView; }
+  get boundaryOverrides() { return this.#boundaryOverridesView; }
+  get spaceOverrides() { return this.#spaceOverridesView; }
+  get dynamicPortals() { return this.#dynamicPortalsView; }
+
+  #assertMutationToken(token) {
+    if (token !== PLACE_INSTANCE_MUTATION_TOKEN) {
+      throw new Error(
+        "PlaceInstance structural state is registry-managed"
+      );
+    }
   }
-  get portalOverrides() { return this.#portalOverrides; }
-  get boundaryOverrides() { return this.#boundaryOverrides; }
-  get spaceOverrides() { return this.#spaceOverrides; }
-  get dynamicPortals() { return this.#dynamicPortals; }
-  getBoundaryOverride(boundaryId) { return this.#boundaryOverrides.get(boundaryId) ?? null; }
-  setBoundaryOverride(boundaryId, override) {
-    if (override == null || Object.keys(override).length === 0) this.#boundaryOverrides.delete(boundaryId);
-    else this.#boundaryOverrides.set(boundaryId, deepFreeze({ ...override }));
+
+  setParentId(parentId, token) {
+    this.#assertMutationToken(token);
+    this.#parentId = parentId;
   }
-  getSpaceOverride(spaceId) { return this.#spaceOverrides.get(spaceId) ?? null; }
-  setSpaceOverride(spaceId, override) {
-    if (override == null || Object.keys(override).length === 0) this.#spaceOverrides.delete(spaceId);
-    else this.#spaceOverrides.set(spaceId, deepFreeze({ ...override }));
+
+  setPlacement(placement, token) {
+    this.#assertMutationToken(token);
+    this.#placement = placement;
   }
-  addDynamicPortal(portal) { this.#dynamicPortals.set(portal.id, portal); }
-  removeDynamicPortal(portalId) { return this.#dynamicPortals.delete(portalId); }
+
+  setAttachment(slot, attachment, token) {
+    this.#assertMutationToken(token);
+    this.#attachments.set(slot, attachment);
+  }
+
+  deleteAttachment(slot, token) {
+    this.#assertMutationToken(token);
+    return this.#attachments.delete(slot);
+  }
+
+  getPortalOverride(portalId) {
+    return this.#portalOverrides.get(portalId) ?? null;
+  }
+
+  setPortalOverride(portalId, override, token) {
+    this.#assertMutationToken(token);
+    if (override == null ||
+        Object.keys(override).length === 0) {
+      this.#portalOverrides.delete(portalId);
+    } else {
+      this.#portalOverrides.set(
+        portalId,
+        deepFreeze({ ...override })
+      );
+    }
+  }
+
+  getBoundaryOverride(boundaryId) {
+    return this.#boundaryOverrides.get(boundaryId) ?? null;
+  }
+
+  setBoundaryOverride(boundaryId, override, token) {
+    this.#assertMutationToken(token);
+    if (override == null ||
+        Object.keys(override).length === 0) {
+      this.#boundaryOverrides.delete(boundaryId);
+    } else {
+      this.#boundaryOverrides.set(
+        boundaryId,
+        deepFreeze({ ...override })
+      );
+    }
+  }
+
+  getSpaceOverride(spaceId) {
+    return this.#spaceOverrides.get(spaceId) ?? null;
+  }
+
+  setSpaceOverride(spaceId, override, token) {
+    this.#assertMutationToken(token);
+    if (override == null ||
+        Object.keys(override).length === 0) {
+      this.#spaceOverrides.delete(spaceId);
+    } else {
+      this.#spaceOverrides.set(
+        spaceId,
+        deepFreeze({ ...override })
+      );
+    }
+  }
+
+  addDynamicPortal(portal, token) {
+    this.#assertMutationToken(token);
+    this.#dynamicPortals.set(
+      portal.id,
+      deepFreeze(portal)
+    );
+  }
+
+  replaceDynamicPortal(portalId, portal, token) {
+    this.#assertMutationToken(token);
+    if (!this.#dynamicPortals.has(portalId)) {
+      throw new Error(
+        `unknown dynamic portal: ${portalId}`
+      );
+    }
+    this.#dynamicPortals.set(
+      portalId,
+      deepFreeze(portal)
+    );
+  }
+
+  removeDynamicPortal(portalId, token) {
+    this.#assertMutationToken(token);
+    return this.#dynamicPortals.delete(portalId);
+  }
 
   getMembership(parentPlaceId, kind = "member-of") {
     return this.#memberships.get(
@@ -427,11 +577,7 @@ export class PlaceInstance {
   }
 
   addMembership(membership, token) {
-    if (token !== PLACE_INSTANCE_MUTATION_TOKEN) {
-      throw new Error(
-        "PlaceInstance membership state is registry-managed"
-      );
-    }
+    this.#assertMutationToken(token);
 
     const key = membershipKey(
       membership.parentPlaceId,
@@ -447,12 +593,7 @@ export class PlaceInstance {
     kind = "member-of",
     token
   ) {
-    if (token !== PLACE_INSTANCE_MUTATION_TOKEN) {
-      throw new Error(
-        "PlaceInstance membership state is registry-managed"
-      );
-    }
-
+    this.#assertMutationToken(token);
     return this.#memberships.delete(
       membershipKey(parentPlaceId, kind)
     );
@@ -1348,13 +1489,18 @@ export class PlaceRegistry {
     const previousResolved = { ...boundary, enabled: currentEnabled };
     instance.setBoundaryOverride(
       boundaryId,
-      enabled === boundary.enabled ? null : { enabled }
+      enabled === boundary.enabled ? null : { enabled },
+      PLACE_INSTANCE_MUTATION_TOKEN
     );
 
     try {
       this.#bridge?.syncBoundaryState?.(instance, resolved);
     } catch (error) {
-      instance.setBoundaryOverride(boundaryId, previousOverride);
+      instance.setBoundaryOverride(
+        boundaryId,
+        previousOverride,
+        PLACE_INSTANCE_MUTATION_TOKEN
+      );
       let rollbackError = null;
       try {
         this.#bridge?.syncBoundaryState?.(instance, previousResolved);
@@ -1400,7 +1546,11 @@ export class PlaceRegistry {
     );
     if (enabled === currentEnabled) return { ...space, enabled };
 
-    instance.setSpaceOverride(spaceId, enabled === baseEnabled ? null : { enabled });
+    instance.setSpaceOverride(
+      spaceId,
+      enabled === baseEnabled ? null : { enabled },
+      PLACE_INSTANCE_MUTATION_TOKEN
+    );
     this.#touchState({ travel: true });
     this.#refreshTrackedOccupancy(affectedEntities);
     this.emit("space-state-changed", { placeId: instanceId, spaceId, enabled });
@@ -1422,7 +1572,11 @@ export class PlaceRegistry {
       )
     );
 
-    instance.attachments.set(slot, nextAttachment);
+    instance.setAttachment(
+      slot,
+      nextAttachment,
+      PLACE_INSTANCE_MUTATION_TOKEN
+    );
     try {
       for (const portal of definition.portals) {
         if (![portal.a, portal.b].some((endpoint) =>
@@ -1436,8 +1590,15 @@ export class PlaceRegistry {
         );
       }
     } catch (error) {
-      if (previousAttachment) instance.attachments.set(slot, previousAttachment);
-      else instance.attachments.delete(slot);
+      if (previousAttachment) instance.setAttachment(
+        slot,
+        previousAttachment,
+        PLACE_INSTANCE_MUTATION_TOKEN
+      );
+      else instance.deleteAttachment(
+        slot,
+        PLACE_INSTANCE_MUTATION_TOKEN
+      );
       throw error;
     }
 
@@ -1457,8 +1618,15 @@ export class PlaceRegistry {
         );
       }
     } catch (error) {
-      if (previousAttachment) instance.attachments.set(slot, previousAttachment);
-      else instance.attachments.delete(slot);
+      if (previousAttachment) instance.setAttachment(
+        slot,
+        previousAttachment,
+        PLACE_INSTANCE_MUTATION_TOKEN
+      );
+      else instance.deleteAttachment(
+        slot,
+        PLACE_INSTANCE_MUTATION_TOKEN
+      );
       this.#reindexInstancePortals(instance, definition);
 
       let rollbackError = null;
@@ -1511,7 +1679,10 @@ export class PlaceRegistry {
       )
     );
 
-    instance.attachments.delete(slot);
+    instance.deleteAttachment(
+        slot,
+        PLACE_INSTANCE_MUTATION_TOKEN
+      );
     this.#reindexInstancePortals(instance, definition);
 
     try {
@@ -1523,7 +1694,11 @@ export class PlaceRegistry {
         );
       }
     } catch (error) {
-      instance.attachments.set(slot, previousAttachment);
+      instance.setAttachment(
+        slot,
+        previousAttachment,
+        PLACE_INSTANCE_MUTATION_TOKEN
+      );
       this.#reindexInstancePortals(instance, definition);
 
       let rollbackError = null;
@@ -1576,7 +1751,10 @@ export class PlaceRegistry {
     for (const id of affected) this.#unindexExterior(this.#instances.get(id));
 
     this.#unregisterPlacementDependency(instance);
-    instance.placement = next;
+    instance.setPlacement(
+      next,
+      PLACE_INSTANCE_MUTATION_TOKEN
+    );
     this.#registerPlacementDependency(instance);
 
     for (const id of affected) {
@@ -1636,7 +1814,10 @@ export class PlaceRegistry {
     }
     const affectedEntities = [...(this.#entitiesByPlace.get(instanceId) ?? [])];
     this.#unregisterSemanticDependency(instance);
-    instance.parentId = parentId ?? null;
+    instance.setParentId(
+      parentId ?? null,
+      PLACE_INSTANCE_MUTATION_TOKEN
+    );
     this.#registerSemanticDependency(instance);
     this.#touchState();
     this.#refreshTrackedOccupancy(affectedEntities);
@@ -1781,11 +1962,19 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     const base = definition.getPortal(portalId);
     if (!base) {
-      const dynamic = instance.dynamicPortals.get(portalId);
-      if (!dynamic) throw new Error(`unknown portal ${portalId} on place ${String(instanceId)}`);
-      const before = this.resolvePortal(instanceId, portalId);
+      const dynamic =
+        instance.dynamicPortals.get(portalId);
+      if (!dynamic) {
+        throw new Error(
+          `unknown portal ${portalId} on place ${String(instanceId)}`
+        );
+      }
+
+      const before =
+        this.resolvePortal(instanceId, portalId);
       const prospectiveState = {};
       let changed = false;
+
       for (const key of PORTAL_STATE_KEYS) {
         const value = normalizeBoolean(
           patch[key],
@@ -1793,15 +1982,24 @@ export class PlaceRegistry {
           { defaultValue: dynamic[key] }
         );
         prospectiveState[key] = value;
-        if (value !== dynamic[key]) changed = true;
+        if (value !== dynamic[key]) {
+          changed = true;
+        }
       }
+
       if (!changed) return before;
 
+      const nextDynamic = deepFreeze({
+        ...dynamic,
+        ...prospectiveState
+      });
       const prospective = {
         ...before,
         ...prospectiveState
       };
-      if (before.traversable !== portalTraversableState(prospective)) {
+
+      if (before.traversable !==
+          portalTraversableState(prospective)) {
         validateResolvedPortalRoadBindings(
           instance,
           definition,
@@ -1810,27 +2008,43 @@ export class PlaceRegistry {
         );
       }
 
-      const previousState = Object.fromEntries(
-        PORTAL_STATE_KEYS.map((key) => [key, dynamic[key]])
+      instance.replaceDynamicPortal(
+        portalId,
+        nextDynamic,
+        PLACE_INSTANCE_MUTATION_TOKEN
       );
-      for (const key of PORTAL_STATE_KEYS) {
-        dynamic[key] = prospectiveState[key];
-      }
 
-      this.#reindexInstancePortals(instance, definition);
-      const resolved = this.resolvePortal(instanceId, portalId);
+      this.#reindexInstancePortals(
+        instance,
+        definition
+      );
+      const resolved =
+        this.resolvePortal(instanceId, portalId);
 
       try {
-        this.#bridge?.syncPortalState?.(instance, dynamic, resolved);
+        this.#bridge?.syncPortalState?.(
+          instance,
+          nextDynamic,
+          resolved
+        );
       } catch (error) {
-        for (const key of PORTAL_STATE_KEYS) {
-          dynamic[key] = previousState[key];
-        }
-        this.#reindexInstancePortals(instance, definition);
+        instance.replaceDynamicPortal(
+          portalId,
+          dynamic,
+          PLACE_INSTANCE_MUTATION_TOKEN
+        );
+        this.#reindexInstancePortals(
+          instance,
+          definition
+        );
 
         let rollbackError = null;
         try {
-          this.#bridge?.syncPortalState?.(instance, dynamic, before);
+          this.#bridge?.syncPortalState?.(
+            instance,
+            dynamic,
+            before
+          );
         } catch (restoreError) {
           rollbackError = restoreError;
         }
@@ -1845,7 +2059,9 @@ export class PlaceRegistry {
       }
 
       this.#touchState({
-        travel: before.traversable !== resolved.traversable
+        travel:
+          before.traversable !==
+          resolved.traversable
       });
       this.emit("portal-state-changed", {
         placeId: instanceId,
@@ -1893,14 +2109,22 @@ export class PlaceRegistry {
     }
 
     const previousOverride = instance.getPortalOverride(portalId);
-    instance.setPortalOverride(portalId, next);
+    instance.setPortalOverride(
+      portalId,
+      next,
+      PLACE_INSTANCE_MUTATION_TOKEN
+    );
     this.#reindexInstancePortals(instance, definition);
     const resolved = this.resolvePortal(instanceId, portalId);
 
     try {
       this.#bridge?.syncPortalState?.(instance, base, resolved);
     } catch (error) {
-      instance.setPortalOverride(portalId, previousOverride);
+      instance.setPortalOverride(
+        portalId,
+        previousOverride,
+        PLACE_INSTANCE_MUTATION_TOKEN
+      );
       this.#reindexInstancePortals(instance, definition);
 
       let rollbackError = null;
@@ -2046,7 +2270,10 @@ export class PlaceRegistry {
       `dynamic portal ${portal.id}`
     );
 
-    instance.addDynamicPortal(portal);
+    instance.addDynamicPortal(
+      portal,
+      PLACE_INSTANCE_MUTATION_TOKEN
+    );
     this.#reindexInstancePortals(instance, definition);
     const resolved = this.resolvePortal(instanceId, portal.id);
 
@@ -2060,7 +2287,10 @@ export class PlaceRegistry {
         rollbackError = restoreError;
       }
 
-      instance.removeDynamicPortal(portal.id);
+      instance.removeDynamicPortal(
+        portal.id,
+        PLACE_INSTANCE_MUTATION_TOKEN
+      );
       this.#reindexInstancePortals(instance, definition);
 
       if (rollbackError) {
@@ -2105,7 +2335,10 @@ export class PlaceRegistry {
       throw error;
     }
 
-    instance.removeDynamicPortal(portalId);
+    instance.removeDynamicPortal(
+      portalId,
+      PLACE_INSTANCE_MUTATION_TOKEN
+    );
     const definition = this.#definitions.get(instance.definitionId);
     this.#reindexInstancePortals(instance, definition);
     this.#touchState({ travel: true });
