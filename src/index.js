@@ -36,6 +36,7 @@ export {
   pointInGeometry,
   transformPoint,
   inverseTransformPoint,
+  composeTransforms,
   transformBounds,
   StaticGeometryIndex,
   DynamicAabbIndex
