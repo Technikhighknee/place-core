@@ -38,6 +38,17 @@ function assertPlainObject(value, label) {
   return value;
 }
 
+function assertPatchKeys(value, allowedKeys, label) {
+  assertPlainObject(value, label);
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new Error(`${label} contains unknown field ${key}`);
+    }
+  }
+  return value;
+}
+
 function assertVec2(value, label = "position") {
   if (!value ||
       typeof value !== "object" ||
@@ -1171,6 +1182,11 @@ export class PlaceRegistry {
   }
 
   setBoundaryState(instanceId, boundaryId, patch) {
+    assertPatchKeys(
+      patch,
+      ["enabled"],
+      "boundary state patch"
+    );
     const instance = this.#instances.get(instanceId);
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
     const definition = this.#definitions.get(instance.definitionId);
@@ -1221,6 +1237,11 @@ export class PlaceRegistry {
   }
 
   setSpaceState(instanceId, spaceId, patch) {
+    assertPatchKeys(
+      patch,
+      ["enabled"],
+      "space state patch"
+    );
     const instance = this.#instances.get(instanceId);
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
     const definition = this.#definitions.get(instance.definitionId);
@@ -1444,8 +1465,19 @@ export class PlaceRegistry {
 
   setParent(instanceId, parentId) {
     const instance = this.#instances.get(instanceId);
-    if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
-    if (parentId != null && !this.#instances.has(parentId)) throw new Error(`unknown parent place: ${String(parentId)}`);
+    if (!instance) {
+      throw new Error(
+        `unknown place instance: ${String(instanceId)}`
+      );
+    }
+    if (parentId != null) {
+      assertId(parentId, "parentId");
+      if (!this.#instances.has(parentId)) {
+        throw new Error(
+          `unknown parent place: ${String(parentId)}`
+        );
+      }
+    }
     if (parentId === instanceId) throw new Error("place cannot parent itself");
     let cursor = parentId == null ? null : this.#instances.get(parentId);
     while (cursor) {
@@ -1464,6 +1496,11 @@ export class PlaceRegistry {
   }
 
   setPortalState(instanceId, portalId, patch) {
+    assertPatchKeys(
+      patch,
+      PORTAL_STATE_KEYS,
+      "portal state patch"
+    );
     const instance = this.#instances.get(instanceId);
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
     const definition = this.#definitions.get(instance.definitionId);
