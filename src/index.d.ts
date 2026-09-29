@@ -332,22 +332,54 @@ export interface PlaceRegistryOptions {
   worldCoreBridge?: WorldCoreBridge | null;
   captureEvents?: boolean;
   eventQueueLimit?: number;
-  eventOverflowPolicy?: "drop-newest" | "drop-oldest" | "throw";
+  eventOverflowPolicy?: "drop-newest" | "drop-oldest";
 }
 
-export interface CreatePlaceInput {
+type CreatePlaceParentInput =
+  | {
+      parentId?: PlaceId | null;
+      parentPlaceId?: never;
+    }
+  | {
+      parentId?: never;
+      parentPlaceId?: PlaceId | null;
+    };
+
+type CreatePlaceAttachmentInput =
+  | {
+      attachments?: Record<string, PlaceAttachment>;
+      externalBindings?: never;
+    }
+  | {
+      attachments?: never;
+      externalBindings?: Record<string, PlaceAttachment>;
+    };
+
+type CreatePlacePlacementInput =
+  | {
+      placement?: PlacePlacement | null;
+      placementDomainId?: never;
+      containment?: never;
+    }
+  | {
+      placement?: Transform2D | null;
+      placementDomainId: string;
+      containment?: "none" | "footprint";
+    }
+  | {
+      placement?: undefined;
+      placementDomainId?: undefined;
+      containment?: undefined;
+    };
+
+export type CreatePlaceInput = {
   id: PlaceId;
   definitionId: string;
-  parentId?: PlaceId | null;
-  parentPlaceId?: PlaceId | null;
   layerDomains?: Record<string, string> | Map<string, string>;
-  attachments?: Record<string, PlaceAttachment>;
-  externalBindings?: Record<string, PlaceAttachment>;
-  placement?: PlacePlacement | Transform2D | null;
-  placementDomainId?: string | null;
-  containment?: "none" | "footprint";
   metadata?: JsonValue;
-}
+} & CreatePlaceParentInput &
+  CreatePlaceAttachmentInput &
+  CreatePlacePlacementInput;
 
 export interface PlaceEvent {
   sequence: number;
