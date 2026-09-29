@@ -1,12 +1,12 @@
 import {
   DynamicAabbIndex,
   geometryBounds,
+  inverseTransformPoint,
   normalizeTransform,
-  squaredDistance,
-  transformBounds,
-  transformPoint
+  pointInGeometry,
+  transformBounds
 } from "./geometry.js";
-import { compilePlace, CompiledPlaceDefinition } from "./definition.js";
+import { CompiledPlaceDefinition } from "./definition.js";
 import {
   assertId,
   assertStringId,
@@ -15,470 +15,582 @@ import {
   deepFreeze
 } from "./utils.js";
 
-const PORTAL_STATE_KEYS = new Set([
-  "enabled", "open", "locked", "blocked", "destroyed", "blocksWhenClosed"
-]);
+const PORTAL_STATE_KEYS = ["enabled", "open", "locked", "blocked", "destroyed"];
 
-const BOUNDARY_STATE_KEYS = new Set(["enabled"]);
-
-function occupancyKey(placeId, spaceId) {
-  return `${String(placeId)}\u0000${spaceId}`;
-}
-
-function addToSetMap(map, key, value) {
-  let set = map.get(key);
-  if (!set) map.set(key, set = new Set());
-  set.add(value);
-}
-
-function removeFromSetMap(map, key, value) {
-  const set = map.get(key);
-  if (!set) return;
-  set.delete(value);
-  if (set.size === 0) map.delete(key);
-}
-
-function validateResolvedEndpoint(endpoint, label = "endpoint") {
-  if (!endpoint || typeof endpoint !== "object") throw new TypeError(`${label} is required`);
-  assertStringId(endpoint.domainId, `${label}.domainId`);
-  if (!endpoint.position || !Number.isFinite(endpoint.position.x) || !Number.isFinite(endpoint.position.y)) {
-    throw new TypeError(`${label}.position requires finite x/y`);
+function normalizeAttachment(value, label) {
+  if (!value || typeof value !== "object") throw new TypeError(`${label} is required`);
+  assertStringId(value.domainId, `${label}.domainId`);
+  if (!value.position || !Number.isFinite(value.position.x) || !Number.isFinite(value.position.y)) {
+    throw new TypeError(`${label}.position must be a Vec2`);
   }
-}
-
-function cloneResolvedEndpoint(endpoint) {
-  if (!endpoint) return null;
   return deepFreeze({
-    domainId: endpoint.domainId,
-    position: { x: endpoint.position.x, y: endpoint.position.y },
-    nodeId: endpoint.nodeId ?? null,
-    placeId: endpoint.placeId ?? null,
-    layerId: endpoint.layerId ?? null,
-    spaceId: endpoint.spaceId ?? null,
-    slot: endpoint.slot ?? null
+    domainId: value.domainId,
+    position: { x: value.position.x, y: value.position.y },
+    nodeId: value.nodeId ?? null,
+    placeId: value.placeId ?? null,
+    spaceId: value.spaceId ?? null,
+    metadata: cloneJson(value.metadata ?? null)
   });
 }
 
-function normalizeDynamicPortal(portal) {
-  assertStringId(portal.id, "dynamic portal id");
-  validateResolvedEndpoint(portal.a, `dynamic portal ${portal.id}.a`);
-  validateResolvedEndpoint(portal.b, `dynamic portal ${portal.id}.b`);
+function normalizePlacement(value) {
+  if (!value) return null;
+  assertStringId(value.domainId, "placement.domainId");
   return deepFreeze({
-    id: portal.id,
-    kind: portal.kind ?? "portal",
-    tags: Object.freeze([...new Set(portal.tags ?? [])]),
-    a: cloneResolvedEndpoint(portal.a),
-    b: cloneResolvedEndpoint(portal.b),
-    bidirectional: portal.bidirectional !== false,
-    transitionCost: Number.isFinite(portal.transitionCost) ? Math.max(0, portal.transitionCost) : 0,
-    enabled: portal.enabled !== false,
-    open: portal.open !== false,
-    locked: portal.locked === true,
-    blocked: portal.blocked === true,
-    destroyed: portal.destroyed === true,
-    blocksWhenClosed: portal.blocksWhenClosed === true,
-    roadBindings: Object.freeze((portal.roadBindings ?? []).map((binding) => deepFreeze({
-      layerId: binding.layerId ?? null,
-      domainId: binding.domainId ?? null,
-      roadId: assertStringId(binding.roadId, "dynamic portal road binding roadId")
-    }))),
-    metadata: deepFreeze(cloneJson(portal.metadata ?? null)),
-    dynamic: true
+    domainId: value.domainId,
+    transform: normalizeTransform(value.transform),
+    containment: value.containment ?? "none"
   });
 }
 
-export function isPortalTraversable(portal) {
-  if (!portal || portal.enabled === false || portal.blocked === true) return false;
-  if (portal.destroyed === true) return true;
-  if (portal.locked === true) return false;
-  if (portal.blocksWhenClosed === true && portal.open === false) return false;
+function makeSpaceKey(instanceId, spaceId) {
+  return `${String(instanceId)}\u0000${spaceId}`;
+}
+
+function cloneState(state) {
+  return {
+    enabled: state.enabled,
+    open: state.open,
+    locked: state.locked,
+    blocked: state.blocked,
+    destroyed: state.destroyed
+  };
+}
+
+function portalTraversableState(portal) {
+  if (!portal.enabled || portal.locked || portal.blocked || portal.destroyed) return false;
+  if (portal.blocksWhenClosed && !portal.open) return false;
   return true;
 }
 
 export class PlaceInstance {
-  constructor({
-    id,
-    definition,
-    layerDomains,
-    parentPlaceId = null,
-    placement = null,
-    placementDomainId = null,
-    metadata = null
-  }) {
-    assertId(id, "place instance id");
-    this.id = id;
-    this.definitionId = definition.id;
-    this.definitionHash = definition.contentHash;
-    this.parentPlaceId = parentPlaceId;
-    this.placement = normalizeTransform(placement ?? {});
-    this.placementDomainId = placementDomainId;
-    this.layerDomains = new Map(layerDomains);
-    this.portalOverrides = new Map();
-    this.boundaryOverrides = new Map();
-    this.dynamicPortals = new Map();
-    this.externalBindings = new Map();
-    this.metadata = cloneJson(metadata);
-    this.revision = 0;
+  #portalOverrides = new Map();
+  #boundaryOverrides = new Map();
+  #spaceOverrides = new Map();
+  #dynamicPortals = new Map();
+
+  constructor(data) {
+    this.id = data.id;
+    this.definitionId = data.definitionId;
+    this.parentId = data.parentId ?? null;
+    this.layerDomains = new Map(data.layerDomains);
+    this.attachments = new Map(data.attachments);
+    this.placement = data.placement;
+    this.metadata = cloneJson(data.metadata ?? null);
   }
 
-  setPlacement(placement, placementDomainId = this.placementDomainId) {
-    this.placement = normalizeTransform(placement);
-    this.placementDomainId = placementDomainId;
-    this.revision += 1;
+  getPortalOverride(portalId) { return this.#portalOverrides.get(portalId) ?? null; }
+  setPortalOverride(portalId, override) {
+    if (override == null || Object.keys(override).length === 0) this.#portalOverrides.delete(portalId);
+    else this.#portalOverrides.set(portalId, deepFreeze({ ...override }));
   }
-
-  setExternalBinding(slot, endpoint) {
-    assertStringId(slot, "external slot");
-    validateResolvedEndpoint(endpoint, `external binding ${slot}`);
-    this.externalBindings.set(slot, cloneResolvedEndpoint({ ...endpoint, slot }));
-    this.revision += 1;
+  get portalOverrides() { return this.#portalOverrides; }
+  get boundaryOverrides() { return this.#boundaryOverrides; }
+  get spaceOverrides() { return this.#spaceOverrides; }
+  get dynamicPortals() { return this.#dynamicPortals; }
+  getBoundaryOverride(boundaryId) { return this.#boundaryOverrides.get(boundaryId) ?? null; }
+  setBoundaryOverride(boundaryId, override) {
+    if (override == null || Object.keys(override).length === 0) this.#boundaryOverrides.delete(boundaryId);
+    else this.#boundaryOverrides.set(boundaryId, deepFreeze({ ...override }));
   }
-
-  clearExternalBinding(slot) {
-    const removed = this.externalBindings.delete(slot);
-    if (removed) this.revision += 1;
-    return removed;
+  getSpaceOverride(spaceId) { return this.#spaceOverrides.get(spaceId) ?? null; }
+  setSpaceOverride(spaceId, override) {
+    if (override == null || Object.keys(override).length === 0) this.#spaceOverrides.delete(spaceId);
+    else this.#spaceOverrides.set(spaceId, deepFreeze({ ...override }));
   }
+  addDynamicPortal(portal) { this.#dynamicPortals.set(portal.id, portal); }
+  removeDynamicPortal(portalId) { return this.#dynamicPortals.delete(portalId); }
 }
 
 export class PlaceRegistry {
+  #definitions = new Map();
+  #instances = new Map();
+  #domainBindings = new Map();
+  #exteriorIndexes = new Map();
+  #portalRecords = new Map();
+  #portalsByDomain = new Map();
+  #instancePortalKeys = new Map();
+  #occupancy = new Map();
+  #entitiesByPlace = new Map();
+  #entitiesBySpace = new Map();
   #events;
+  #captureEvents;
   #bridge = null;
-  #footprintIndexes = new Map();
-  #entityContexts = new Map();
-  #placeOccupants = new Map();
-  #spaceOccupants = new Map();
+  #sequence = 0;
+  #graphRevision = 0;
 
-  constructor({
-    eventQueueLimit = 10_000,
-    eventOverflowPolicy = "drop-newest",
-    footprintCellSize = 128
-  } = {}) {
-    this.definitions = new Map();
-    this.instances = new Map();
-    this.domainBindings = new Map();
-    this.graphRevision = 0;
-    this.time = 0;
-    this.footprintCellSize = footprintCellSize;
+  constructor(options = {}) {
+    this.#captureEvents = options.captureEvents === true;
     this.#events = new BoundedEventQueue({
-      limit: eventQueueLimit,
-      overflowPolicy: eventOverflowPolicy
+      limit: options.eventQueueLimit ?? 10_000,
+      overflowPolicy: options.eventOverflowPolicy ?? "drop-newest"
     });
+    if (options.bridge) this.attachBridge(options.bridge);
   }
 
-  attachWorldCoreBridge(bridge) {
-    this.#bridge = bridge ?? null;
-    bridge?.attachRegistry?.(this);
+  get definitions() { return this.#definitions; }
+  get instances() { return this.#instances; }
+  get domainBindings() { return this.#domainBindings; }
+  get activeTravels() {
+    if (!this._activeTravels) this._activeTravels = new Map();
+    return this._activeTravels;
+  }
+  get pendingTravels() {
+    if (!this._pendingTravels) this._pendingTravels = [];
+    return this._pendingTravels;
+  }
+  get graphRevision() { return this.#graphRevision; }
+  get bridge() { return this.#bridge; }
+
+  attachBridge(bridge) {
+    if (!bridge || typeof bridge !== "object") throw new TypeError("bridge must be an object");
+    this.#bridge = bridge;
+    if (typeof bridge.attachRegistry === "function") bridge.attachRegistry(this);
     return this;
   }
 
-  registerDefinition(input, options) {
-    const definition = input instanceof CompiledPlaceDefinition ? input : compilePlace(input, options);
-    const existing = this.definitions.get(definition.id);
+  registerDefinition(definition) {
+    if (!(definition instanceof CompiledPlaceDefinition)) throw new TypeError("registerDefinition requires a compiled place definition");
+    const existing = this.#definitions.get(definition.id);
     if (existing && existing.contentHash !== definition.contentHash) {
-      throw new Error(`place definition ${definition.id} already registered with a different content hash`);
+      throw new Error(`definition ${definition.id} is already registered with another content hash`);
     }
-    if (!existing) {
-      this.definitions.set(definition.id, definition);
-      this.graphRevision += 1;
-    }
-    return existing ?? definition;
+    this.#definitions.set(definition.id, definition);
+    return definition;
   }
 
   removeDefinition(definitionId) {
-    for (const instance of this.instances.values()) {
-      if (instance.definitionId === definitionId) {
-        throw new Error(`cannot remove definition ${definitionId} while instance ${String(instance.id)} uses it`);
-      }
+    for (const instance of this.#instances.values()) {
+      if (instance.definitionId === definitionId) return false;
     }
-    const removed = this.definitions.delete(definitionId);
-    if (removed) this.graphRevision += 1;
-    return removed;
+    return this.#definitions.delete(definitionId);
   }
 
-  createPlace({
-    id,
-    definitionId,
-    layerDomains = null,
-    parentPlaceId = null,
-    placement = null,
-    placementDomainId = null,
-    externalBindings = null,
-    metadata = null
-  }) {
-    assertId(id, "place id");
-    if (this.instances.has(id)) throw new Error(`place instance already exists: ${String(id)}`);
-    const definition = this.definitions.get(definitionId);
-    if (!definition) throw new Error(`unknown place definition: ${definitionId}`);
-    if (parentPlaceId != null && !this.instances.has(parentPlaceId)) {
-      throw new Error(`unknown parent place: ${String(parentPlaceId)}`);
+  getDefinition(id) { return this.#definitions.get(id) ?? null; }
+  getPlace(id) { return this.#instances.get(id) ?? null; }
+
+  getSpace(instanceId, spaceId) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) return null;
+    const definition = this.#definitions.get(instance.definitionId);
+    const space = definition.getSpace(spaceId);
+    if (!space) return null;
+    return { ...space, enabled: this.#spaceEnabled(instance, definition, space) };
+  }
+
+  getBoundary(instanceId, boundaryId) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) return null;
+    const definition = this.#definitions.get(instance.definitionId);
+    const boundary = definition.getBoundary(boundaryId);
+    if (!boundary) return null;
+    return { ...boundary, enabled: instance.getBoundaryOverride(boundaryId)?.enabled ?? boundary.enabled };
+  }
+
+  getPortal(instanceId, portalId) { return this.resolvePortal(instanceId, portalId); }
+
+  findAnchor(instanceId, anchorId) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) return null;
+    const definition = this.#definitions.get(instance.definitionId);
+    const anchor = definition.getAnchor(anchorId);
+    if (!anchor) return null;
+    return { ...anchor, placeId: instanceId, domainId: instance.layerDomains.get(anchor.layerId) };
+  }
+
+  findAnchorsByTag(instanceId, tag) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) return [];
+    const definition = this.#definitions.get(instance.definitionId);
+    return definition.getAnchorsByTag(tag).map((anchor) => ({
+      ...anchor, placeId: instanceId, domainId: instance.layerDomains.get(anchor.layerId)
+    }));
+  }
+
+  findNearestAnchor(instanceId, position, options = {}) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) return null;
+    const definition = this.#definitions.get(instance.definitionId);
+    const candidates = options.tag ? definition.getAnchorsByTag(options.tag) : definition.anchors;
+    let best = null;
+    let bestDistanceSq = Infinity;
+    for (const anchor of candidates) {
+      if (options.layerId != null && anchor.layerId !== options.layerId) continue;
+      const dx = anchor.position.x - position.x;
+      const dy = anchor.position.y - position.y;
+      const distanceSq = dx * dx + dy * dy;
+      if (distanceSq < bestDistanceSq) { best = anchor; bestDistanceSq = distanceSq; }
+    }
+    return best ? { ...best, placeId: instanceId, domainId: instance.layerDomains.get(best.layerId), distance: Math.sqrt(bestDistanceSq) } : null;
+  }
+
+  createPlace(input) {
+    assertId(input?.id, "place instance id");
+    assertStringId(input?.definitionId, "definitionId");
+    if (this.#instances.has(input.id)) throw new Error(`place instance already exists: ${input.id}`);
+    const definition = this.#definitions.get(input.definitionId);
+    if (!definition) throw new Error(`unknown place definition: ${input.definitionId}`);
+    if (input.parentId != null && !this.#instances.has(input.parentId)) throw new Error(`unknown parent place: ${input.parentId}`);
+
+    const layerDomains = new Map();
+    const suppliedLayerDomains = input.layerDomains ?? {};
+    for (const layer of definition.layers) {
+      const domainId = suppliedLayerDomains[layer.id] ?? `${String(input.id)}:${layer.id}`;
+      assertStringId(domainId, `layerDomains.${layer.id}`);
+      const existing = this.#domainBindings.get(domainId);
+      if (existing) throw new Error(`domain ${domainId} is already bound to ${String(existing.instanceId)}:${existing.layerId}`);
+      layerDomains.set(layer.id, domainId);
     }
 
-    const domainMap = new Map();
-    for (const layer of definition.layers) {
-      const supplied = layerDomains instanceof Map ? layerDomains.get(layer.id) : layerDomains?.[layer.id];
-      const domainId = supplied ?? `place:${String(id)}:${layer.id}`;
-      assertStringId(domainId, `domain for layer ${layer.id}`);
-      if (this.domainBindings.has(domainId)) throw new Error(`world domain already bound to a place layer: ${domainId}`);
-      domainMap.set(layer.id, domainId);
+    const attachments = new Map();
+    for (const [slot, value] of Object.entries(input.attachments ?? {})) {
+      assertStringId(slot, "attachment slot");
+      attachments.set(slot, normalizeAttachment(value, `attachment.${slot}`));
+    }
+    for (const portal of definition.portals) {
+      for (const endpoint of [portal.a, portal.b]) {
+        if (endpoint.kind === "external" && !attachments.has(endpoint.slot)) {
+          throw new Error(`place ${String(input.id)} is missing external attachment slot ${endpoint.slot}`);
+        }
+      }
     }
 
     const instance = new PlaceInstance({
-      id,
-      definition,
-      layerDomains: domainMap,
-      parentPlaceId,
-      placement,
-      placementDomainId,
-      metadata
+      id: input.id,
+      definitionId: definition.id,
+      parentId: input.parentId ?? null,
+      layerDomains,
+      attachments,
+      placement: normalizePlacement(input.placement),
+      metadata: input.metadata
     });
 
-    if (externalBindings) {
-      for (const [slot, endpoint] of Object.entries(externalBindings)) {
-        instance.setExternalBinding(slot, endpoint);
-      }
-      instance.revision = 0;
+    this.#instances.set(instance.id, instance);
+    for (const [layerId, domainId] of layerDomains) {
+      this.#domainBindings.set(domainId, { instanceId: instance.id, layerId });
     }
-
-    this.instances.set(id, instance);
-    for (const [layerId, domainId] of domainMap) {
-      this.domainBindings.set(domainId, { placeId: id, layerId });
-    }
+    this.#indexExterior(instance, definition);
+    this.#reindexInstancePortals(instance, definition);
+    this.#graphRevision += 1;
 
     try {
       this.#bridge?.materializePlace?.(instance, definition);
-      for (const portal of definition.portals) {
-        this.#bridge?.syncPortalState?.(instance, portal, this.resolvePortal(id, portal.id));
-      }
-      for (const boundary of definition.boundaries) {
-        this.#bridge?.syncBoundaryState?.(instance, this.resolveBoundary(id, boundary.id));
-      }
-      this.#reindexFootprint(instance, definition);
+      for (const boundary of definition.boundaries) this.#bridge?.syncBoundaryState?.(instance, boundary);
+      for (const portal of definition.portals) this.#bridge?.syncPortalState?.(instance, portal, this.resolvePortal(instance.id, portal.id));
     } catch (error) {
-      for (const domainId of domainMap.values()) this.domainBindings.delete(domainId);
-      this.instances.delete(id);
+      this.#removePlaceInternal(instance.id, false);
       throw error;
     }
 
-    this.graphRevision += 1;
-    this.emitEvent("place-created", { placeId: id, definitionId });
+    this.emit("place-created", { placeId: instance.id, definitionId: definition.id });
     return instance;
   }
 
-  removePlace(placeId) {
-    const instance = this.instances.get(placeId);
+  removePlace(instanceId) {
+    return this.#removePlaceInternal(instanceId, true);
+  }
+
+  #removePlaceInternal(instanceId, callBridge) {
+    const instance = this.#instances.get(instanceId);
     if (!instance) return false;
-    for (const child of this.instances.values()) {
-      if (child.parentPlaceId === placeId) throw new Error(`cannot remove place ${String(placeId)} while child ${String(child.id)} exists`);
+    for (const child of this.#instances.values()) {
+      if (child.parentId === instanceId) throw new Error(`cannot remove place ${String(instanceId)} while child ${String(child.id)} exists`);
     }
-    const occupants = this.#placeOccupants.get(placeId);
-    if (occupants?.size) throw new Error(`cannot remove occupied place ${String(placeId)}`);
-
-    const definition = this.definitions.get(instance.definitionId);
-    this.#bridge?.unmaterializePlace?.(instance, definition);
-
-    for (const domainId of instance.layerDomains.values()) this.domainBindings.delete(domainId);
-    this.#unindexFootprint(instance);
-    this.instances.delete(placeId);
-    this.graphRevision += 1;
-    this.emitEvent("place-removed", { placeId, definitionId: instance.definitionId });
+    const definition = this.#definitions.get(instance.definitionId);
+    if (callBridge) this.#bridge?.unmaterializePlace?.(instance, definition);
+    this.clearEntityOccupancyForPlace(instanceId);
+    for (const domainId of instance.layerDomains.values()) this.#domainBindings.delete(domainId);
+    this.#unindexExterior(instance);
+    this.#removeInstancePortals(instance.id);
+    this.#instances.delete(instance.id);
+    this.#graphRevision += 1;
+    this.emit("place-removed", { placeId: instanceId, definitionId: instance.definitionId });
     return true;
   }
 
-  getDefinition(id) { return this.definitions.get(id) ?? null; }
-  getPlace(id) { return this.instances.get(id) ?? null; }
-
-  getLayerDomain(placeId, layerId) {
-    return this.instances.get(placeId)?.layerDomains.get(layerId) ?? null;
+  getDomainBinding(domainId) { return this.#domainBindings.get(domainId) ?? null; }
+  domainForLayer(instanceId, layerId) {
+    return this.#instances.get(instanceId)?.layerDomains.get(layerId) ?? null;
   }
 
-  getDomainBinding(domainId) {
-    return this.domainBindings.get(domainId) ?? null;
+  resolveEndpoint(instanceId, endpoint) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
+    if (endpoint.kind === "local") {
+      const domainId = instance.layerDomains.get(endpoint.layerId);
+      if (!domainId) throw new Error(`place ${String(instanceId)} has no domain for layer ${endpoint.layerId}`);
+      return {
+        domainId,
+        position: endpoint.position,
+        nodeId: endpoint.nodeId,
+        placeId: instanceId,
+        spaceId: endpoint.spaceId,
+        layerId: endpoint.layerId
+      };
+    }
+    if (endpoint.kind === "external") {
+      const attachment = instance.attachments.get(endpoint.slot);
+      if (!attachment) throw new Error(`missing attachment ${endpoint.slot}`);
+      return {
+        ...attachment,
+        layerId: null
+      };
+    }
+    if (endpoint.kind === "resolved") return endpoint;
+    throw new TypeError(`unsupported endpoint kind: ${endpoint.kind}`);
   }
 
-  setPlacement(placeId, placement, placementDomainId) {
-    const instance = this.#requirePlace(placeId);
-    const definition = this.#requireDefinition(instance.definitionId);
-    this.#unindexFootprint(instance);
-    instance.setPlacement(placement, placementDomainId);
-    this.#reindexFootprint(instance, definition);
-    this.graphRevision += 1;
-    this.emitEvent("place-moved", { placeId, placement: instance.placement, placementDomainId: instance.placementDomainId });
+  resolvePortal(instanceId, portalId) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) return null;
+    const definition = this.#definitions.get(instance.definitionId);
+    const dynamic = instance.dynamicPortals.get(portalId);
+    const source = dynamic ?? definition.getPortal(portalId);
+    if (!source) return null;
+    const override = dynamic ? null : instance.getPortalOverride(portalId);
+    const merged = override ? { ...source, ...override } : source;
+    return {
+      ...merged,
+      instanceId,
+      definitionId: definition.id,
+      a: this.resolveEndpoint(instanceId, merged.a),
+      b: this.resolveEndpoint(instanceId, merged.b),
+      traversable: portalTraversableState(merged),
+      source: dynamic ? "dynamic" : "definition"
+    };
+  }
+
+  setBoundaryState(instanceId, boundaryId, patch) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
+    const definition = this.#definitions.get(instance.definitionId);
+    const boundary = definition.getBoundary(boundaryId);
+    if (!boundary) throw new Error(`unknown boundary ${boundaryId} on place ${String(instanceId)}`);
+    const enabled = patch.enabled === undefined
+      ? (instance.getBoundaryOverride(boundaryId)?.enabled ?? boundary.enabled)
+      : Boolean(patch.enabled);
+    instance.setBoundaryOverride(boundaryId, enabled === boundary.enabled ? null : { enabled });
+    this.#graphRevision += 1;
+    const resolved = { ...boundary, enabled };
+    this.#bridge?.syncBoundaryState?.(instance, resolved);
+    this.emit("boundary-state-changed", { placeId: instanceId, boundaryId, enabled });
+    return resolved;
+  }
+
+  setSpaceState(instanceId, spaceId, patch) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
+    const definition = this.#definitions.get(instance.definitionId);
+    const space = definition.getSpace(spaceId);
+    if (!space) throw new Error(`unknown space ${spaceId} on place ${String(instanceId)}`);
+    const baseEnabled = true;
+    const enabled = patch.enabled === undefined
+      ? (instance.getSpaceOverride(spaceId)?.enabled ?? baseEnabled)
+      : Boolean(patch.enabled);
+    instance.setSpaceOverride(spaceId, enabled === baseEnabled ? null : { enabled });
+    this.#graphRevision += 1;
+    this.emit("space-state-changed", { placeId: instanceId, spaceId, enabled });
+    return { ...space, enabled };
+  }
+
+  setAttachment(instanceId, slot, value) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
+    assertStringId(slot, "attachment slot");
+    const definition = this.#definitions.get(instance.definitionId);
+    instance.attachments.set(slot, normalizeAttachment(value, `attachment.${slot}`));
+    this.#reindexInstancePortals(instance, definition);
+    this.#graphRevision += 1;
+    for (const portal of definition.portals) {
+      if ([portal.a, portal.b].some((endpoint) => endpoint.kind === "external" && endpoint.slot === slot)) {
+        this.#bridge?.syncPortalState?.(instance, portal, this.resolvePortal(instanceId, portal.id));
+      }
+    }
+    this.emit("place-attachment-changed", { placeId: instanceId, slot, attachment: cloneJson(instance.attachments.get(slot)) });
+    return instance.attachments.get(slot);
+  }
+
+  setPlacement(instanceId, placement) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
+    const definition = this.#definitions.get(instance.definitionId);
+    this.#unindexExterior(instance);
+    instance.placement = normalizePlacement(placement);
+    this.#indexExterior(instance, definition);
+    this.#graphRevision += 1;
+    this.emit("place-placement-changed", { placeId: instanceId, placement: cloneJson(instance.placement) });
+    return instance.placement;
+  }
+
+  setParent(instanceId, parentId) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
+    if (parentId != null && !this.#instances.has(parentId)) throw new Error(`unknown parent place: ${String(parentId)}`);
+    if (parentId === instanceId) throw new Error("place cannot parent itself");
+    let cursor = parentId == null ? null : this.#instances.get(parentId);
+    while (cursor) {
+      if (cursor.id === instanceId) throw new Error("place parent cycle");
+      cursor = cursor.parentId == null ? null : this.#instances.get(cursor.parentId);
+    }
+    instance.parentId = parentId ?? null;
+    this.#graphRevision += 1;
+    this.emit("place-parent-changed", { placeId: instanceId, parentId: instance.parentId });
     return instance;
   }
 
-  setExternalBinding(placeId, slot, endpoint) {
-    const instance = this.#requirePlace(placeId);
-    instance.setExternalBinding(slot, endpoint);
-    this.graphRevision += 1;
-    this.emitEvent("external-binding-changed", { placeId, slot });
-    return instance.externalBindings.get(slot);
-  }
-
-  clearExternalBinding(placeId, slot) {
-    const instance = this.#requirePlace(placeId);
-    const removed = instance.clearExternalBinding(slot);
-    if (removed) {
-      this.graphRevision += 1;
-      this.emitEvent("external-binding-changed", { placeId, slot, cleared: true });
-    }
-    return removed;
-  }
-
-  resolvePortal(placeId, portalId) {
-    const instance = this.#requirePlace(placeId);
-    const definition = this.#requireDefinition(instance.definitionId);
-    const dynamic = instance.dynamicPortals.get(portalId);
-    if (dynamic) return dynamic;
-    const portal = definition.getPortal(portalId);
-    if (!portal) return null;
-    const override = instance.portalOverrides.get(portalId) ?? null;
-    return deepFreeze({
-      ...portal,
-      ...(override ?? {}),
-      a: this.#resolveEndpoint(instance, portal.a),
-      b: this.#resolveEndpoint(instance, portal.b),
-      placeId,
-      dynamic: false
-    });
-  }
-
-  *resolvedPortals(placeId = null) {
-    const instances = placeId == null ? this.instances.values() : [this.#requirePlace(placeId)];
-    for (const instance of instances) {
-      const definition = this.#requireDefinition(instance.definitionId);
-      for (const portal of definition.portals) yield this.resolvePortal(instance.id, portal.id);
-      for (const portal of instance.dynamicPortals.values()) yield portal;
-    }
-  }
-
-  setPortalState(placeId, portalId, patch) {
-    const instance = this.#requirePlace(placeId);
-    if (!patch || typeof patch !== "object") throw new TypeError("portal state patch is required");
-
-    const dynamic = instance.dynamicPortals.get(portalId);
-    if (dynamic) {
-      const next = { ...dynamic };
-      for (const [key, value] of Object.entries(patch)) {
-        if (!PORTAL_STATE_KEYS.has(key)) throw new Error(`unsupported portal state property: ${key}`);
-        if (typeof value !== "boolean") throw new TypeError(`portal state ${key} must be boolean`);
-        next[key] = value;
+  setPortalState(instanceId, portalId, patch) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
+    const definition = this.#definitions.get(instance.definitionId);
+    const base = definition.getPortal(portalId);
+    if (!base) {
+      const dynamic = instance.dynamicPortals.get(portalId);
+      if (!dynamic) throw new Error(`unknown portal ${portalId} on place ${String(instanceId)}`);
+      for (const key of PORTAL_STATE_KEYS) {
+        if (patch[key] !== undefined) dynamic[key] = Boolean(patch[key]);
       }
-      const normalized = normalizeDynamicPortal(next);
-      instance.dynamicPortals.set(portalId, normalized);
-      instance.revision += 1;
-      this.graphRevision += 1;
-      this.#bridge?.syncDynamicPortal?.(instance, normalized, normalized);
-      this.emitEvent("portal-state-changed", { placeId, portalId, state: patch, dynamic: true });
-      return normalized;
+      this.#reindexInstancePortals(instance, definition);
+      this.#graphRevision += 1;
+      const resolved = this.resolvePortal(instanceId, portalId);
+      this.#bridge?.syncPortalState?.(instance, dynamic, resolved);
+      this.emit("portal-state-changed", { placeId: instanceId, portalId, state: cloneState(resolved) });
+      return resolved;
     }
 
-    const definition = this.#requireDefinition(instance.definitionId);
-    const portal = definition.getPortal(portalId);
-    if (!portal) throw new Error(`unknown portal ${portalId} in place ${String(placeId)}`);
-    const previous = instance.portalOverrides.get(portalId) ?? {};
-    const next = { ...previous };
-    for (const [key, value] of Object.entries(patch)) {
-      if (!PORTAL_STATE_KEYS.has(key)) throw new Error(`unsupported portal state property: ${key}`);
-      if (typeof value !== "boolean") throw new TypeError(`portal state ${key} must be boolean`);
-      if (value === portal[key]) delete next[key];
-      else next[key] = value;
+    const current = { ...base, ...(instance.getPortalOverride(portalId) ?? {}) };
+    const next = {};
+    for (const key of PORTAL_STATE_KEYS) {
+      const value = patch[key] === undefined ? current[key] : Boolean(patch[key]);
+      if (value !== base[key]) next[key] = value;
     }
-    if (Object.keys(next).length === 0) instance.portalOverrides.delete(portalId);
-    else instance.portalOverrides.set(portalId, deepFreeze(next));
-    instance.revision += 1;
-    this.graphRevision += 1;
-    const resolved = this.resolvePortal(placeId, portalId);
-    this.#bridge?.syncPortalState?.(instance, portal, resolved);
-    this.emitEvent("portal-state-changed", { placeId, portalId, state: patch, dynamic: false });
+    instance.setPortalOverride(portalId, next);
+    this.#reindexInstancePortals(instance, definition);
+    this.#graphRevision += 1;
+    const resolved = this.resolvePortal(instanceId, portalId);
+    this.#bridge?.syncPortalState?.(instance, base, resolved);
+    this.emit("portal-state-changed", { placeId: instanceId, portalId, state: cloneState(resolved) });
     return resolved;
   }
 
-  addPortal(placeId, portal) {
-    const instance = this.#requirePlace(placeId);
-    const definition = this.#requireDefinition(instance.definitionId);
-    if (definition.getPortal(portal.id) || instance.dynamicPortals.has(portal.id)) {
-      throw new Error(`portal already exists: ${portal.id}`);
-    }
-    const normalized = normalizeDynamicPortal({ ...portal, placeId });
-    instance.dynamicPortals.set(normalized.id, normalized);
-    instance.revision += 1;
-    this.graphRevision += 1;
-    this.#bridge?.syncDynamicPortal?.(instance, normalized, normalized);
-    this.emitEvent("portal-added", { placeId, portalId: normalized.id });
-    return normalized;
+  addInstancePortal(instanceId, spec) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
+    assertStringId(spec?.id, "dynamic portal id");
+    const definition = this.#definitions.get(instance.definitionId);
+    if (definition.getPortal(spec.id) || instance.dynamicPortals.has(spec.id)) throw new Error(`portal already exists: ${spec.id}`);
+    const normalizeResolved = (endpoint, label) => {
+      assertStringId(endpoint?.domainId, `${label}.domainId`);
+      if (!endpoint.position || !Number.isFinite(endpoint.position.x) || !Number.isFinite(endpoint.position.y)) {
+        throw new TypeError(`${label}.position must be a Vec2`);
+      }
+      return {
+        kind: "resolved",
+        domainId: endpoint.domainId,
+        position: { x: endpoint.position.x, y: endpoint.position.y },
+        nodeId: endpoint.nodeId ?? null,
+        placeId: endpoint.placeId ?? null,
+        spaceId: endpoint.spaceId ?? null,
+        layerId: endpoint.layerId ?? null
+      };
+    };
+    const portal = {
+      id: spec.id,
+      kind: spec.kind ?? "portal",
+      tags: [...new Set(spec.tags ?? [])],
+      a: normalizeResolved(spec.a, "portal.a"),
+      b: normalizeResolved(spec.b, "portal.b"),
+      bidirectional: spec.bidirectional !== false,
+      transitionCost: Number.isFinite(spec.transitionCost) ? Math.max(0, spec.transitionCost) : 0,
+      enabled: spec.enabled !== false,
+      open: spec.open !== false,
+      locked: spec.locked === true,
+      blocked: spec.blocked === true,
+      destroyed: spec.destroyed === true,
+      blocksWhenClosed: spec.blocksWhenClosed === true,
+      roadBindings: (spec.roadBindings ?? []).map((binding, index) => {
+        assertStringId(binding.layerId, `dynamic portal roadBindings[${index}].layerId`);
+        assertStringId(binding.roadId, `dynamic portal roadBindings[${index}].roadId`);
+        if (!instance.layerDomains.has(binding.layerId)) throw new Error(`dynamic portal road binding references unknown layer ${binding.layerId}`);
+        return { layerId: binding.layerId, roadId: binding.roadId };
+      }),
+      metadata: cloneJson(spec.metadata ?? null)
+    };
+    instance.addDynamicPortal(portal);
+    this.#reindexInstancePortals(instance, definition);
+    this.#graphRevision += 1;
+    this.#bridge?.syncDynamicPortal?.(instance, portal, this.resolvePortal(instanceId, portal.id));
+    this.emit("portal-added", { placeId: instanceId, portalId: portal.id });
+    return this.resolvePortal(instanceId, portal.id);
   }
 
-  removePortal(placeId, portalId) {
-    const instance = this.#requirePlace(placeId);
-    const portal = instance.dynamicPortals.get(portalId);
-    if (!portal) throw new Error("only dynamic instance portals may be removed");
-    this.#bridge?.removeDynamicPortal?.(instance, portal);
-    instance.dynamicPortals.delete(portalId);
-    instance.revision += 1;
-    this.graphRevision += 1;
-    this.emitEvent("portal-removed", { placeId, portalId });
+  removeInstancePortal(instanceId, portalId) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance || !instance.dynamicPortals.has(portalId)) return false;
+    const resolved = this.resolvePortal(instanceId, portalId);
+    this.#bridge?.removeDynamicPortal?.(instance, resolved);
+    instance.removeDynamicPortal(portalId);
+    const definition = this.#definitions.get(instance.definitionId);
+    this.#reindexInstancePortals(instance, definition);
+    this.#graphRevision += 1;
+    this.emit("portal-removed", { placeId: instanceId, portalId });
     return true;
   }
 
-  resolveBoundary(placeId, boundaryId) {
-    const instance = this.#requirePlace(placeId);
-    const definition = this.#requireDefinition(instance.definitionId);
-    const boundary = definition.getBoundary(boundaryId);
-    if (!boundary) return null;
-    return deepFreeze({
-      ...boundary,
-      ...(instance.boundaryOverrides.get(boundaryId) ?? {}),
-      placeId
-    });
+  getPortalsForDomain(domainId) {
+    const keys = this.#portalsByDomain.get(domainId);
+    if (!keys) return [];
+    return [...keys].map((key) => this.#portalRecords.get(key)).filter(Boolean);
   }
 
-  setBoundaryState(placeId, boundaryId, patch) {
-    const instance = this.#requirePlace(placeId);
-    const definition = this.#requireDefinition(instance.definitionId);
-    const boundary = definition.getBoundary(boundaryId);
-    if (!boundary) throw new Error(`unknown boundary ${boundaryId} in place ${String(placeId)}`);
-    const previous = instance.boundaryOverrides.get(boundaryId) ?? {};
-    const next = { ...previous };
-    for (const [key, value] of Object.entries(patch ?? {})) {
-      if (!BOUNDARY_STATE_KEYS.has(key)) throw new Error(`unsupported boundary state property: ${key}`);
-      if (typeof value !== "boolean") throw new TypeError(`boundary state ${key} must be boolean`);
-      if (value === boundary[key]) delete next[key];
-      else next[key] = value;
-    }
-    if (Object.keys(next).length === 0) instance.boundaryOverrides.delete(boundaryId);
-    else instance.boundaryOverrides.set(boundaryId, deepFreeze(next));
-    instance.revision += 1;
-    this.graphRevision += 1;
-    const resolved = this.resolveBoundary(placeId, boundaryId);
-    this.#bridge?.syncBoundaryState?.(instance, resolved);
-    this.emitEvent("boundary-state-changed", { placeId, boundaryId, state: patch });
-    return resolved;
-  }
+  getPortalRecord(key) { return this.#portalRecords.get(key) ?? null; }
 
   locate(domainId, position) {
-    const binding = this.domainBindings.get(domainId);
-    if (!binding) return {
+    const places = [];
+    const spaces = [];
+    const seenPlaces = new Set();
+
+    const binding = this.#domainBindings.get(domainId);
+    if (binding) {
+      const instance = this.#instances.get(binding.instanceId);
+      if (instance) {
+        const definition = this.#definitions.get(instance.definitionId);
+        for (const id of this.#placeChain(instance.id)) {
+          if (!seenPlaces.has(id)) {
+            places.push(id);
+            seenPlaces.add(id);
+          }
+        }
+        for (const space of definition.locateSpaces(binding.layerId, position)) {
+          if (!this.#spaceEnabled(instance, definition, space)) continue;
+          spaces.push({ placeId: instance.id, spaceId: space.id, layerId: binding.layerId, kind: space.kind });
+        }
+      }
+    }
+
+    const exteriorIndex = this.#exteriorIndexes.get(domainId);
+    if (exteriorIndex) {
+      for (const instanceId of exteriorIndex.queryPoint(position)) {
+        const instance = this.#instances.get(instanceId);
+        if (!instance?.placement || instance.placement.containment !== "footprint") continue;
+        const definition = this.#definitions.get(instance.definitionId);
+        if (!definition.footprint) continue;
+        const local = inverseTransformPoint(position, instance.placement.transform);
+        if (!pointInGeometry(local, definition.footprint)) continue;
+        for (const id of this.#placeChain(instance.id)) {
+          if (!seenPlaces.has(id)) {
+            places.push(id);
+            seenPlaces.add(id);
+          }
+        }
+      }
+    }
+
+    return deepFreeze({
       domainId,
       position: { x: position.x, y: position.y },
-      placeId: null,
-      layerId: null,
-      places: [],
-      spaces: [],
-      deepestSpace: null
-    };
-    const instance = this.#requirePlace(binding.placeId);
-    const definition = this.#requireDefinition(instance.definitionId);
-    const spaces = definition.locateSpaces(binding.layerId, position);
-    return {
-      domainId,
-      position: { x: position.x, y: position.y },
-      placeId: instance.id,
-      layerId: binding.layerId,
-      places: this.#placeChain(instance.id),
-      spaces,
-      deepestSpace: spaces.length ? spaces[spaces.length - 1] : null
-    };
+      places,
+      spaces
+    });
   }
 
   locateEntity(entity) {
@@ -486,303 +598,237 @@ export class PlaceRegistry {
     return this.locate(entity.domainId ?? "default", entity.position);
   }
 
-  placesAt(domainId, position) {
-    const index = this.#footprintIndexes.get(domainId);
-    if (!index) return [];
-    const ids = index.queryPoint(position);
-    const result = [];
-    for (const id of ids) {
-      const instance = this.instances.get(id);
-      const definition = instance && this.definitions.get(instance.definitionId);
-      if (!instance || !definition?.footprint) continue;
-      const local = this.#toLocalPlacementPoint(position, instance);
-      if (definition.footprint && this.#pointInDefinitionFootprint(local, definition)) result.push(instance);
-    }
-    return result;
-  }
-
-  resolveAnchor(placeId, anchorId) {
-    const instance = this.#requirePlace(placeId);
-    const definition = this.#requireDefinition(instance.definitionId);
-    const anchor = definition.getAnchor(anchorId);
-    if (!anchor) return null;
-    return deepFreeze({
-      ...anchor,
-      placeId,
-      domainId: instance.layerDomains.get(anchor.layerId)
-    });
-  }
-
-  findAnchors({ placeId = null, tag = null, kind = null, spaceId = null } = {}) {
-    const result = [];
-    const instances = placeId == null ? this.instances.values() : [this.#requirePlace(placeId)];
-    for (const instance of instances) {
-      const definition = this.#requireDefinition(instance.definitionId);
-      let candidates;
-      if (tag != null) candidates = definition.getAnchorsByTag(tag);
-      else if (spaceId != null) candidates = definition.getAnchorsForSpace(spaceId);
-      else candidates = definition.anchors;
-      for (const anchor of candidates) {
-        if (kind != null && anchor.kind !== kind) continue;
-        if (spaceId != null && anchor.spaceId !== spaceId) continue;
-        result.push(this.resolveAnchor(instance.id, anchor.id));
-      }
-    }
-    return result;
-  }
-
-  findNearestAnchor({ domainId, position, tag = null, kind = null, placeId = null } = {}) {
-    let best = null;
-    let bestD2 = Infinity;
-    for (const anchor of this.findAnchors({ placeId, tag, kind })) {
-      if (anchor.domainId !== domainId) continue;
-      const d2 = squaredDistance(position, anchor.position);
-      if (d2 < bestD2 || (d2 === bestD2 && anchor.id < best.id)) {
-        best = anchor;
-        bestD2 = d2;
-      }
-    }
-    return best ? { anchor: best, distance: Math.sqrt(bestD2) } : null;
-  }
-
-  updateEntityOccupancy(entity) {
-    assertId(entity.id, "entity.id");
+  syncEntityOccupancy(entity) {
+    assertId(entity?.id, "entity.id");
     const next = this.locateEntity(entity);
-    const previous = this.#entityContexts.get(entity.id) ?? null;
-    const prevPlace = previous?.placeId ?? null;
-    const nextPlace = next.placeId ?? null;
-
-    if (prevPlace !== nextPlace) {
-      if (prevPlace != null) {
-        removeFromSetMap(this.#placeOccupants, prevPlace, entity.id);
-        this.emitEvent("place-leave", { entityId: entity.id, placeId: prevPlace });
-      }
-      if (nextPlace != null) {
-        addToSetMap(this.#placeOccupants, nextPlace, entity.id);
-        this.emitEvent("place-enter", { entityId: entity.id, placeId: nextPlace });
-      }
-    }
-
-    const previousSpaceIds = new Set(previous?.spaces?.map((space) => space.id) ?? []);
-    const nextSpaceIds = new Set(next.spaces.map((space) => space.id));
-
-    if (prevPlace != null) {
-      for (const spaceId of previousSpaceIds) {
-        if (prevPlace === nextPlace && nextSpaceIds.has(spaceId)) continue;
-        removeFromSetMap(this.#spaceOccupants, occupancyKey(prevPlace, spaceId), entity.id);
-        this.emitEvent("space-leave", { entityId: entity.id, placeId: prevPlace, spaceId });
-      }
-    }
-    if (nextPlace != null) {
-      for (const spaceId of nextSpaceIds) {
-        if (prevPlace === nextPlace && previousSpaceIds.has(spaceId)) continue;
-        addToSetMap(this.#spaceOccupants, occupancyKey(nextPlace, spaceId), entity.id);
-        this.emitEvent("space-enter", { entityId: entity.id, placeId: nextPlace, spaceId });
-      }
-    }
-
-    this.#entityContexts.set(entity.id, next);
+    const previous = this.#occupancy.get(entity.id) ?? null;
+    if (previous && this.#sameLocation(previous, next)) return next;
+    if (previous) this.#removeOccupancy(entity.id, previous);
+    this.#occupancy.set(entity.id, next);
+    this.#addOccupancy(entity.id, next);
+    this.#emitLocationTransitions(entity.id, previous, next);
     return next;
   }
 
   removeEntityOccupancy(entityId) {
-    const previous = this.#entityContexts.get(entityId);
+    const previous = this.#occupancy.get(entityId);
     if (!previous) return false;
-    if (previous.placeId != null) {
-      removeFromSetMap(this.#placeOccupants, previous.placeId, entityId);
-      for (const space of previous.spaces) {
-        removeFromSetMap(this.#spaceOccupants, occupancyKey(previous.placeId, space.id), entityId);
-      }
-    }
-    this.#entityContexts.delete(entityId);
+    this.#removeOccupancy(entityId, previous);
+    this.#occupancy.delete(entityId);
+    this.#emitLocationTransitions(entityId, previous, null);
     return true;
   }
 
-  entitiesInPlace(placeId) {
-    return this.#placeOccupants.get(placeId) ?? EMPTY_SET;
+  getEntityLocation(entityId) { return this.#occupancy.get(entityId) ?? null; }
+  entitiesInPlace(instanceId) { return new Set(this.#entitiesByPlace.get(instanceId) ?? []); }
+  entitiesInSpace(instanceId, spaceId) { return new Set(this.#entitiesBySpace.get(makeSpaceKey(instanceId, spaceId)) ?? []); }
+
+  clearEntityOccupancyForPlace(instanceId) {
+    const entities = [...(this.#entitiesByPlace.get(instanceId) ?? [])];
+    for (const entityId of entities) this.removeEntityOccupancy(entityId);
   }
 
-  entitiesInSpace(placeId, spaceId) {
-    return this.#spaceOccupants.get(occupancyKey(placeId, spaceId)) ?? EMPTY_SET;
-  }
-
-  emitEvent(type, data = {}) {
-    const event = deepFreeze({ time: this.time, type, ...cloneJson(data) });
+  emit(type, data = {}) {
+    if (!this.#captureEvents) return null;
+    const event = deepFreeze({ sequence: ++this.#sequence, type, ...cloneJson(data) });
     this.#events.push(event);
     return event;
   }
 
+  setEventCapture(enabled) { this.#captureEvents = Boolean(enabled); }
   drainEvents(target = []) { return this.#events.drain(target); }
   peekEvents() { return this.#events.peek(); }
-
-  configureEventQueue(options) {
-    this.#events.configure(options);
-    return { limit: this.#events.limit, overflowPolicy: this.#events.overflowPolicy };
-  }
-
   getEventQueueStats() {
-    return {
-      size: this.#events.size,
-      limit: this.#events.limit,
-      overflowPolicy: this.#events.overflowPolicy,
-      dropped: this.#events.dropped
-    };
+    return { size: this.#events.size, limit: this.#events.limit, overflowPolicy: this.#events.overflowPolicy, dropped: this.#events.dropped };
   }
 
   getDiagnostics() {
     let portalOverrideCount = 0;
     let boundaryOverrideCount = 0;
+    let spaceOverrideCount = 0;
     let dynamicPortalCount = 0;
-    let externalBindingCount = 0;
-    for (const instance of this.instances.values()) {
+    for (const instance of this.#instances.values()) {
       portalOverrideCount += instance.portalOverrides.size;
       boundaryOverrideCount += instance.boundaryOverrides.size;
+      spaceOverrideCount += instance.spaceOverrides.size;
       dynamicPortalCount += instance.dynamicPortals.size;
-      externalBindingCount += instance.externalBindings.size;
     }
-    let footprintCells = 0;
-    for (const index of this.#footprintIndexes.values()) footprintCells += index.cellCount;
+    let footprintIndexCells = 0;
+    for (const index of this.#exteriorIndexes.values()) footprintIndexCells += index.cellCount;
     return {
-      definitionCount: this.definitions.size,
-      instanceCount: this.instances.size,
-      boundDomainCount: this.domainBindings.size,
+      definitionCount: this.#definitions.size,
+      instanceCount: this.#instances.size,
+      domainBindingCount: this.#domainBindings.size,
+      portalRecordCount: this.#portalRecords.size,
       portalOverrideCount,
       boundaryOverrideCount,
+      spaceOverrideCount,
       dynamicPortalCount,
-      externalBindingCount,
-      occupancyEntityCount: this.#entityContexts.size,
-      occupiedPlaceCount: this.#placeOccupants.size,
-      occupiedSpaceCount: this.#spaceOccupants.size,
-      footprintDomainCount: this.#footprintIndexes.size,
-      footprintCells,
-      graphRevision: this.graphRevision,
+      occupiedEntityCount: this.#occupancy.size,
+      graphRevision: this.#graphRevision,
+      footprintIndexCells,
       eventQueueSize: this.#events.size,
       droppedEventCount: this.#events.dropped
     };
   }
 
   assertInternalConsistency() {
-    for (const [domainId, binding] of this.domainBindings) {
-      const instance = this.instances.get(binding.placeId);
-      if (!instance) throw new Error(`domain ${domainId} references missing place ${String(binding.placeId)}`);
-      if (instance.layerDomains.get(binding.layerId) !== domainId) {
-        throw new Error(`domain binding mismatch for ${domainId}`);
+    for (const [domainId, binding] of this.#domainBindings) {
+      const instance = this.#instances.get(binding.instanceId);
+      if (!instance) throw new Error(`domain ${domainId} references missing instance`);
+      if (instance.layerDomains.get(binding.layerId) !== domainId) throw new Error(`domain ${domainId} binding mismatch`);
+    }
+    for (const instance of this.#instances.values()) {
+      const definition = this.#definitions.get(instance.definitionId);
+      if (!definition) throw new Error(`instance ${String(instance.id)} references missing definition`);
+      if (instance.parentId != null && !this.#instances.has(instance.parentId)) throw new Error(`instance ${String(instance.id)} references missing parent`);
+      const visited = new Set();
+      let current = instance;
+      while (current?.parentId != null) {
+        if (visited.has(current.id)) throw new Error(`place parent cycle involving ${String(current.id)}`);
+        visited.add(current.id);
+        current = this.#instances.get(current.parentId);
       }
     }
-    for (const instance of this.instances.values()) {
-      const definition = this.definitions.get(instance.definitionId);
-      if (!definition) throw new Error(`place ${String(instance.id)} references missing definition`);
-      if (definition.contentHash !== instance.definitionHash) throw new Error(`definition hash mismatch for place ${String(instance.id)}`);
-      for (const [layerId, domainId] of instance.layerDomains) {
-        const binding = this.domainBindings.get(domainId);
-        if (!binding || binding.placeId !== instance.id || binding.layerId !== layerId) {
-          throw new Error(`missing domain reverse binding for ${domainId}`);
-        }
-      }
-      for (const portalId of instance.portalOverrides.keys()) {
-        if (!definition.getPortal(portalId)) throw new Error(`orphan portal override ${portalId}`);
-      }
-      for (const boundaryId of instance.boundaryOverrides.keys()) {
-        if (!definition.getBoundary(boundaryId)) throw new Error(`orphan boundary override ${boundaryId}`);
+    for (const [key, record] of this.#portalRecords) {
+      if (!this.#instances.has(record.instanceId)) throw new Error(`portal record ${key} references missing instance`);
+      for (const domainId of [record.a.domainId, record.b.domainId]) {
+        if (!this.#portalsByDomain.get(domainId)?.has(key)) throw new Error(`portal record ${key} missing domain adjacency`);
       }
     }
     return this.getDiagnostics();
   }
 
-  #resolveEndpoint(instance, endpoint) {
-    if (endpoint.kind === "local") {
-      return deepFreeze({
-        domainId: instance.layerDomains.get(endpoint.layerId),
-        position: { x: endpoint.position.x, y: endpoint.position.y },
-        nodeId: endpoint.nodeId,
-        placeId: instance.id,
-        layerId: endpoint.layerId,
-        spaceId: endpoint.spaceId,
-        slot: null
-      });
-    }
-    return instance.externalBindings.get(endpoint.slot) ?? null;
-  }
-
-  #placeChain(placeId) {
-    const chain = [];
-    const seen = new Set();
-    let current = this.instances.get(placeId);
+  #spaceEnabled(instance, definition, space) {
+    let current = space;
     while (current) {
-      if (seen.has(current.id)) throw new Error("place parent cycle detected");
-      seen.add(current.id);
-      chain.push(current);
-      current = current.parentPlaceId == null ? null : this.instances.get(current.parentPlaceId);
+      if (instance.getSpaceOverride(current.id)?.enabled === false) return false;
+      current = current.parentSpaceId == null ? null : definition.getSpace(current.parentSpaceId);
     }
-    chain.reverse();
-    return chain;
+    return true;
   }
 
-  #requirePlace(id) {
-    const place = this.instances.get(id);
-    if (!place) throw new Error(`unknown place: ${String(id)}`);
-    return place;
+  #indexExterior(instance, definition) {
+    if (!instance.placement || instance.placement.containment !== "footprint" || !definition.footprint) return;
+    const localBounds = geometryBounds(definition.footprint);
+    const bounds = transformBounds(localBounds, instance.placement.transform);
+    let index = this.#exteriorIndexes.get(instance.placement.domainId);
+    if (!index) this.#exteriorIndexes.set(instance.placement.domainId, index = new DynamicAabbIndex());
+    index.set(instance.id, bounds);
   }
 
-  #requireDefinition(id) {
-    const definition = this.definitions.get(id);
-    if (!definition) throw new Error(`unknown place definition: ${id}`);
-    return definition;
-  }
-
-  #reindexFootprint(instance, definition) {
-    if (!definition.footprint || !instance.placementDomainId) return;
-    let index = this.#footprintIndexes.get(instance.placementDomainId);
-    if (!index) this.#footprintIndexes.set(
-      instance.placementDomainId,
-      index = new DynamicAabbIndex(this.footprintCellSize)
-    );
-    index.set(instance.id, transformBounds(geometryBounds(definition.footprint), instance.placement));
-  }
-
-  #unindexFootprint(instance) {
-    if (!instance.placementDomainId) return;
-    const index = this.#footprintIndexes.get(instance.placementDomainId);
+  #unindexExterior(instance) {
+    if (!instance.placement) return;
+    const index = this.#exteriorIndexes.get(instance.placement.domainId);
     if (!index) return;
     index.delete(instance.id);
-    if (index.size === 0) this.#footprintIndexes.delete(instance.placementDomainId);
+    if (index.size === 0) this.#exteriorIndexes.delete(instance.placement.domainId);
   }
 
-  #toLocalPlacementPoint(point, instance) {
-    const { x, y, rotation, scale } = instance.placement;
-    const dx = point.x - x;
-    const dy = point.y - y;
-    const c = Math.cos(-rotation);
-    const s = Math.sin(-rotation);
-    return {
-      x: (dx * c - dy * s) / scale,
-      y: (dx * s + dy * c) / scale
-    };
+  #portalKey(instanceId, portalId) { return `${String(instanceId)}\u0000${portalId}`; }
+
+  #removeInstancePortals(instanceId) {
+    const keys = this.#instancePortalKeys.get(instanceId);
+    if (!keys) return;
+    for (const key of keys) {
+      const record = this.#portalRecords.get(key);
+      if (!record) continue;
+      for (const domainId of [record.a.domainId, record.b.domainId]) {
+        const set = this.#portalsByDomain.get(domainId);
+        set?.delete(key);
+        if (set?.size === 0) this.#portalsByDomain.delete(domainId);
+      }
+      this.#portalRecords.delete(key);
+    }
+    this.#instancePortalKeys.delete(instanceId);
   }
 
-  #pointInDefinitionFootprint(point, definition) {
-    const geometry = definition.footprint;
-    if (geometry.type === "aabb") {
-      return point.x >= geometry.minX && point.x <= geometry.maxX &&
-        point.y >= geometry.minY && point.y <= geometry.maxY;
-    }
-    if (geometry.type === "circle") {
-      const dx = point.x - geometry.center.x;
-      const dy = point.y - geometry.center.y;
-      return dx * dx + dy * dy <= geometry.radius * geometry.radius;
-    }
-    let inside = false;
-    const points = geometry.points;
-    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-      const a = points[i];
-      const b = points[j];
-      if (((a.y > point.y) !== (b.y > point.y)) &&
-        point.x < ((b.x - a.x) * (point.y - a.y)) / ((b.y - a.y) || Number.EPSILON) + a.x) {
-        inside = !inside;
+  #reindexInstancePortals(instance, definition) {
+    this.#removeInstancePortals(instance.id);
+    const keys = new Set();
+    const portalIds = [
+      ...definition.portals.map((portal) => portal.id),
+      ...instance.dynamicPortals.keys()
+    ];
+    for (const portalId of portalIds) {
+      const resolved = this.resolvePortal(instance.id, portalId);
+      const key = this.#portalKey(instance.id, portalId);
+      const record = deepFreeze({ key, ...resolved });
+      this.#portalRecords.set(key, record);
+      keys.add(key);
+      for (const domainId of new Set([record.a.domainId, record.b.domainId])) {
+        let set = this.#portalsByDomain.get(domainId);
+        if (!set) this.#portalsByDomain.set(domainId, set = new Set());
+        set.add(key);
       }
     }
-    return inside;
+    this.#instancePortalKeys.set(instance.id, keys);
+  }
+
+  #placeChain(instanceId) {
+    const chain = [];
+    const visited = new Set();
+    let current = this.#instances.get(instanceId);
+    while (current) {
+      if (visited.has(current.id)) throw new Error(`place parent cycle involving ${String(current.id)}`);
+      visited.add(current.id);
+      chain.push(current.id);
+      current = current.parentId == null ? null : this.#instances.get(current.parentId);
+    }
+    return chain.reverse();
+  }
+
+  #sameLocation(a, b) {
+    if (!a || !b || a.domainId !== b.domainId) return false;
+    if (a.places.length !== b.places.length || a.spaces.length !== b.spaces.length) return false;
+    for (let i = 0; i < a.places.length; i += 1) if (a.places[i] !== b.places[i]) return false;
+    for (let i = 0; i < a.spaces.length; i += 1) {
+      if (a.spaces[i].placeId !== b.spaces[i].placeId || a.spaces[i].spaceId !== b.spaces[i].spaceId) return false;
+    }
+    return true;
+  }
+
+  #addOccupancy(entityId, location) {
+    for (const placeId of location.places) {
+      let set = this.#entitiesByPlace.get(placeId);
+      if (!set) this.#entitiesByPlace.set(placeId, set = new Set());
+      set.add(entityId);
+    }
+    for (const space of location.spaces) {
+      const key = makeSpaceKey(space.placeId, space.spaceId);
+      let set = this.#entitiesBySpace.get(key);
+      if (!set) this.#entitiesBySpace.set(key, set = new Set());
+      set.add(entityId);
+    }
+  }
+
+  #removeOccupancy(entityId, location) {
+    for (const placeId of location.places) {
+      const set = this.#entitiesByPlace.get(placeId);
+      set?.delete(entityId);
+      if (set?.size === 0) this.#entitiesByPlace.delete(placeId);
+    }
+    for (const space of location.spaces) {
+      const key = makeSpaceKey(space.placeId, space.spaceId);
+      const set = this.#entitiesBySpace.get(key);
+      set?.delete(entityId);
+      if (set?.size === 0) this.#entitiesBySpace.delete(key);
+    }
+  }
+
+  #emitLocationTransitions(entityId, previous, next) {
+    const beforePlaces = new Set(previous?.places ?? []);
+    const afterPlaces = new Set(next?.places ?? []);
+    for (const placeId of beforePlaces) if (!afterPlaces.has(placeId)) this.emit("place-leave", { entityId, placeId });
+    for (const placeId of afterPlaces) if (!beforePlaces.has(placeId)) this.emit("place-enter", { entityId, placeId });
+
+    const beforeSpaces = new Map((previous?.spaces ?? []).map((x) => [makeSpaceKey(x.placeId, x.spaceId), x]));
+    const afterSpaces = new Map((next?.spaces ?? []).map((x) => [makeSpaceKey(x.placeId, x.spaceId), x]));
+    for (const [key, value] of beforeSpaces) if (!afterSpaces.has(key)) this.emit("space-leave", { entityId, ...value });
+    for (const [key, value] of afterSpaces) if (!beforeSpaces.has(key)) this.emit("space-enter", { entityId, ...value });
   }
 }
 
-const EMPTY_SET = Object.freeze(new Set());
+export function isPortalTraversable(portal) {
+  return portalTraversableState(portal);
+}

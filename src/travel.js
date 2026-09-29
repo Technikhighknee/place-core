@@ -1,467 +1,391 @@
-import { isPortalTraversable } from "./registry.js";
 import { squaredDistance } from "./geometry.js";
+import { isPortalTraversable } from "./registry.js";
 import { cloneJson, deepFreeze } from "./utils.js";
 
-class MinHeap {
-  #items = [];
+const EMPTY_SET = new Set();
+const POSITION_EPSILON_SQ = 1e-8;
 
-  push(item) {
-    let i = this.#items.length;
-    this.#items.push(item);
-    while (i > 0) {
-      const p = (i - 1) >> 1;
-      if (compareQueue(this.#items[p], item) <= 0) break;
-      this.#items[i] = this.#items[p];
-      i = p;
-    }
-    this.#items[i] = item;
+function sortedPortals(registry, domainId) {
+  return registry.getPortalsForDomain(domainId).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function outgoingEdges(registry, domainId, excluded = EMPTY_SET) {
+  const edges = [];
+  for (const portal of sortedPortals(registry, domainId)) {
+    if (excluded.has(portal.key) || !isPortalTraversable(portal) || portal.a.domainId === portal.b.domainId) continue;
+    if (portal.a.domainId === domainId) edges.push({ portalKey: portal.key, portal, from: portal.a, to: portal.b });
+    if (portal.bidirectional && portal.b.domainId === domainId) edges.push({ portalKey: portal.key, portal, from: portal.b, to: portal.a });
   }
+  return edges;
+}
 
-  pop() {
-    if (this.#items.length === 0) return null;
-    const root = this.#items[0];
-    const last = this.#items.pop();
-    if (this.#items.length && last) {
-      let i = 0;
-      while (true) {
-        const left = i * 2 + 1;
-        const right = left + 1;
-        if (left >= this.#items.length) break;
-        let child = left;
-        if (right < this.#items.length && compareQueue(this.#items[right], this.#items[left]) < 0) child = right;
-        if (compareQueue(this.#items[child], last) >= 0) break;
-        this.#items[i] = this.#items[child];
-        i = child;
-      }
-      this.#items[i] = last;
-    }
-    return root;
+function incomingEdges(registry, domainId, excluded = EMPTY_SET) {
+  const edges = [];
+  for (const portal of sortedPortals(registry, domainId)) {
+    if (excluded.has(portal.key) || !isPortalTraversable(portal) || portal.a.domainId === portal.b.domainId) continue;
+    if (portal.b.domainId === domainId) edges.push({ portalKey: portal.key, portal, from: portal.a, to: portal.b });
+    if (portal.bidirectional && portal.a.domainId === domainId) edges.push({ portalKey: portal.key, portal, from: portal.b, to: portal.a });
   }
-
-  get size() { return this.#items.length; }
+  return edges;
 }
 
-function compareQueue(a, b) {
-  if (a.cost !== b.cost) return a.cost - b.cost;
-  return a.key.localeCompare(b.key);
-}
-
-function endpointKey(portal, side) {
-  return `${String(portal.placeId ?? "")}:${portal.id}:${side}`;
-}
-
-function closeEnough(a, b, epsilon = 1e-6) {
-  return squaredDistance(a, b) <= epsilon * epsilon;
-}
-
-function portalCandidates(registry, domainId) {
-  const result = [];
-  for (const portal of registry.resolvedPortals()) {
-    if (!portal || !isPortalTraversable(portal) || !portal.a || !portal.b) continue;
-    if (portal.a.domainId === domainId) result.push({ portal, from: portal.a, to: portal.b, side: "a" });
-    if (portal.b.domainId === domainId && portal.bidirectional !== false) {
-      result.push({ portal, from: portal.b, to: portal.a, side: "b" });
-    }
-  }
-  result.sort((x, y) => endpointKey(x.portal, x.side).localeCompare(endpointKey(y.portal, y.side)));
-  return result;
-}
-
-function localRoute(bridge, entity, from, destination) {
-  if (from.domainId !== destination.domainId) return null;
-  if (closeEnough(from.position, destination.position) && destination.nodeId == null) {
-    return { estimatedSeconds: 0, destinationNodeId: null, route: null, prefixLeg: null, entryPoint: null };
-  }
-  if (destination.nodeId == null) return null;
-  const result = bridge.planLocalRoute({
-    domainId: from.domainId,
-    position: from.position,
-    destinationNodeId: destination.nodeId,
-    mobility: entity.mobility,
-    options: undefined
-  });
-  return result;
-}
-
-function journeyLeg(from, destination, routePlan) {
-  if (!routePlan || routePlan.estimatedSeconds <= 0) return null;
-  return deepFreeze({
-    type: "journey",
-    domainId: from.domainId,
-    destinationNodeId: destination.nodeId,
-    destinationPosition: { ...destination.position },
-    estimatedSeconds: routePlan.estimatedSeconds
-  });
-}
-
-function portalLeg(candidate) {
-  return deepFreeze({
-    type: "portal",
-    placeId: candidate.portal.placeId ?? null,
-    portalId: candidate.portal.id,
-    side: candidate.side,
-    from: cloneEndpoint(candidate.from),
-    to: cloneEndpoint(candidate.to),
-    estimatedSeconds: candidate.portal.transitionCost ?? 0
-  });
-}
-
-function cloneEndpoint(endpoint) {
-  return deepFreeze({
-    domainId: endpoint.domainId,
-    position: { x: endpoint.position.x, y: endpoint.position.y },
-    nodeId: endpoint.nodeId ?? null,
-    placeId: endpoint.placeId ?? null,
-    layerId: endpoint.layerId ?? null,
-    spaceId: endpoint.spaceId ?? null,
-    slot: endpoint.slot ?? null
-  });
-}
-
-export function findDomainPortalPath(registry, startDomainId, targetDomainId) {
+export function findDomainPortalPath(registry, startDomainId, targetDomainId, options = {}) {
   if (startDomainId === targetDomainId) return [];
-  const queue = [{ domainId: startDomainId, path: [] }];
-  const visited = new Set([startDomainId]);
-  for (let i = 0; i < queue.length; i += 1) {
-    const current = queue[i];
-    for (const candidate of portalCandidates(registry, current.domainId)) {
-      const nextDomainId = candidate.to.domainId;
-      const nextPath = [...current.path, portalLeg(candidate)];
-      if (nextDomainId === targetDomainId) return nextPath;
-      if (!visited.has(nextDomainId)) {
-        visited.add(nextDomainId);
-        queue.push({ domainId: nextDomainId, path: nextPath });
+  const excluded = options.excludedPortalKeys ?? EMPTY_SET;
+  const forwardVisited = new Map([[startDomainId, null]]);
+  const backwardVisited = new Map([[targetDomainId, null]]);
+  let forwardFrontier = new Set([startDomainId]);
+  let backwardFrontier = new Set([targetDomainId]);
+  let preferForwardOnTie = true;
+  let meeting = null;
+
+  while (forwardFrontier.size && backwardFrontier.size) {
+    const expandForward = forwardFrontier.size < backwardFrontier.size ||
+      (forwardFrontier.size === backwardFrontier.size && preferForwardOnTie);
+    preferForwardOnTie = !preferForwardOnTie;
+
+    if (expandForward) {
+      const next = new Set();
+      for (const domainId of [...forwardFrontier].sort()) {
+        for (const edge of outgoingEdges(registry, domainId, excluded)) {
+          const neighbor = edge.to.domainId;
+          if (forwardVisited.has(neighbor)) continue;
+          forwardVisited.set(neighbor, { previousDomain: domainId, edge });
+          if (backwardVisited.has(neighbor)) { meeting = neighbor; break; }
+          next.add(neighbor);
+        }
+        if (meeting) break;
       }
+      if (meeting) break;
+      forwardFrontier = next;
+    } else {
+      const next = new Set();
+      for (const domainId of [...backwardFrontier].sort()) {
+        for (const edge of incomingEdges(registry, domainId, excluded)) {
+          const predecessor = edge.from.domainId;
+          if (backwardVisited.has(predecessor)) continue;
+          backwardVisited.set(predecessor, { nextDomain: domainId, edge });
+          if (forwardVisited.has(predecessor)) { meeting = predecessor; break; }
+          next.add(predecessor);
+        }
+        if (meeting) break;
+      }
+      if (meeting) break;
+      backwardFrontier = next;
+    }
+  }
+
+  if (!meeting) return null;
+  const prefix = [];
+  let cursor = meeting;
+  while (cursor !== startDomainId) {
+    const entry = forwardVisited.get(cursor);
+    if (!entry) throw new Error("corrupt forward portal search state");
+    prefix.push(entry.edge);
+    cursor = entry.previousDomain;
+  }
+  prefix.reverse();
+
+  const suffix = [];
+  cursor = meeting;
+  while (cursor !== targetDomainId) {
+    const entry = backwardVisited.get(cursor);
+    if (!entry) throw new Error("corrupt backward portal search state");
+    suffix.push(entry.edge);
+    cursor = entry.nextDomain;
+  }
+  return [...prefix, ...suffix];
+}
+
+export function resolveTravelTarget(registry, target) {
+  if (!target || typeof target !== "object") throw new TypeError("travel target is required");
+  const instance = registry.getPlace(target.placeId);
+  if (!instance) throw new Error(`unknown target place ${String(target.placeId)}`);
+  const definition = registry.getDefinition(instance.definitionId);
+  let anchor = null;
+
+  if (target.anchorId != null) {
+    anchor = definition.getAnchor(target.anchorId);
+    if (!anchor) throw new Error(`unknown anchor ${target.anchorId} on place ${String(target.placeId)}`);
+  } else if (target.spaceId != null) {
+    const space = definition.getSpace(target.spaceId);
+    if (!space) throw new Error(`unknown space ${target.spaceId} on place ${String(target.placeId)}`);
+    if (space.defaultAnchorId) anchor = definition.getAnchor(space.defaultAnchorId);
+    if (!anchor) anchor = definition.getAnchorsForSpace(space.id)[0] ?? null;
+  } else if (definition.defaultAnchorId) {
+    anchor = definition.getAnchor(definition.defaultAnchorId);
+  } else {
+    anchor = definition.getAnchorsByTag("entry")[0] ?? definition.anchors[0] ?? null;
+  }
+
+  if (!anchor) throw new Error(`place ${String(target.placeId)} has no routable anchor`);
+  return deepFreeze({
+    placeId: target.placeId,
+    anchorId: anchor.id,
+    spaceId: anchor.spaceId,
+    layerId: anchor.layerId,
+    domainId: instance.layerDomains.get(anchor.layerId),
+    position: anchor.position,
+    nodeId: anchor.nodeId
+  });
+}
+
+function localStep(steps, bridge, state, destination, options) {
+  if (state.domainId !== destination.domainId) throw new Error("local step cannot cross domains");
+  if (squaredDistance(state.position, destination.position) <= POSITION_EPSILON_SQ) {
+    state.position = destination.position;
+    return 0;
+  }
+  if (destination.nodeId == null) {
+    const error = new Error(`destination in ${destination.domainId} has no nodeId`);
+    error.code = "LOCAL_ROUTE_UNAVAILABLE";
+    throw error;
+  }
+  const routePlan = bridge.planLocalRoute({
+    domainId: state.domainId,
+    position: state.position,
+    destinationNodeId: destination.nodeId,
+    mobility: state.mobility,
+    options: options.journeyOptions
+  });
+  if (!routePlan) {
+    const error = new Error(`no local route in ${state.domainId} to ${destination.nodeId}`);
+    error.code = "LOCAL_ROUTE_UNAVAILABLE";
+    throw error;
+  }
+  const estimatedSeconds = routePlan.estimatedSeconds ?? routePlan.route?.estimatedSeconds ?? 0;
+  steps.push(deepFreeze({
+    type: "local-journey",
+    domainId: state.domainId,
+    destinationNodeId: destination.nodeId,
+    destinationPosition: destination.position,
+    estimatedSeconds
+  }));
+  state.position = destination.position;
+  return estimatedSeconds;
+}
+
+export function planTravel(registry, entityOrId, target, options = {}) {
+  const bridge = options.bridge ?? registry.bridge;
+  if (!bridge) throw new Error("planTravel requires a WorldCoreBridge");
+  const entity = typeof entityOrId === "object" ? entityOrId : bridge.getEntity(entityOrId);
+  if (!entity) throw new Error(`unknown entity ${String(entityOrId)}`);
+
+  const startDomainId = entity.domainId ?? "default";
+  const resolvedTarget = resolveTravelTarget(registry, target);
+  const excluded = new Set(options.excludedPortalKeys ?? []);
+  const maxAttempts = options.maxPortalPathAttempts ?? 32;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const portalPath = findDomainPortalPath(registry, startDomainId, resolvedTarget.domainId, { excludedPortalKeys: excluded });
+    if (portalPath == null) return null;
+    const steps = [];
+    const state = { domainId: startDomainId, position: entity.position, mobility: entity.mobility };
+    let estimatedSeconds = 0;
+    let failedPortalKey = null;
+
+    try {
+      for (const edge of portalPath) {
+        try {
+          estimatedSeconds += localStep(steps, bridge, state, edge.from, options);
+        } catch (error) {
+          if (error.code !== "LOCAL_ROUTE_UNAVAILABLE") throw error;
+          failedPortalKey = edge.portalKey;
+          throw error;
+        }
+
+        steps.push(deepFreeze({
+          type: "traverse-portal",
+          portalKey: edge.portalKey,
+          placeId: edge.portal.instanceId,
+          portalId: edge.portal.id,
+          fromDomainId: edge.from.domainId,
+          toDomainId: edge.to.domainId,
+          destinationPosition: edge.to.position,
+          transitionCost: edge.portal.transitionCost
+        }));
+        estimatedSeconds += edge.portal.transitionCost;
+        state.domainId = edge.to.domainId;
+        state.position = edge.to.position;
+      }
+
+      try {
+        estimatedSeconds += localStep(steps, bridge, state, resolvedTarget, options);
+      } catch (error) {
+        if (error.code !== "LOCAL_ROUTE_UNAVAILABLE") throw error;
+        failedPortalKey = portalPath.at(-1)?.portalKey ?? null;
+        throw error;
+      }
+
+      return deepFreeze({
+        entityId: entity.id,
+        target: cloneJson(target),
+        resolvedTarget,
+        graphRevision: registry.graphRevision,
+        startDomainId,
+        steps,
+        estimatedSeconds,
+        rejectedPortalKeys: Object.freeze([...excluded])
+      });
+    } catch (error) {
+      if (error.code !== "LOCAL_ROUTE_UNAVAILABLE") throw error;
+      if (!failedPortalKey || excluded.has(failedPortalKey)) return null;
+      excluded.add(failedPortalKey);
     }
   }
   return null;
 }
 
-export function resolveTravelTarget(registry, entity, target) {
-  if (!target || typeof target !== "object") throw new TypeError("travel target is required");
-
-  if (typeof target.domainId === "string" && target.position) {
-    return deepFreeze({
-      domainId: target.domainId,
-      position: { x: target.position.x, y: target.position.y },
-      nodeId: target.nodeId ?? null,
-      placeId: target.placeId ?? null,
-      layerId: target.layerId ?? null,
-      spaceId: target.spaceId ?? null,
-      anchorId: target.anchorId ?? null
-    });
-  }
-
-  if (target.placeId != null && target.anchorId != null) {
-    const anchor = registry.resolveAnchor(target.placeId, target.anchorId);
-    if (!anchor) throw new Error(`unknown target anchor ${target.anchorId}`);
-    return deepFreeze({
-      domainId: anchor.domainId,
-      position: { ...anchor.position },
-      nodeId: anchor.nodeId,
-      placeId: target.placeId,
-      layerId: anchor.layerId,
-      spaceId: anchor.spaceId,
-      anchorId: anchor.id
-    });
-  }
-
-  if (target.placeId != null && target.spaceId != null) {
-    const place = registry.getPlace(target.placeId);
-    if (!place) throw new Error(`unknown target place ${String(target.placeId)}`);
-    const definition = registry.getDefinition(place.definitionId);
-    const space = definition?.getSpace(target.spaceId);
-    if (!space) throw new Error(`unknown target space ${target.spaceId}`);
-    const anchors = definition.getAnchorsForSpace(space.id);
-    const anchor = space.defaultAnchorId
-      ? definition.getAnchor(space.defaultAnchorId)
-      : [...anchors].sort((a, b) => a.id.localeCompare(b.id))[0] ?? null;
-    if (!anchor) throw new Error(`target space ${space.id} has no anchor`);
-    return resolveTravelTarget(registry, entity, { placeId: target.placeId, anchorId: anchor.id });
-  }
-
-  if (target.placeId != null) {
-    const place = registry.getPlace(target.placeId);
-    if (!place) throw new Error(`unknown target place ${String(target.placeId)}`);
-    const definition = registry.getDefinition(place.definitionId);
-    const anchorId = definition.defaultAnchorId ?? [...definition.anchors].sort((a, b) => a.id.localeCompare(b.id))[0]?.id;
-    if (!anchorId) throw new Error(`target place ${String(target.placeId)} has no anchor`);
-    return resolveTravelTarget(registry, entity, { placeId: target.placeId, anchorId });
-  }
-
-  if (target.kind === "nearest" && target.tag) {
-    const sameDomain = registry.findNearestAnchor({
-      domainId: entity.domainId,
-      position: entity.position,
-      tag: target.tag
-    });
-    if (sameDomain) {
-      return resolveTravelTarget(registry, entity, {
-        placeId: sameDomain.anchor.placeId,
-        anchorId: sameDomain.anchor.id
-      });
-    }
-    const candidates = registry.findAnchors({ tag: target.tag })
-      .sort((a, b) => {
-        const p = String(a.placeId).localeCompare(String(b.placeId));
-        return p || a.id.localeCompare(b.id);
-      });
-    if (!candidates.length) throw new Error(`no anchor matches tag ${target.tag}`);
-    return resolveTravelTarget(registry, entity, {
-      placeId: candidates[0].placeId,
-      anchorId: candidates[0].id
-    });
-  }
-
-  throw new TypeError("unsupported travel target");
-}
-
-export function planTravel(registry, bridge, entityId, target, options = {}) {
-  const entity = bridge.getEntity(entityId);
-  if (!entity) throw new Error(`unknown entity ${String(entityId)}`);
-  if (!entity.mobility) throw new Error(`entity ${String(entityId)} has no mobility profile`);
-
-  const resolvedTarget = resolveTravelTarget(registry, entity, target);
-  const start = {
-    domainId: entity.domainId ?? "default",
-    position: { x: entity.position.x, y: entity.position.y },
-    nodeId: null
-  };
-
-  const heap = new MinHeap();
-  const startState = {
-    key: "start",
-    cost: 0,
-    domainId: start.domainId,
-    position: start.position,
-    nodeId: null,
-    legs: []
-  };
-  heap.push(startState);
-  const best = new Map([["start", 0]]);
-  let bestGoal = null;
-  let expansions = 0;
-  const maxExpansions = options.maxExpansions ?? 100_000;
-
-  while (heap.size) {
-    const current = heap.pop();
-    if (current.cost !== best.get(current.key)) continue;
-    if (++expansions > maxExpansions) throw new Error("place travel planning exceeded maxExpansions");
-
-    if (current.domainId === resolvedTarget.domainId) {
-      const local = localRoute(bridge, entity, current, resolvedTarget);
-      if (local) {
-        const leg = journeyLeg(current, resolvedTarget, local);
-        const cost = current.cost + local.estimatedSeconds;
-        const legs = leg ? [...current.legs, leg] : [...current.legs];
-        if (!bestGoal || cost < bestGoal.cost) {
-          bestGoal = { cost, legs };
-        }
-      }
-    }
-
-    if (bestGoal && current.cost >= bestGoal.cost) continue;
-
-    for (const candidate of portalCandidates(registry, current.domainId)) {
-      const local = localRoute(bridge, entity, current, candidate.from);
-      if (!local) continue;
-
-      const localLeg = journeyLeg(current, candidate.from, local);
-      const pLeg = portalLeg(candidate);
-      const nextCost = current.cost + local.estimatedSeconds + (candidate.portal.transitionCost ?? 0);
-      if (bestGoal && nextCost >= bestGoal.cost) continue;
-
-      const key = endpointKey(candidate.portal, candidate.side === "a" ? "b" : "a");
-      const previousBest = best.get(key);
-      if (previousBest != null && previousBest <= nextCost) continue;
-      best.set(key, nextCost);
-      heap.push({
-        key,
-        cost: nextCost,
-        domainId: candidate.to.domainId,
-        position: candidate.to.position,
-        nodeId: candidate.to.nodeId,
-        legs: localLeg ? [...current.legs, localLeg, pLeg] : [...current.legs, pLeg]
-      });
-    }
-  }
-
-  if (!bestGoal) return null;
-
-  return deepFreeze({
-    entityId,
-    target: cloneJson(target),
-    resolvedTarget,
-    graphRevision: registry.graphRevision,
-    estimatedSeconds: bestGoal.cost,
-    legs: Object.freeze(bestGoal.legs),
-    expansionCount: expansions
-  });
-}
-
-function travels(registry) {
-  if (!registry.activeTravels) registry.activeTravels = new Map();
-  return registry.activeTravels;
-}
-
-export function startTravel(registry, bridge, entityId, target, options = {}) {
-  const plan = planTravel(registry, bridge, entityId, target, options);
-  if (!plan) return null;
-  stopTravel(registry, bridge, entityId, { emit: false });
-  const state = {
-    entityId,
-    target: cloneJson(target),
-    options: cloneJson(options),
-    plan,
-    legIndex: 0,
-    legStarted: false,
-    status: "active",
-    replans: 0
-  };
-  travels(registry).set(entityId, state);
-  registry.emitEvent("travel-start", {
-    entityId,
-    target: state.target,
-    estimatedSeconds: plan.estimatedSeconds
-  });
-  advanceTravel(registry, bridge, state);
+function fail(registry, bridge, state, reason) {
+  bridge.stopLocalJourney(state.entityId);
+  state.status = "failed";
+  state.failureReason = reason;
+  registry.activeTravels.delete(state.entityId);
+  registry.emit("travel-failed", { entityId: state.entityId, reason, target: state.target });
   return state;
 }
 
-export function stopTravel(registry, bridge, entityId, { emit = true } = {}) {
-  const state = travels(registry).get(entityId);
-  if (!state) return false;
-  bridge.stopLocalJourney(entityId);
-  travels(registry).delete(entityId);
-  state.status = "cancelled";
-  if (emit) registry.emitEvent("travel-cancelled", { entityId });
-  return true;
+function complete(registry, state) {
+  state.status = "complete";
+  registry.activeTravels.delete(state.entityId);
+  registry.emit("travel-complete", { entityId: state.entityId, target: state.target });
+  return state;
 }
 
-function resolveCurrentPortal(registry, leg) {
-  if (leg.placeId == null) {
-    for (const portal of registry.resolvedPortals()) {
-      if (portal.id === leg.portalId) return portal;
-    }
-    return null;
-  }
-  return registry.resolvePortal(leg.placeId, leg.portalId);
-}
-
-function replan(registry, bridge, state) {
+function replan(registry, bridge, state, options) {
   bridge.stopLocalJourney(state.entityId);
-  const plan = planTravel(registry, bridge, state.entityId, state.target, state.options);
-  state.replans += 1;
-  state.legIndex = 0;
-  state.legStarted = false;
-  if (!plan) {
-    state.status = "failed";
-    travels(registry).delete(state.entityId);
-    registry.emitEvent("travel-failed", {
-      entityId: state.entityId,
-      reason: "no-route-after-world-change",
-      replans: state.replans
-    });
-    return false;
-  }
+  const plan = planTravel(registry, state.entityId, state.target, { ...options, bridge });
+  if (!plan) return fail(registry, bridge, state, "no-path-after-replan");
   state.plan = plan;
-  registry.emitEvent("travel-replan", {
-    entityId: state.entityId,
-    replans: state.replans,
-    estimatedSeconds: plan.estimatedSeconds
-  });
-  return true;
+  state.stepIndex = 0;
+  state.localStarted = false;
+  state.graphRevision = registry.graphRevision;
+  registry.emit("travel-replanned", { entityId: state.entityId, target: state.target, graphRevision: state.graphRevision });
+  return state;
 }
 
-function advanceTravel(registry, bridge, state) {
-  const entity = bridge.getEntity(state.entityId);
-  if (!entity) {
-    state.status = "failed";
-    travels(registry).delete(state.entityId);
-    registry.emitEvent("travel-failed", { entityId: state.entityId, reason: "entity-missing" });
-    return false;
-  }
+function advance(registry, bridge, state, options) {
+  while (state.status === "active") {
+    if (state.stepIndex >= state.plan.steps.length) return complete(registry, state);
+    const step = state.plan.steps[state.stepIndex];
 
-  while (state.legIndex < state.plan.legs.length) {
-    const leg = state.plan.legs[state.legIndex];
-
-    if (leg.type === "journey") {
-      if (entity.domainId !== leg.domainId) {
-        if (!replan(registry, bridge, state)) return false;
-        continue;
+    if (step.type === "local-journey") {
+      if (!state.localStarted) {
+        const ok = bridge.startLocalJourney(state.entityId, step.destinationNodeId, options.journeyOptions);
+        if (!ok) {
+          if (options.replanOnFailure !== false) {
+            const next = replan(registry, bridge, state, options);
+            if (next.status !== "active") return next;
+            continue;
+          }
+          return fail(registry, bridge, state, "local-route-start-failed");
+        }
+        state.localStarted = true;
       }
-      if (!state.legStarted) {
-        const started = bridge.startLocalJourney(state.entityId, leg.destinationNodeId);
-        if (!started) {
-          if (!replan(registry, bridge, state)) return false;
+      return state;
+    }
+
+    if (step.type === "traverse-portal") {
+      const portal = registry.getPortalRecord(step.portalKey);
+      if (!portal || !isPortalTraversable(portal)) {
+        if (options.replanOnFailure !== false) {
+          const next = replan(registry, bridge, state, options);
+          if (next.status !== "active") return next;
           continue;
         }
-        state.legStarted = true;
-        registry.emitEvent("travel-leg-start", {
-          entityId: state.entityId,
-          legIndex: state.legIndex,
-          type: "journey",
-          domainId: leg.domainId,
-          destinationNodeId: leg.destinationNodeId
-        });
-        return true;
+        return fail(registry, bridge, state, "portal-unavailable");
       }
-      if (entity.journey) return true;
-      state.legStarted = false;
-      state.legIndex += 1;
+
+      const entity = bridge.getEntity(state.entityId);
+      if (!entity || (entity.domainId ?? "default") !== step.fromDomainId) {
+        return fail(registry, bridge, state, "portal-domain-mismatch");
+      }
+      const destination = portal.a.domainId === step.toDomainId ? portal.a : portal.b;
+      registry.emit("portal-enter", { entityId: state.entityId, placeId: portal.instanceId, portalId: portal.id });
+      bridge.transferEntity(state.entityId, destination);
+      const moved = bridge.getEntity(state.entityId);
+      if (moved) registry.syncEntityOccupancy(moved);
+      registry.emit("portal-traverse", { entityId: state.entityId, placeId: portal.instanceId, portalId: portal.id, toDomainId: destination.domainId });
+      registry.emit("portal-exit", { entityId: state.entityId, placeId: portal.instanceId, portalId: portal.id });
+      state.stepIndex += 1;
+      state.localStarted = false;
       continue;
     }
 
-    if (leg.type === "portal") {
-      const portal = resolveCurrentPortal(registry, leg);
-      if (!portal || !isPortalTraversable(portal)) {
-        if (!replan(registry, bridge, state)) return false;
-        continue;
-      }
-      if (entity.domainId !== leg.from.domainId) {
-        if (!replan(registry, bridge, state)) return false;
-        continue;
-      }
-      bridge.transferEntity(state.entityId, leg.to);
-      registry.updateEntityOccupancy(entity);
-      registry.emitEvent("portal-traverse", {
-        entityId: state.entityId,
-        placeId: leg.placeId,
-        portalId: leg.portalId,
-        fromDomainId: leg.from.domainId,
-        toDomainId: leg.to.domainId
-      });
-      state.legIndex += 1;
-      state.legStarted = false;
-      continue;
-    }
-
-    throw new Error(`unknown travel leg type ${leg.type}`);
+    return fail(registry, bridge, state, `unknown-step:${step.type}`);
   }
-
-  state.status = "complete";
-  travels(registry).delete(state.entityId);
-  registry.updateEntityOccupancy(entity);
-  registry.emitEvent("travel-complete", {
-    entityId: state.entityId,
-    replans: state.replans
-  });
-  return true;
+  return state;
 }
 
-export function stepTravel(registry, bridge, entityId) {
-  const state = travels(registry).get(entityId);
+export function startTravel(registry, entityId, target, options = {}) {
+  const bridge = options.bridge ?? registry.bridge;
+  if (!bridge) throw new Error("startTravel requires a WorldCoreBridge");
+  if (registry.activeTravels.has(entityId)) stopTravel(registry, entityId, { bridge, reason: "replaced" });
+  const plan = planTravel(registry, entityId, target, { ...options, bridge });
+  if (!plan) return null;
+  const state = {
+    entityId,
+    target: cloneJson(target),
+    plan,
+    stepIndex: 0,
+    localStarted: false,
+    graphRevision: registry.graphRevision,
+    status: "active",
+    failureReason: null
+  };
+  registry.activeTravels.set(entityId, state);
+  registry.emit("travel-start", { entityId, target: state.target, estimatedSeconds: plan.estimatedSeconds });
+  return advance(registry, bridge, state, options);
+}
+
+export function stepTravel(registry, entityId, options = {}) {
+  const bridge = options.bridge ?? registry.bridge;
+  if (!bridge) throw new Error("stepTravel requires a WorldCoreBridge");
+  const state = registry.activeTravels.get(entityId);
+  if (!state) return null;
+
+  if (state.graphRevision !== registry.graphRevision) {
+    const next = replan(registry, bridge, state, options);
+    if (next.status !== "active") return next;
+  }
+
+  const step = state.plan.steps[state.stepIndex];
+  if (step?.type === "local-journey" && state.localStarted) {
+    const entity = bridge.getEntity(entityId);
+    if (!entity) return fail(registry, bridge, state, "entity-missing");
+    if (entity.journey != null) {
+      registry.syncEntityOccupancy(entity);
+      return state;
+    }
+    if (entity.lastJourneyFailure?.destinationNodeId === step.destinationNodeId) {
+      if (options.replanOnFailure !== false) {
+        const next = replan(registry, bridge, state, options);
+        if (next.status !== "active") return next;
+      } else {
+        return fail(registry, bridge, state, "local-journey-failed");
+      }
+    } else {
+      state.stepIndex += 1;
+      state.localStarted = false;
+      registry.syncEntityOccupancy(entity);
+    }
+  }
+  return advance(registry, bridge, state, options);
+}
+
+export function stepPlaceSimulation(registry, options = {}) {
+  const ids = [...registry.activeTravels.keys()];
+  for (const entityId of ids) stepTravel(registry, entityId, options);
+  return registry.activeTravels.size;
+}
+
+export function stopTravel(registry, entityId, options = {}) {
+  const bridge = options.bridge ?? registry.bridge;
+  const state = registry.activeTravels.get(entityId);
   if (!state) return false;
-  if (state.plan.graphRevision !== registry.graphRevision) {
-    if (!replan(registry, bridge, state)) return false;
-  }
-  return advanceTravel(registry, bridge, state);
-}
-
-export function stepPlaceSimulation(registry, bridge, deltaSeconds) {
-  if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) throw new RangeError("deltaSeconds must be >= 0");
-  registry.time += deltaSeconds;
-  const ids = [...travels(registry).keys()];
-  for (const entityId of ids) stepTravel(registry, bridge, entityId);
-  return travels(registry).size;
+  bridge?.stopLocalJourney?.(entityId);
+  registry.activeTravels.delete(entityId);
+  state.status = "cancelled";
+  registry.emit("travel-cancelled", { entityId, reason: options.reason ?? "cancelled" });
+  return true;
 }
