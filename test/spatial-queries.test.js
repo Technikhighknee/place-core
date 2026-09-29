@@ -634,3 +634,117 @@ test("huge portal radius query visits sparse occupied cells rather than empty ar
     ["near", "far"]
   );
 });
+
+
+test("instance-local nearest anchor refuses to compare different layer frames", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "multi-layer-nearest",
+    layers: [
+      { id: "ground" },
+      { id: "upper" }
+    ],
+    anchors: [
+      {
+        id: "ground-anchor",
+        layerId: "ground",
+        position: { x: 100, y: 0 }
+      },
+      {
+        id: "upper-anchor",
+        layerId: "upper",
+        position: { x: 0, y: 0 }
+      }
+    ]
+  });
+  places.createPlace({
+    id: "house",
+    definitionId: "multi-layer-nearest"
+  });
+
+  assert.throws(
+    () => places.findNearestAnchor(
+      "house",
+      { x: 0, y: 0 }
+    ),
+    /layerId.*multiple spatial layers/i
+  );
+
+  assert.equal(
+    places.findNearestAnchor(
+      "house",
+      { x: 0, y: 0 },
+      { layerId: "ground" }
+    ).id,
+    "ground-anchor"
+  );
+  assert.equal(
+    places.findNearestAnchor(
+      "house",
+      { x: 0, y: 0 },
+      { layerId: "upper" }
+    ).id,
+    "upper-anchor"
+  );
+});
+
+test("findAnchors rejects misspelled option fields", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(definition());
+  places.createPlace({
+    id: "shop",
+    definitionId: "query-place"
+  });
+
+  assert.throws(
+    () => places.findAnchors({
+      tga: "service"
+    }),
+    /findAnchors options contains unknown field tga/
+  );
+});
+
+test("space tie-breaking uses locale-independent code-unit ordering", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "canonical-id-order",
+    layers: [{ id: "inside" }],
+    spaces: [
+      {
+        id: "z",
+        layerId: "inside",
+        priority: 1,
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: 0,
+          maxX: 10,
+          maxY: 10
+        }
+      },
+      {
+        id: "ä",
+        layerId: "inside",
+        priority: 1,
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: 0,
+          maxX: 10,
+          maxY: 10
+        }
+      }
+    ]
+  });
+
+  const definition =
+    places.getDefinition("canonical-id-order");
+  assert.equal(
+    definition.primarySpaceAt(
+      "inside",
+      { x: 5, y: 5 }
+    ).id,
+    "z",
+    "canonical ordering must not depend on host locale collation"
+  );
+});

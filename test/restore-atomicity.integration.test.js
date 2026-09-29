@@ -338,3 +338,73 @@ test("failed adopt restore preserves pre-existing domains bindings and road over
   assert.equal(navigation.domainInstances.has("second:inside"), false);
   assert.equal(navigation.getDiagnostics().overrideEffectCount, 1);
 });
+
+
+test("restart mode retains travel intent when route planning throws", () => {
+  const { snapshot } =
+    sourceSnapshot({ withTravel: true });
+
+  const entity = {
+    id: "hans",
+    domainId: "first:inside",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+
+  const bridge = {
+    registry: null,
+    attachRegistry(registry, onDispose) {
+      this.registry = registry;
+      this.onDispose = onDispose;
+      return this;
+    },
+    materializePlace() {
+      return {};
+    },
+    syncBoundaryState() {},
+    syncPortalState() {},
+    syncDynamicPortal() {},
+    getEntity(id) {
+      return id === "hans"
+        ? entity
+        : null;
+    },
+    planLocalRoute() {
+      throw new Error(
+        "synthetic restart planning failure"
+      );
+    },
+    startLocalJourney() {
+      throw new Error(
+        "journey must not start after planning failure"
+      );
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  const restored = deserializePlaceCore(
+    snapshot,
+    {
+      bridge,
+      restartTravels: true
+    }
+  );
+
+  assert.equal(
+    restored.activeTravels.size,
+    0
+  );
+  assert.equal(
+    restored.pendingTravels.length,
+    1
+  );
+  assert.equal(
+    restored.pendingTravels[0]
+      .restartError?.message,
+    "synthetic restart planning failure"
+  );
+});

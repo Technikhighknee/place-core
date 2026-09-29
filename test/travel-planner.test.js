@@ -685,3 +685,108 @@ test("planner keeps a locally failed domain pair available through a different a
     ["a-d", "d-b", "b-c"]
   );
 });
+
+
+test("concrete detour fallback may revisit a domain through a different portal", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "revisit-domain-graph"
+  });
+  places.createPlace({
+    id: "graph",
+    definitionId: "revisit-domain-graph"
+  });
+
+  const add = (
+    id,
+    fromDomainId,
+    fromX,
+    fromNodeId,
+    toDomainId,
+    toX,
+    toNodeId
+  ) => places.addPortal("graph", {
+    id,
+    bidirectional: false,
+    a: {
+      domainId: fromDomainId,
+      position: { x: fromX, y: 0 },
+      nodeId: fromNodeId
+    },
+    b: {
+      domainId: toDomainId,
+      position: { x: toX, y: 0 },
+      nodeId: toNodeId
+    }
+  });
+
+  add("a-b", "A", 1, "a-b", "B", 0, "b-from-a");
+  add("b-c", "B", 10, "b-c", "C", 0, "c-from-b");
+  add("b-d", "B", 0, "b-d", "D", 0, "d-from-b");
+  add("d-b", "D", 1, "d-b", "B", 10, "b-from-d");
+
+  const entity = {
+    id: "hans",
+    domainId: "A",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const nodes = new Map([
+    ["A:a-b", 1],
+    ["B:b-c", 10],
+    ["B:b-d", 0],
+    ["D:d-b", 1],
+    ["C:target", 1]
+  ]);
+
+  const bridge = {
+    getEntity(id) {
+      return id === "hans"
+        ? entity
+        : null;
+    },
+    planLocalRoute({
+      domainId,
+      position,
+      destinationNodeId
+    }) {
+      if (
+        domainId === "B" &&
+        destinationNodeId === "b-c" &&
+        position.x < 9
+      ) {
+        return null;
+      }
+      const x = nodes.get(
+        `${domainId}:${destinationNodeId}`
+      );
+      return x == null
+        ? null
+        : {
+            estimatedSeconds:
+              Math.abs(position.x - x)
+          };
+    },
+    startLocalJourney() { return true; },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      domainId: "C",
+      position: { x: 1, y: 0 },
+      nodeId: "target"
+    }
+  );
+
+  assert.ok(plan);
+  assert.deepEqual(
+    plan.domainPath,
+    ["A", "B", "D", "B", "C"]
+  );
+});

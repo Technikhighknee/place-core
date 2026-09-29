@@ -207,3 +207,108 @@ test("semantic membership keys cannot collide on embedded separators", () => {
   );
   registry.assertInternalConsistency();
 });
+
+
+test("runtime nested place inputs reject unknown fields", () => {
+  const make = () => {
+    const registry = new PlaceRegistry();
+    registry.registerDefinition({
+      id: "strict-runtime-input",
+      layers: [{ id: "inside" }]
+    });
+    return registry;
+  };
+
+  assert.throws(
+    () => make().createPlace({
+      id: "bad-attachment",
+      definitionId: "strict-runtime-input",
+      attachments: {
+        outside: {
+          domainId: "street",
+          position: { x: 0, y: 0 },
+          postion: { x: 1, y: 1 }
+        }
+      }
+    }),
+    /attachment\.outside contains unknown field postion/
+  );
+
+  assert.throws(
+    () => make().createPlace({
+      id: "bad-placement",
+      definitionId: "strict-runtime-input",
+      placement: {
+        domainId: "street",
+        parentPlacId: "typo"
+      }
+    }),
+    /placement contains unknown field parentPlacId/
+  );
+
+  const registry = make();
+  const place = registry.createPlace({
+    id: "house",
+    definitionId: "strict-runtime-input"
+  });
+
+  assert.throws(
+    () => registry.addPortal("house", {
+      id: "bad-portal",
+      bidirectionl: false,
+      a: {
+        domainId: place.layerDomains.get("inside"),
+        position: { x: 0, y: 0 }
+      },
+      b: {
+        domainId: "street",
+        position: { x: 0, y: 0 }
+      }
+    }),
+    /dynamic portal contains unknown field bidirectionl/
+  );
+
+  assert.throws(
+    () => registry.addPortal("house", {
+      id: "bad-endpoint",
+      a: {
+        domainId: place.layerDomains.get("inside"),
+        position: { x: 0, y: 0 },
+        spaecId: "typo"
+      },
+      b: {
+        domainId: "street",
+        position: { x: 0, y: 0 }
+      }
+    }),
+    /portal\.a contains unknown field spaecId/
+  );
+});
+
+test("prototype-shadowing layer IDs survive snapshot round-trip", () => {
+  const registry = new PlaceRegistry();
+  registry.registerDefinition({
+    id: "prototype-snapshot-place",
+    layers: [{ id: "constructor" }]
+  });
+  registry.createPlace({
+    id: "house",
+    definitionId: "prototype-snapshot-place"
+  });
+
+  const restored = deserializePlaceCore(
+    JSON.parse(
+      JSON.stringify(
+        serializePlaceCore(registry)
+      )
+    )
+  );
+
+  assert.equal(
+    restored
+      .getPlace("house")
+      .layerDomains
+      .get("constructor"),
+    "house:constructor"
+  );
+});

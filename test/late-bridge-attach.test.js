@@ -204,3 +204,36 @@ test("one WorldCoreBridge cannot be silently hijacked by another registry", () =
   assert.equal(two.bridge, bridge);
   assert.equal(one.bridge, null);
 });
+
+
+test("direct bridge attachment cannot bypass registry ownership", () => {
+  const places = new PlaceRegistry();
+  const { bridge } = makeBridge();
+
+  assert.throws(
+    () => bridge.attachRegistry(places),
+    /PlaceRegistry\.attachWorldCoreBridge/
+  );
+  assert.equal(places.bridge, null);
+});
+
+test("disposing an active bridge with materialized places is rejected", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(definition());
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "late-attach-place"
+  });
+  const { world, bridge } = makeBridge();
+
+  places.attachWorldCoreBridge(bridge);
+  const domainId = place.layerDomains.get("inside");
+  assert.ok(world.getDomain(domainId));
+
+  assert.throws(
+    () => bridge.dispose(),
+    /materialized places/
+  );
+  assert.equal(places.bridge, bridge);
+  assert.ok(world.getDomain(domainId));
+});
