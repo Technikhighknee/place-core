@@ -37,6 +37,10 @@ export {
   transformPoint,
   inverseTransformPoint,
   composeTransforms,
+  boundsIntersect,
+  segmentBounds,
+  segmentIntersectsBounds,
+  squaredDistancePointToSegment,
   transformBounds,
   StaticGeometryIndex,
   DynamicAabbIndex
