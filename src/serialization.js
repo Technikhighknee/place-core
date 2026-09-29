@@ -385,6 +385,130 @@ function assertAttachment(value, label) {
   }
 }
 
+function snapshotPortalTraversable(portal) {
+  return (portal.enabled ?? true) &&
+    !(portal.locked ?? false) &&
+    !(portal.blocked ?? false) &&
+    !(portal.destroyed ?? false) &&
+    (!(portal.blocksWhenClosed ?? false) || (portal.open ?? true));
+}
+
+function assertSnapshotResolvedPortalPhysical(
+  portal,
+  definition,
+  item,
+  label
+) {
+  if (!portal?.a || !portal?.b) return;
+  if (portal.a.domainId !== portal.b.domainId) return;
+
+  const domainId = portal.a.domainId;
+  const thresholdBindings = (portal.roadBindings ?? []).filter(
+    (binding) => item.layerDomains[binding.layerId] === domainId
+  );
+  const crossesSpaces =
+    portal.a.spaceId != null &&
+    portal.b.spaceId != null &&
+    portal.a.spaceId !== portal.b.spaceId;
+  const needsPhysicalEnforcement =
+    crossesSpaces ||
+    (portal.transitionCost ?? 0) > 0 ||
+    !snapshotPortalTraversable(portal);
+
+  if (needsPhysicalEnforcement && thresholdBindings.length === 0) {
+    throw new Error(
+      `${label} requires a road binding in domain ${domainId} for same-domain physical enforcement`
+    );
+  }
+
+  if (thresholdBindings.length === 0) return;
+
+  let allowsForward = false;
+  let allowsReverse = false;
+  let verifiedEmbeddedRoad = false;
+
+  for (const binding of thresholdBindings) {
+    const layer = definition.getLayer(binding.layerId);
+    if (!layer?.navigation) continue;
+
+    const road = layer.navigation.roads.find(
+      (candidate) => candidate.id === binding.roadId
+    );
+    if (!road) {
+      throw new Error(
+        `${label} references unknown navigation road ${binding.roadId}`
+      );
+    }
+    verifiedEmbeddedRoad = true;
+
+    if (portal.a.nodeId == null || portal.b.nodeId == null) {
+      throw new Error(
+        `${label} with a same-domain threshold road binding requires nodeId on both endpoints`
+      );
+    }
+
+    const forward =
+      road.from === portal.a.nodeId &&
+      road.to === portal.b.nodeId;
+    const reverse =
+      road.from === portal.b.nodeId &&
+      road.to === portal.a.nodeId;
+
+    if (!forward && !reverse) {
+      throw new Error(
+        `${label} road binding ${binding.roadId} does not connect its endpoint nodes`
+      );
+    }
+
+    allowsForward ||= forward || (reverse && road.bidirectional);
+    allowsReverse ||= reverse || (forward && road.bidirectional);
+  }
+
+  if (!verifiedEmbeddedRoad) return;
+
+  if (!allowsForward) {
+    throw new Error(
+      `${label} threshold roads do not allow traversal from endpoint a to b`
+    );
+  }
+
+  if (portal.bidirectional ?? true) {
+    if (!allowsReverse) {
+      throw new Error(
+        `${label} is bidirectional but its threshold roads do not allow traversal from endpoint b to a`
+      );
+    }
+  } else if (allowsReverse) {
+    throw new Error(
+      `${label} is unidirectional but its threshold roads allow reverse traversal`
+    );
+  }
+}
+
+function resolveSnapshotPortalEndpoint(endpoint, item) {
+  if (endpoint.kind === "local") {
+    return {
+      domainId: item.layerDomains[endpoint.layerId],
+      position: endpoint.position,
+      nodeId: endpoint.nodeId ?? null,
+      placeId: item.id,
+      spaceId: endpoint.spaceId ?? null,
+      layerId: endpoint.layerId
+    };
+  }
+
+  if (endpoint.kind === "external") {
+    const attachment = item.attachments[endpoint.slot];
+    if (!attachment) return null;
+    return {
+      ...attachment,
+      layerId: null
+    };
+  }
+
+  return endpoint;
+}
+
 function assertDynamicPortal(portal, definition, item, dynamicIds) {
   assertObject(portal, "dynamic portal");
   assertStringId(portal.id, "dynamic portal.id");
@@ -467,7 +591,6 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
     portal.roadBindings ?? [],
     `dynamic portal ${portal.id}.roadBindings`
   );
-  const layerDomains = item.layerDomains;
   for (let i = 0; i < (portal.roadBindings ?? []).length; i += 1) {
     const binding = portal.roadBindings[i];
     assertObject(
@@ -488,6 +611,11 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
         `dynamic portal ${portal.id} road binding references unknown layer ${binding.layerId}`
       );
     }
+    if (layer.topologyId == null) {
+      throw new Error(
+        `dynamic portal ${portal.id} road binding requires navigation topology on layer ${binding.layerId}`
+      );
+    }
     if (layer.navigation &&
         !layer.navigation.roads.some((road) => road.id === binding.roadId)) {
       throw new Error(
@@ -500,28 +628,12 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
     assertJsonSafe(portal.metadata, `dynamic portal ${portal.id}.metadata`);
   }
 
-  const a = portal.a;
-  const b = portal.b;
-  const traversable =
-    (portal.enabled ?? true) &&
-    !(portal.locked ?? false) &&
-    !(portal.blocked ?? false) &&
-    !(portal.destroyed ?? false) &&
-    (!(portal.blocksWhenClosed ?? false) || (portal.open ?? true));
-  const needsPhysicalEnforcement =
-    a.domainId === b.domainId &&
-    (transitionCost > 0 || !traversable);
-
-  if (needsPhysicalEnforcement) {
-    const hasBinding = (portal.roadBindings ?? []).some(
-      (binding) => layerDomains[binding.layerId] === a.domainId
-    );
-    if (!hasBinding) {
-      throw new Error(
-        `dynamic portal ${portal.id} requires a road binding in domain ${a.domainId} for same-domain physical enforcement`
-      );
-    }
-  }
+  assertSnapshotResolvedPortalPhysical(
+    portal,
+    definition,
+    item,
+    `dynamic portal ${portal.id}`
+  );
 }
 
 export function validatePlaceCoreSnapshot(snapshot, options = {}) {
@@ -677,6 +789,26 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         item,
         dynamicIds
       );
+    }
+
+    for (const basePortal of definition.portals) {
+      const override =
+        item.portalOverrides?.[basePortal.id] ??
+        {};
+      const resolved = {
+        ...basePortal,
+        ...override,
+        a: resolveSnapshotPortalEndpoint(basePortal.a, item),
+        b: resolveSnapshotPortalEndpoint(basePortal.b, item)
+      };
+      if (resolved.a && resolved.b) {
+        assertSnapshotResolvedPortalPhysical(
+          resolved,
+          definition,
+          item,
+          `portal ${basePortal.id}`
+        );
+      }
     }
 
     instances.set(key, item);
