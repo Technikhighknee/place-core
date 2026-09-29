@@ -151,12 +151,6 @@ function assertBooleanPatch(patch, allowedKeys, label) {
   }
 }
 
-function assertPositiveIntegerOption(value, label) {
-  if (value == null) return;
-  if (!Number.isInteger(value) || value < 1) {
-    throw new RangeError(`${label} must be a positive integer`);
-  }
-}
 
 function assertTravelTarget(target, _label = "travel target") {
   return validateTravelTarget(target);
