@@ -40,9 +40,17 @@ function normalizeNavigationSpec(spec, label) {
     assertStringId(node.id, `${label}.nodes[${index}].id`);
     if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) throw new TypeError(`${label}.node ${node.id} requires finite x/y`);
     if (node.regionId != null && !regionIds.has(node.regionId)) throw new Error(`${label}.node ${node.id} references unknown region ${node.regionId}`);
+    const junctionRadius = node.junctionRadius ?? 0;
+    if (!Number.isFinite(junctionRadius) || junctionRadius < 0) {
+      throw new RangeError(
+        `${label}.node ${node.id} junctionRadius must be a finite number >= 0`
+      );
+    }
     return deepFreeze({
-      id: node.id, x: node.x, y: node.y,
-      junctionRadius: node.junctionRadius ?? 0,
+      id: node.id,
+      x: node.x,
+      y: node.y,
+      junctionRadius,
       regionId: node.regionId ?? null
     });
   });
@@ -52,12 +60,45 @@ function normalizeNavigationSpec(spec, label) {
     assertStringId(road.id, `${label}.roads[${index}].id`);
     assertStringId(road.from, `${label}.road(${road.id}).from`);
     assertStringId(road.to, `${label}.road(${road.id}).to`);
-    if (!nodeIds.has(road.from) || !nodeIds.has(road.to)) throw new Error(`${label}.road ${road.id} references unknown node`);
+    if (!nodeIds.has(road.from) || !nodeIds.has(road.to)) {
+      throw new Error(`${label}.road ${road.id} references unknown node`);
+    }
+
+    const width = road.width ?? 4;
+    if (!Number.isFinite(width) || width <= 0) {
+      throw new RangeError(
+        `${label}.road ${road.id} width must be a finite number > 0`
+      );
+    }
+
+    const surface = road.surface ?? "street";
+    assertStringId(surface, `${label}.road(${road.id}).surface`);
+
+    if (road.shape != null && !Array.isArray(road.shape)) {
+      throw new TypeError(
+        `${label}.road(${road.id}).shape must be an array of Vec2 points`
+      );
+    }
+    const shape = Object.freeze(
+      (road.shape ?? []).map((point, shapeIndex) => {
+        try {
+          return cloneVec2(point);
+        } catch (error) {
+          throw new TypeError(
+            `${label}.road(${road.id}).shape[${shapeIndex}] must be a finite Vec2`,
+            { cause: error }
+          );
+        }
+      })
+    );
+
     return deepFreeze({
-      id: road.id, from: road.from, to: road.to,
-      shape: road.shape ? Object.freeze(road.shape.map(cloneVec2)) : undefined,
-      width: road.width,
-      surface: road.surface,
+      id: road.id,
+      from: road.from,
+      to: road.to,
+      shape,
+      width,
+      surface,
       bidirectional: normalizeBoolean(
         road.bidirectional,
         `${label}.road(${road.id}).bidirectional`
