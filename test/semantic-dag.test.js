@@ -581,3 +581,34 @@ test("snapshot restore supports cross-graph dependency cycles between semantics 
   );
   restored.assertInternalConsistency();
 });
+
+
+test("PlaceInstance cannot bypass registry-managed semantic membership invariants", () => {
+  const places = registry();
+
+  add(places, "parent");
+  const child = add(places, "child");
+
+  assert.throws(
+    () => child.addMembership({
+      parentPlaceId: "parent",
+      kind: "illegal-direct-mutation",
+      metadata: null
+    }),
+    /registry-managed/
+  );
+
+  assert.throws(
+    () => child.removeMembership(
+      "parent",
+      "illegal-direct-mutation"
+    ),
+    /registry-managed/
+  );
+
+  assert.deepEqual(
+    places.getMemberships("child"),
+    []
+  );
+  places.assertInternalConsistency();
+});
