@@ -157,6 +157,8 @@ export class PlaceRegistry {
   #semanticChildren = new Map();
   #portalRecords = new Map();
   #portalsByDomain = new Map();
+  #portalEndpointIndexes = new Map();
+  #portalEndpointRecords = new Map();
   #instancePortalKeys = new Map();
   #occupancy = new Map();
   #occupancySpatialIndexes = new Map();
@@ -328,35 +330,107 @@ export class PlaceRegistry {
     } : null;
   }
 
-  findNearestPortal(domainId, position, options = {}) {
-    let best = null;
-    let bestDistanceSq = Infinity;
+  findPortalEndpointsNear(domainId, position, radius, options = {}) {
+    if (!Number.isFinite(radius) || radius < 0) {
+      throw new RangeError("portal query radius must be a finite number >= 0");
+    }
+    const index = this.#portalEndpointIndexes.get(domainId);
+    if (!index) return [];
 
-    for (const portal of this.getPortalsForDomain(domainId)) {
+    const bounds = {
+      minX: position.x - radius,
+      minY: position.y - radius,
+      maxX: position.x + radius,
+      maxY: position.y + radius
+    };
+    const radiusSq = radius * radius;
+    const result = [];
+
+    for (const endpointKey of index.queryBounds(bounds)) {
+      const endpointRecord = this.#portalEndpointRecords.get(endpointKey);
+      if (!endpointRecord) continue;
+      const portal = this.#portalRecords.get(endpointRecord.portalKey);
+      if (!portal) continue;
       if (options.traversableOnly !== false && !portal.traversable) continue;
       if (options.kind != null && portal.kind !== options.kind) continue;
       if (options.tag != null && !portal.tags?.includes(options.tag)) continue;
 
-      const endpoint = portal.a.domainId === domainId
-        ? portal.a
-        : portal.b.domainId === domainId
-          ? portal.b
-          : null;
-      if (!endpoint) continue;
-
+      const endpoint = endpointRecord.side === "a" ? portal.a : portal.b;
+      if (!endpoint || endpoint.domainId !== domainId) continue;
       const distanceSq = squaredDistance(position, endpoint.position);
-      if (distanceSq < bestDistanceSq ||
-          (distanceSq === bestDistanceSq && portal.key.localeCompare(best?.portal.key ?? "") < 0)) {
-        best = { portal, endpoint };
+      if (distanceSq > radiusSq) continue;
+
+      result.push({
+        portal,
+        endpoint,
+        side: endpointRecord.side,
+        distance: Math.sqrt(distanceSq)
+      });
+    }
+
+    result.sort((a, b) =>
+      a.distance - b.distance ||
+      a.portal.key.localeCompare(b.portal.key) ||
+      a.side.localeCompare(b.side)
+    );
+    return result;
+  }
+
+  findNearestPortal(domainId, position, options = {}) {
+    const index = this.#portalEndpointIndexes.get(domainId);
+    if (!index || index.size === 0) return null;
+
+    const maxDistance = options.maxDistance == null
+      ? Infinity
+      : Number(options.maxDistance);
+    if (!(maxDistance >= 0)) {
+      throw new RangeError("maxDistance must be >= 0");
+    }
+
+    if (Number.isFinite(maxDistance)) {
+      return this.findPortalEndpointsNear(
+        domainId,
+        position,
+        maxDistance,
+        options
+      )[0] ?? null;
+    }
+
+    let radius = Math.max(index.cellSize, 1);
+    for (let attempt = 0; attempt < 24; attempt += 1) {
+      const hits = this.findPortalEndpointsNear(domainId, position, radius, options);
+      if (hits.length > 0 && hits[0].distance <= radius) return hits[0];
+      radius *= 2;
+    }
+
+    // Coordinates can be arbitrarily large. Preserve correctness after bounded
+    // spatial expansion with a deterministic indexed-endpoint fallback.
+    let best = null;
+    let bestDistanceSq = Infinity;
+    for (const endpointRecord of this.#portalEndpointRecords.values()) {
+      if (endpointRecord.domainId !== domainId) continue;
+      const portal = this.#portalRecords.get(endpointRecord.portalKey);
+      if (!portal) continue;
+      if (options.traversableOnly !== false && !portal.traversable) continue;
+      if (options.kind != null && portal.kind !== options.kind) continue;
+      if (options.tag != null && !portal.tags?.includes(options.tag)) continue;
+      const endpoint = endpointRecord.side === "a" ? portal.a : portal.b;
+      if (!endpoint) continue;
+      const distanceSq = squaredDistance(position, endpoint.position);
+      if (!best ||
+          distanceSq < bestDistanceSq ||
+          (distanceSq === bestDistanceSq &&
+           portal.key.localeCompare(best.portal.key) < 0)) {
+        best = {
+          portal,
+          endpoint,
+          side: endpointRecord.side,
+          distance: Math.sqrt(distanceSq)
+        };
         bestDistanceSq = distanceSq;
       }
     }
-
-    return best ? {
-      portal: best.portal,
-      endpoint: best.endpoint,
-      distance: Math.sqrt(bestDistanceSq)
-    } : null;
+    return best;
   }
 
   getBoundariesForDomain(domainId, options = {}) {
@@ -1077,9 +1151,26 @@ export class PlaceRegistry {
     for (const [key, record] of this.#portalRecords) {
       if (!this.#instances.has(record.instanceId)) throw new Error(`portal record ${key} references missing instance`);
       if (!record.connected || !record.a || !record.b) throw new Error(`portal record ${key} is disconnected`);
-      for (const domainId of [record.a.domainId, record.b.domainId]) {
-        if (!this.#portalsByDomain.get(domainId)?.has(key)) throw new Error(`portal record ${key} missing domain adjacency`);
+      for (const [side, endpoint] of [["a", record.a], ["b", record.b]]) {
+        const domainId = endpoint.domainId;
+        if (!this.#portalsByDomain.get(domainId)?.has(key)) {
+          throw new Error(`portal record ${key} missing domain adjacency`);
+        }
+        const endpointKey = `${key}\u0000${side}`;
+        const endpointRecord = this.#portalEndpointRecords.get(endpointKey);
+        if (!endpointRecord ||
+            endpointRecord.portalKey !== key ||
+            endpointRecord.domainId !== domainId ||
+            endpointRecord.side !== side) {
+          throw new Error(`portal record ${key} missing endpoint spatial record`);
+        }
+        if (!this.#portalEndpointIndexes.get(domainId)?.getBounds(endpointKey)) {
+          throw new Error(`portal record ${key} missing endpoint spatial index entry`);
+        }
       }
+    }
+    if (this.#portalEndpointRecords.size !== this.#portalRecords.size * 2) {
+      throw new Error("portal endpoint spatial record count drift");
     }
     return this.getDiagnostics();
   }
@@ -1214,10 +1305,17 @@ export class PlaceRegistry {
     for (const key of keys) {
       const record = this.#portalRecords.get(key);
       if (!record) continue;
-      for (const domainId of [record.a.domainId, record.b.domainId]) {
+      for (const [side, endpoint] of [["a", record.a], ["b", record.b]]) {
+        const domainId = endpoint.domainId;
         const set = this.#portalsByDomain.get(domainId);
         set?.delete(key);
         if (set?.size === 0) this.#portalsByDomain.delete(domainId);
+
+        const endpointKey = `${key}\u0000${side}`;
+        const endpointIndex = this.#portalEndpointIndexes.get(domainId);
+        endpointIndex?.delete(endpointKey);
+        if (endpointIndex?.size === 0) this.#portalEndpointIndexes.delete(domainId);
+        this.#portalEndpointRecords.delete(endpointKey);
       }
       this.#portalRecords.delete(key);
     }
@@ -1242,6 +1340,28 @@ export class PlaceRegistry {
         let set = this.#portalsByDomain.get(domainId);
         if (!set) this.#portalsByDomain.set(domainId, set = new Set());
         set.add(key);
+      }
+
+      for (const [side, endpoint] of [["a", record.a], ["b", record.b]]) {
+        const endpointKey = `${key}\u0000${side}`;
+        this.#portalEndpointRecords.set(endpointKey, {
+          portalKey: key,
+          side,
+          domainId: endpoint.domainId
+        });
+        let endpointIndex = this.#portalEndpointIndexes.get(endpoint.domainId);
+        if (!endpointIndex) {
+          this.#portalEndpointIndexes.set(
+            endpoint.domainId,
+            endpointIndex = new DynamicAabbIndex()
+          );
+        }
+        endpointIndex.set(endpointKey, {
+          minX: endpoint.position.x,
+          minY: endpoint.position.y,
+          maxX: endpoint.position.x,
+          maxY: endpoint.position.y
+        });
       }
     }
     if (keys.size > 0) this.#instancePortalKeys.set(instance.id, keys);
