@@ -1011,14 +1011,7 @@ function captureTravelOptions(options = {}) {
     worldChangePolicy: normalizeWorldChangePolicy(normalized.worldChangePolicy),
     portalEntryTolerance: normalizePortalEntryTolerance(
       normalized.portalEntryTolerance
-    ),
-    maxDomainPathAttempts: normalized.maxDomainPathAttempts,
-    maxShortestDomainPaths: normalized.maxShortestDomainPaths,
-    allowPartialShortestPathSearch:
-      normalized.allowPartialShortestPathSearch,
-    maxConcreteStatesPerLayer: normalized.maxConcreteStatesPerLayer,
-    maxNearestTargetExpansions: normalized.maxNearestTargetExpansions,
-    maxCost: normalized.maxCost
+    )
   };
 
   if (normalized.journeyOptions !== undefined) {
@@ -1033,6 +1026,20 @@ function captureTravelOptions(options = {}) {
     captured.excludedDomainPairs = Object.freeze(
       [...normalized.excludedDomainPairs]
     );
+  }
+
+  for (const key of [
+    "maxDomainPathAttempts",
+    "maxShortestDomainPaths",
+    "allowPartialShortestPathSearch",
+    "maxConcreteStatesPerLayer",
+    "maxNearestTargetExpansions"
+  ]) {
+    if (options[key] !== undefined) captured[key] = normalized[key];
+  }
+
+  if (options.maxCost !== undefined && normalized.maxCost !== Infinity) {
+    captured.maxCost = normalized.maxCost;
   }
 
   if (normalized.anchorPredicate !== undefined) {
