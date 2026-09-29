@@ -1277,6 +1277,56 @@ function normalizePlanningOptions(options = {}) {
   return normalized;
 }
 
+export function validatePersistedTravelOptions(
+  options,
+  label = "travel options"
+) {
+  assertPlainObject(options, label);
+  assertTravelOptionKeys(
+    options,
+    [
+      "journeyOptions",
+      "excludedPortalKeys",
+      "excludedDomainPairs",
+      "maxDomainPathAttempts",
+      "maxShortestDomainPaths",
+      "allowPartialShortestPathSearch",
+      "maxConcreteStatesPerLayer",
+      "maxNearestTargetExpansions",
+      "maxCost",
+      "worldChangePolicy",
+      "portalEntryTolerance"
+    ],
+    label
+  );
+
+  for (const key of [
+    "excludedPortalKeys",
+    "excludedDomainPairs"
+  ]) {
+    if (options[key] == null) continue;
+    if (!Array.isArray(options[key])) {
+      throw new TypeError(
+        `${label}.${key} must be an array`
+      );
+    }
+  }
+
+  if (options.journeyOptions !== undefined) {
+    cloneJson(options.journeyOptions);
+  }
+
+  if (options.maxCost !== undefined &&
+      !Number.isFinite(options.maxCost)) {
+    throw new RangeError(
+      `${label}.maxCost must be a finite number >= 0`
+    );
+  }
+
+  normalizePlanningOptions(options);
+  return options;
+}
+
 function validateStepOptionsInput(options = {}) {
   assertTravelOptionKeys(
     options,
