@@ -41,6 +41,6 @@
   ],
   "license": "ISC",
   "devDependencies": {
-    "world-core": "github:Technikhighknee/world-core#4075df03b1c1c0f53ee12fb398449f550b3d9716"
+    "world-core": "github:Technikhighknee/world-core#2b9f98dce99c771ecfee5598ff1d22ded727ee97"
   }
 }
