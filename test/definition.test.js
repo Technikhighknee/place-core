@@ -839,3 +839,63 @@ test("embedded navigation option defaults are canonical definition identity", ()
     explicit.layers[0].navigation.options
   );
 });
+
+
+test("static road bindings require a topology-backed layer", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "boundary-without-topology",
+      layers: [{ id: "inside" }],
+      boundaries: [{
+        id: "wall",
+        layerId: "inside",
+        a: { x: 0, y: 0 },
+        b: { x: 1, y: 0 },
+        roadBindings: [{ roadId: "road" }]
+      }]
+    }),
+    /road binding requires navigation topology/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "portal-without-topology",
+      layers: [{ id: "inside" }, { id: "other" }],
+      portals: [{
+        id: "stairs",
+        a: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 0, y: 0 }
+        },
+        b: {
+          kind: "local",
+          layerId: "other",
+          position: { x: 0, y: 0 }
+        },
+        roadBindings: [{
+          layerId: "inside",
+          roadId: "road"
+        }]
+      }]
+    }),
+    /road binding requires navigation topology/
+  );
+
+  assert.doesNotThrow(
+    () => compilePlace({
+      id: "externally-backed-topology",
+      layers: [{
+        id: "inside",
+        topologyId: "external-topology"
+      }],
+      boundaries: [{
+        id: "wall",
+        layerId: "inside",
+        a: { x: 0, y: 0 },
+        b: { x: 1, y: 0 },
+        roadBindings: [{ roadId: "external-road" }]
+      }]
+    })
+  );
+});
