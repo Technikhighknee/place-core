@@ -2,6 +2,8 @@ import { isPortalTraversable } from "./registry.js";
 
 export class WorldCoreBridge {
   #registry = null;
+  #unsubscribeWorldEvents = null;
+  #sameDomainPortalCrossings = new Map();
 
   constructor({ world, navigation, startJourney, stopJourney, Navigation = null } = {}) {
     if (!world) throw new TypeError("WorldCoreBridge requires world");
@@ -16,7 +18,163 @@ export class WorldCoreBridge {
   }
 
   attachRegistry(registry) {
+    if (!registry || typeof registry !== "object") {
+      throw new TypeError("WorldCoreBridge registry is required");
+    }
+
+    this.#unsubscribeWorldEvents?.();
+    this.#unsubscribeWorldEvents = null;
+    this.#sameDomainPortalCrossings.clear();
     this.#registry = registry;
+
+    if (typeof this.world.subscribeEvents === "function") {
+      this.#unsubscribeWorldEvents = this.world.subscribeEvents(
+        (event) => this.#handleWorldEvent(event)
+      );
+    }
+
+    return this;
+  }
+
+  dispose() {
+    const removed = this.#unsubscribeWorldEvents?.() ?? false;
+    this.#unsubscribeWorldEvents = null;
+    this.#sameDomainPortalCrossings.clear();
+    this.#registry = null;
+    return removed;
+  }
+
+  #journeyLegForRoad(entity, roadId) {
+    const journey = entity?.journey;
+    if (!journey) return null;
+    const leg = journey.prefixLeg ??
+      journey.route?.legs?.[journey.legIndex] ??
+      null;
+    return leg?.roadId === roadId ? leg : null;
+  }
+
+  #resolveSameDomainPortalCrossing(entity, roadId) {
+    if (!this.#registry || !entity || roadId == null) return null;
+    const domainId = entity.domainId ?? "default";
+    const navigation = this.navigationForDomain(domainId);
+    const road = navigation?.roads?.get?.(roadId);
+    const leg = this.#journeyLegForRoad(entity, roadId);
+    if (!road || !leg) return null;
+
+    const startNodeId = leg.reversed ? road.to : road.from;
+    const endNodeId = leg.reversed ? road.from : road.to;
+
+    for (const portal of this.#registry.getPortalsForRoad(domainId, roadId)) {
+      if (!portal?.connected || !isPortalTraversable(portal)) continue;
+      if (portal.a?.domainId !== domainId || portal.b?.domainId !== domainId) {
+        continue;
+      }
+
+      if (
+        portal.a.nodeId === startNodeId &&
+        portal.b.nodeId === endNodeId
+      ) {
+        return {
+          portal,
+          from: portal.a,
+          to: portal.b,
+          domainId,
+          roadId
+        };
+      }
+
+      if (
+        portal.bidirectional !== false &&
+        portal.b.nodeId === startNodeId &&
+        portal.a.nodeId === endNodeId
+      ) {
+        return {
+          portal,
+          from: portal.b,
+          to: portal.a,
+          domainId,
+          roadId
+        };
+      }
+    }
+
+    return null;
+  }
+
+  #emitSameDomainPortalEvent(type, entityId, crossing, extra = {}) {
+    this.#registry?.emit(type, {
+      entityId,
+      portalKey: crossing.portal.key,
+      placeId: crossing.portal.instanceId,
+      portalId: crossing.portal.id,
+      roadId: crossing.roadId,
+      fromDomainId: crossing.domainId,
+      toDomainId: crossing.domainId,
+      fromSpaceId: crossing.from.spaceId ?? null,
+      toSpaceId: crossing.to.spaceId ?? null,
+      sameDomain: true,
+      ...extra
+    });
+  }
+
+  #handleWorldEvent(event) {
+    if (!this.#registry || event?.entityId == null || event?.roadId == null) {
+      return;
+    }
+
+    if (event.type === "roadEntered") {
+      const entity = this.world.getEntity(event.entityId);
+      const crossing = this.#resolveSameDomainPortalCrossing(
+        entity,
+        event.roadId
+      );
+      if (!crossing) return;
+
+      const previous = this.#sameDomainPortalCrossings.get(event.entityId);
+      if (previous) {
+        this.#emitSameDomainPortalEvent(
+          "portal-abort",
+          event.entityId,
+          previous,
+          { reason: "superseded-road-entry" }
+        );
+      }
+
+      this.#sameDomainPortalCrossings.set(event.entityId, crossing);
+      this.#emitSameDomainPortalEvent(
+        "portal-enter",
+        event.entityId,
+        crossing
+      );
+      return;
+    }
+
+    if (event.type !== "roadLeft") return;
+
+    const crossing = this.#sameDomainPortalCrossings.get(event.entityId);
+    if (!crossing || crossing.roadId !== event.roadId) return;
+    this.#sameDomainPortalCrossings.delete(event.entityId);
+
+    if (event.reason != null) {
+      this.#emitSameDomainPortalEvent(
+        "portal-abort",
+        event.entityId,
+        crossing,
+        { reason: event.reason }
+      );
+      return;
+    }
+
+    this.#emitSameDomainPortalEvent(
+      "portal-traverse",
+      event.entityId,
+      crossing
+    );
+    this.#emitSameDomainPortalEvent(
+      "portal-exit",
+      event.entityId,
+      crossing
+    );
   }
 
   materializePlace(instance, definition) {
