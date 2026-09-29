@@ -1609,7 +1609,8 @@ export class PlaceRegistry {
     if (parentId != null) {
       this.#assertSemanticEdgeDoesNotCycle(
         instanceId,
-        parentId
+        parentId,
+        "place parent cycle through semantic membership graph"
       );
     }
     if (instance.parentId === (parentId ?? null)) {
@@ -2152,10 +2153,14 @@ export class PlaceRegistry {
       }
     }
 
+    const semanticPlaces =
+      this.#semanticClosure(places);
+
     return deepFreeze({
       domainId,
       position: { x: position.x, y: position.y },
       places,
+      semanticPlaces,
       spaces
     });
   }
@@ -2252,10 +2257,19 @@ export class PlaceRegistry {
       traversablePortalEndpointCount += index.size;
     }
 
+    let semanticMembershipCount = 0;
+    for (const instance of this.#instances.values()) {
+      semanticMembershipCount +=
+        instance.getMemberships().length;
+    }
+
     return {
       definitionCount: this.#definitions.size,
       instanceCount: this.#instances.size,
       domainBindingCount: this.#domainBindings.size,
+      semanticMembershipCount,
+      semanticMembershipParentCount:
+        this.#membershipChildren.size,
       portalRecordCount: this.#portalRecords.size,
       portalEndpointCount: this.#portalEndpointRecords.size,
       portalEndpointDomainCount: this.#portalEndpointIndexes.size,
@@ -2289,11 +2303,40 @@ export class PlaceRegistry {
       const definition = this.#definitions.get(instance.definitionId);
       if (!definition) throw new Error(`instance ${String(instance.id)} references missing definition`);
       if (instance.parentId != null) {
-        if (!this.#instances.has(instance.parentId)) throw new Error(`instance ${String(instance.id)} references missing parent`);
-        if (!this.#semanticChildren.get(instance.parentId)?.has(instance.id)) {
-          throw new Error(`instance ${String(instance.id)} missing semantic dependency index`);
+        if (!this.#instances.has(instance.parentId)) {
+          throw new Error(
+            `instance ${String(instance.id)} references missing parent`
+          );
+        }
+        if (!this.#semanticChildren
+          .get(instance.parentId)
+          ?.has(instance.id)) {
+          throw new Error(
+            `instance ${String(instance.id)} missing semantic dependency index`
+          );
         }
       }
+
+      for (const membership of instance.getMemberships()) {
+        if (!this.#instances.has(membership.parentPlaceId)) {
+          throw new Error(
+            `instance ${String(instance.id)} references missing membership parent ${String(membership.parentPlaceId)}`
+          );
+        }
+        const count = this.#membershipChildren
+          .get(membership.parentPlaceId)
+          ?.get(instance.id) ?? 0;
+        const expectedCount = instance.getMemberships()
+          .filter((candidate) =>
+            candidate.parentPlaceId === membership.parentPlaceId
+          ).length;
+        if (count !== expectedCount) {
+          throw new Error(
+            `instance ${String(instance.id)} membership reverse index drift`
+          );
+        }
+      }
+
       if (instance.placement?.parentPlaceId != null) {
         if (!this.#instances.has(instance.placement.parentPlaceId)) {
           throw new Error(`instance ${String(instance.id)} references missing placement parent`);
@@ -2303,14 +2346,40 @@ export class PlaceRegistry {
           throw new Error(`instance ${String(instance.id)} missing placement dependency index`);
         }
       }
-      const visited = new Set();
-      let current = instance;
-      while (current?.parentId != null) {
-        if (visited.has(current.id)) throw new Error(`place parent cycle involving ${String(current.id)}`);
-        visited.add(current.id);
-        current = this.#instances.get(current.parentId);
+    }
+
+    this.#assertSemanticGraphAcyclic();
+
+    let indexedMembershipCount = 0;
+    for (const [parentId, children] of this.#membershipChildren) {
+      if (!this.#instances.has(parentId)) {
+        throw new Error(
+          `membership reverse index references missing parent ${String(parentId)}`
+        );
+      }
+      for (const [childId, count] of children) {
+        if (!this.#instances.has(childId) ||
+            !Number.isInteger(count) ||
+            count < 1) {
+          throw new Error(
+            "membership reverse index contains invalid child/count"
+          );
+        }
+        indexedMembershipCount += count;
       }
     }
+
+    let actualMembershipCount = 0;
+    for (const instance of this.#instances.values()) {
+      actualMembershipCount +=
+        instance.getMemberships().length;
+    }
+    if (indexedMembershipCount !== actualMembershipCount) {
+      throw new Error(
+        "semantic membership reverse index count drift"
+      );
+    }
+
     for (const [key, record] of this.#portalRecords) {
       if (!this.#instances.has(record.instanceId)) throw new Error(`portal record ${key} references missing instance`);
       if (!record.connected || !record.a || !record.b) throw new Error(`portal record ${key} is disconnected`);
@@ -2508,7 +2577,11 @@ export class PlaceRegistry {
       );
   }
 
-  #assertSemanticEdgeDoesNotCycle(instanceId, parentId) {
+  #assertSemanticEdgeDoesNotCycle(
+    instanceId,
+    parentId,
+    message = "place semantic membership cycle"
+  ) {
     const targetKey = typedIdKey(instanceId);
     const stack = [parentId];
     const visited = new Set();
@@ -2517,7 +2590,7 @@ export class PlaceRegistry {
       const currentId = stack.pop();
       const currentKey = typedIdKey(currentId);
       if (currentKey === targetKey) {
-        throw new Error("place semantic membership cycle");
+        throw new Error(message);
       }
       if (visited.has(currentKey)) continue;
       visited.add(currentKey);
@@ -2562,6 +2635,36 @@ export class PlaceRegistry {
     }
 
     return output;
+  }
+
+  #assertSemanticGraphAcyclic() {
+    const permanent = new Set();
+    const temporary = new Set();
+
+    const visit = (instanceId) => {
+      const key = typedIdKey(instanceId);
+      if (permanent.has(key)) return;
+      if (temporary.has(key)) {
+        throw new Error(
+          "place semantic membership cycle"
+        );
+      }
+
+      temporary.add(key);
+      for (const parentId of this.#semanticParentIds(instanceId)) {
+        visit(parentId);
+      }
+      temporary.delete(key);
+      permanent.add(key);
+    };
+
+    const ids = [...this.#instances.keys()]
+      .sort((a, b) =>
+        typedIdKey(a).localeCompare(typedIdKey(b))
+      );
+    for (const instanceId of ids) {
+      visit(instanceId);
+    }
   }
 
   #registerPlacementDependency(instance) {
@@ -2765,11 +2868,29 @@ export class PlaceRegistry {
   }
 
   #sameLocation(a, b) {
-    if (!a || !b || a.domainId !== b.domainId) return false;
-    if (a.places.length !== b.places.length || a.spaces.length !== b.spaces.length) return false;
-    for (let i = 0; i < a.places.length; i += 1) if (a.places[i] !== b.places[i]) return false;
+    if (!a || !b || a.domainId !== b.domainId) {
+      return false;
+    }
+
+    if (a.places.length !== b.places.length ||
+        a.semanticPlaces.length !== b.semanticPlaces.length ||
+        a.spaces.length !== b.spaces.length) {
+      return false;
+    }
+
+    for (let i = 0; i < a.places.length; i += 1) {
+      if (a.places[i] !== b.places[i]) return false;
+    }
+    for (let i = 0; i < a.semanticPlaces.length; i += 1) {
+      if (a.semanticPlaces[i] !== b.semanticPlaces[i]) {
+        return false;
+      }
+    }
     for (let i = 0; i < a.spaces.length; i += 1) {
-      if (a.spaces[i].placeId !== b.spaces[i].placeId || a.spaces[i].spaceId !== b.spaces[i].spaceId) return false;
+      if (a.spaces[i].placeId !== b.spaces[i].placeId ||
+          a.spaces[i].spaceId !== b.spaces[i].spaceId) {
+        return false;
+      }
     }
     return true;
   }
@@ -2828,7 +2949,7 @@ export class PlaceRegistry {
   }
 
   #addOccupancy(entityId, location) {
-    for (const placeId of location.places) {
+    for (const placeId of location.semanticPlaces) {
       let set = this.#entitiesByPlace.get(placeId);
       if (!set) this.#entitiesByPlace.set(placeId, set = new Set());
       set.add(entityId);
@@ -2842,7 +2963,7 @@ export class PlaceRegistry {
   }
 
   #removeOccupancy(entityId, location) {
-    for (const placeId of location.places) {
+    for (const placeId of location.semanticPlaces) {
       const set = this.#entitiesByPlace.get(placeId);
       set?.delete(entityId);
       if (set?.size === 0) this.#entitiesByPlace.delete(placeId);
@@ -2856,8 +2977,12 @@ export class PlaceRegistry {
   }
 
   #emitLocationTransitions(entityId, previous, next) {
-    const beforePlaces = new Set(previous?.places ?? []);
-    const afterPlaces = new Set(next?.places ?? []);
+    const beforePlaces = new Set(
+      previous?.semanticPlaces ?? []
+    );
+    const afterPlaces = new Set(
+      next?.semanticPlaces ?? []
+    );
     for (const placeId of beforePlaces) if (!afterPlaces.has(placeId)) this.emit("place-leave", { entityId, placeId });
     for (const placeId of afterPlaces) if (!beforePlaces.has(placeId)) this.emit("place-enter", { entityId, placeId });
 
