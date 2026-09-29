@@ -339,3 +339,116 @@ test("explicit topology IDs must be non-empty strings", () => {
     /topologyId/
   );
 });
+
+
+test("authoring tag and profile fields require arrays of non-empty strings", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "bad-place-tags",
+      tags: "building",
+      layers: [{ id: "ground" }]
+    }),
+    /place\.tags must be an array/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-space-tags",
+      layers: [{ id: "ground" }],
+      spaces: [{
+        id: "room",
+        layerId: "ground",
+        tags: ["valid", ""],
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: 0,
+          maxX: 1,
+          maxY: 1
+        }
+      }]
+    }),
+    /space\(room\)\.tags\[1\]/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-road-profiles",
+      layers: [{
+        id: "ground",
+        navigation: {
+          nodes: [
+            { id: "a", x: 0, y: 0 },
+            { id: "b", x: 1, y: 0 }
+          ],
+          roads: [{
+            id: "road",
+            from: "a",
+            to: "b",
+            allowedProfiles: "pedestrian"
+          }]
+        }
+      }]
+    }),
+    /allowedProfiles must be an array/
+  );
+
+  const valid = compilePlace({
+    id: "dedup-tags",
+    tags: ["building", "building"],
+    layers: [{
+      id: "ground",
+      tags: ["interior", "interior"],
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 }
+        ],
+        roads: [{
+          id: "road",
+          from: "a",
+          to: "b",
+          tags: ["threshold", "threshold"],
+          allowedProfiles: ["pedestrian", "pedestrian"],
+          blockedProfiles: ["cart"]
+        }]
+      }
+    }]
+  });
+
+  assert.deepEqual(valid.tags, ["building"]);
+  assert.deepEqual(valid.layers[0].tags, ["interior"]);
+  assert.deepEqual(valid.layers[0].navigation.roads[0].tags, ["threshold"]);
+  assert.deepEqual(
+    valid.layers[0].navigation.roads[0].allowedProfiles,
+    ["pedestrian"]
+  );
+});
+
+test("space priority must be finite when supplied", () => {
+  for (const priority of [
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY
+  ]) {
+    assert.throws(
+      () => compilePlace({
+        id: `bad-priority-${String(priority)}`,
+        layers: [{ id: "ground" }],
+        spaces: [{
+          id: "room",
+          layerId: "ground",
+          priority,
+          geometry: {
+            type: "aabb",
+            minX: 0,
+            minY: 0,
+            maxX: 1,
+            maxY: 1
+          }
+        }]
+      }),
+      /priority must be a finite number/
+    );
+  }
+});
