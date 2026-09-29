@@ -159,6 +159,7 @@ export class PlaceRegistry {
   #portalsByDomain = new Map();
   #portalEndpointIndexes = new Map();
   #portalEndpointRecords = new Map();
+  #portalsByRoad = new Map();
   #instancePortalKeys = new Map();
   #occupancy = new Map();
   #occupancySpatialIndexes = new Map();
@@ -968,6 +969,15 @@ export class PlaceRegistry {
     return [...keys].map((key) => this.#portalRecords.get(key)).filter(Boolean);
   }
 
+  getPortalsForRoad(domainId, roadId) {
+    const keys = this.#portalsByRoad.get(domainId)?.get(roadId);
+    if (!keys) return [];
+    return [...keys]
+      .sort()
+      .map((key) => this.#portalRecords.get(key))
+      .filter(Boolean);
+  }
+
   getPortalRecord(key) { return this.#portalRecords.get(key) ?? null; }
 
   locate(domainId, position) {
@@ -1151,6 +1161,29 @@ export class PlaceRegistry {
     for (const [key, record] of this.#portalRecords) {
       if (!this.#instances.has(record.instanceId)) throw new Error(`portal record ${key} references missing instance`);
       if (!record.connected || !record.a || !record.b) throw new Error(`portal record ${key} is disconnected`);
+      const instance = this.#instances.get(record.instanceId);
+      if (instance) {
+        for (const binding of record.roadBindings ?? []) {
+          const domainId = instance.layerDomains.get(binding.layerId);
+          if (!domainId) continue;
+          const roads = this.#portalsByRoad.get(domainId);
+          const keysForRoad = roads?.get(binding.roadId);
+          keysForRoad?.delete(key);
+          if (keysForRoad?.size === 0) roads.delete(binding.roadId);
+          if (roads?.size === 0) this.#portalsByRoad.delete(domainId);
+        }
+      }
+
+      const instance = this.#instances.get(record.instanceId);
+      for (const binding of record.roadBindings ?? []) {
+        const domainId = instance?.layerDomains.get(binding.layerId);
+        if (!domainId ||
+            !this.#portalsByRoad.get(domainId)?.get(binding.roadId)?.has(key)) {
+          throw new Error(
+            `portal record ${key} missing road binding index for ${binding.roadId}`
+          );
+        }
+      }
       for (const [side, endpoint] of [["a", record.a], ["b", record.b]]) {
         const domainId = endpoint.domainId;
         if (!this.#portalsByDomain.get(domainId)?.has(key)) {
@@ -1340,6 +1373,16 @@ export class PlaceRegistry {
         let set = this.#portalsByDomain.get(domainId);
         if (!set) this.#portalsByDomain.set(domainId, set = new Set());
         set.add(key);
+      }
+
+      for (const binding of record.roadBindings ?? []) {
+        const domainId = instance.layerDomains.get(binding.layerId);
+        if (!domainId) continue;
+        let roads = this.#portalsByRoad.get(domainId);
+        if (!roads) this.#portalsByRoad.set(domainId, roads = new Map());
+        let roadKeys = roads.get(binding.roadId);
+        if (!roadKeys) roads.set(binding.roadId, roadKeys = new Set());
+        roadKeys.add(key);
       }
 
       for (const [side, endpoint] of [["a", record.a], ["b", record.b]]) {
