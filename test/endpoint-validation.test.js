@@ -199,3 +199,64 @@ test("endpoint metadata is JSON-safe at the live API boundary", () => {
 
   assert.equal(place.dynamicPortals.size, 0);
 });
+
+
+test("static local endpoint metadata survives resolve and snapshot roundtrip", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "static-endpoint-metadata",
+    layers: [{ id: "inside" }],
+    portals: [{
+      id: "door",
+      a: {
+        kind: "external",
+        slot: "outside"
+      },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        metadata: {
+          semanticSide: "inside",
+          marker: { value: 7 }
+        }
+      }
+    }]
+  });
+
+  places.createPlace({
+    id: "house",
+    definitionId: "static-endpoint-metadata",
+    attachments: {
+      outside: {
+        domainId: "street",
+        position: { x: 10, y: 0 },
+        metadata: {
+          semanticSide: "outside"
+        }
+      }
+    }
+  });
+
+  let portal = places.getPortal("house", "door");
+  assert.deepEqual(portal.a.metadata, {
+    semanticSide: "outside"
+  });
+  assert.deepEqual(portal.b.metadata, {
+    semanticSide: "inside",
+    marker: { value: 7 }
+  });
+
+  const restored = deserializePlaceCore(
+    JSON.parse(JSON.stringify(serializePlaceCore(places)))
+  );
+  portal = restored.getPortal("house", "door");
+
+  assert.deepEqual(portal.a.metadata, {
+    semanticSide: "outside"
+  });
+  assert.deepEqual(portal.b.metadata, {
+    semanticSide: "inside",
+    marker: { value: 7 }
+  });
+});
