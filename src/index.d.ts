@@ -272,6 +272,12 @@ export interface ResolvedPlacePlacement {
   containment: "none" | "footprint";
 }
 
+export interface PlaceMembership {
+  parentPlaceId: PlaceId;
+  kind: string;
+  metadata: JsonValue;
+}
+
 export interface ResolvedPortal {
   key?: string;
   id: string;
@@ -307,6 +313,11 @@ export class PlaceInstance {
   readonly boundaryOverrides: Map<string, { enabled?: boolean }>;
   readonly spaceOverrides: Map<string, { enabled?: boolean }>;
   readonly dynamicPortals: Map<string, DynamicPortalInput>;
+  getMembership(
+    parentPlaceId: PlaceId,
+    kind?: string
+  ): PlaceMembership | null;
+  getMemberships(): PlaceMembership[];
 }
 
 export interface SpaceLocation {
@@ -321,6 +332,7 @@ export interface LocationContext {
   domainId: string;
   position: Vec2;
   places: readonly PlaceId[];
+  semanticPlaces: readonly PlaceId[];
   spaces: readonly SpaceLocation[];
   placeId: PlaceId | null;
   layerId: string | null;
@@ -376,6 +388,7 @@ export type CreatePlaceInput = {
   id: PlaceId;
   definitionId: string;
   layerDomains?: Record<string, string> | Map<string, string>;
+  memberships?: readonly PlaceMembership[];
   metadata?: JsonValue;
 } & CreatePlaceParentInput &
   CreatePlaceAttachmentInput &
@@ -415,6 +428,20 @@ export class PlaceRegistry {
   createPlace(input: CreatePlaceInput): PlaceInstance;
   removePlace(id: PlaceId): boolean;
   setParent(instanceId: PlaceId, parentId: PlaceId | null): PlaceInstance;
+  getMemberships(instanceId: PlaceId): PlaceMembership[];
+  addMembership(
+    instanceId: PlaceId,
+    membership: PlaceMembership
+  ): PlaceMembership;
+  removeMembership(
+    instanceId: PlaceId,
+    parentPlaceId: PlaceId,
+    kind?: string
+  ): boolean;
+  getSemanticAncestors(
+    instanceId: PlaceId,
+    options?: { includeSelf?: boolean }
+  ): PlaceId[];
   setPlacement(instanceId: PlaceId, placement: PlacePlacement | null): PlacePlacement | null;
   getResolvedPlacement(instanceId: PlaceId): ResolvedPlacePlacement | null;
 
@@ -842,6 +869,7 @@ export interface PlaceCoreSnapshot {
     id: PlaceId;
     definitionId: string;
     parentId: PlaceId | null;
+    memberships: PlaceMembership[];
     layerDomains: Record<string, string>;
     attachments: Record<string, PlaceAttachment>;
     placement: PlacePlacement | null;
