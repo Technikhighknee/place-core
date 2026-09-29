@@ -799,6 +799,14 @@ function resolveStartCall(registry, a, b, c, d) {
   return { bridge: options.bridge ?? registry.bridge, entityId: a, target: b, options };
 }
 
+function normalizeWorldChangePolicy(value) {
+  const policy = value ?? "encounter";
+  if (policy !== "encounter" && policy !== "eager") {
+    throw new TypeError("worldChangePolicy must be \"encounter\" or \"eager\"");
+  }
+  return policy;
+}
+
 function fail(registry, bridge, state, reason) {
   bridge.stopLocalJourney(state.entityId);
   state.status = "failed";
@@ -883,7 +891,25 @@ function advance(registry, bridge, state, options = {}) {
 
     if (step.type === "traverse-portal") {
       const portal = registry.getPortalRecord(step.portalKey);
-      if (!portal || !isPortalTraversable(portal)) return replan(registry, bridge, state, options);
+      if (!portal || !isPortalTraversable(portal)) {
+        registry.emit("travel-obstacle-encountered", {
+          entityId: state.entityId,
+          stepIndex: state.stepIndex,
+          obstacle: "portal",
+          portalKey: step.portalKey,
+          placeId: step.placeId,
+          portalId: step.portalId,
+          missing: portal == null,
+          state: portal ? {
+            enabled: portal.enabled,
+            open: portal.open,
+            locked: portal.locked,
+            blocked: portal.blocked,
+            destroyed: portal.destroyed
+          } : null
+        });
+        return replan(registry, bridge, state, options);
+      }
       const direction = currentPortalDestination(portal, step);
       if (!direction) return replan(registry, bridge, state, options);
 
@@ -960,6 +986,7 @@ export function startTravel(registry, a, b, c, d) {
     portalEntered: false,
     portalTransitionRemaining: 0,
     graphRevision: registry.graphRevision,
+    worldChangePolicy: normalizeWorldChangePolicy(options.worldChangePolicy),
     status: "active",
     failureReason: null,
     replans: 0
@@ -987,7 +1014,11 @@ export function stepTravel(registry, a, b, c) {
   const state = registry.activeTravels.get(entityId);
   if (!state) return null;
 
-  if (state.graphRevision !== registry.graphRevision) {
+  const worldChangePolicy = options.worldChangePolicy == null
+    ? state.worldChangePolicy
+    : normalizeWorldChangePolicy(options.worldChangePolicy);
+
+  if (worldChangePolicy === "eager" && state.graphRevision !== registry.graphRevision) {
     const next = replan(registry, bridge, state, options);
     if (next.status !== "active") return next;
   }
