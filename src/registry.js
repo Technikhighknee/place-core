@@ -5,6 +5,9 @@ import {
   normalizeTransform,
   composeTransforms,
   pointInGeometry,
+  squaredDistance,
+  squaredDistancePointToSegment,
+  segmentIntersectsBounds,
   transformBounds
 } from "./geometry.js";
 import { CompiledPlaceDefinition } from "./definition.js";
@@ -240,6 +243,122 @@ export class PlaceRegistry {
       if (distanceSq < bestDistanceSq) { best = anchor; bestDistanceSq = distanceSq; }
     }
     return best ? { ...best, placeId: instanceId, domainId: instance.layerDomains.get(best.layerId), distance: Math.sqrt(bestDistanceSq) } : null;
+  }
+
+  findNearestAnchorInDomain(domainId, position, options = {}) {
+    const binding = this.#domainBindings.get(domainId);
+    if (!binding) return null;
+    const instance = this.#instances.get(binding.instanceId);
+    if (!instance) return null;
+    const definition = this.#definitions.get(instance.definitionId);
+    const candidates = options.tag ? definition.getAnchorsByTag(options.tag) : definition.anchors;
+
+    let best = null;
+    let bestDistanceSq = Infinity;
+    for (const anchor of candidates) {
+      if (anchor.layerId !== binding.layerId) continue;
+      if (options.kind != null && anchor.kind !== options.kind) continue;
+      if (options.spaceId != null && anchor.spaceId !== options.spaceId) continue;
+      if (anchor.spaceId != null) {
+        const space = definition.getSpace(anchor.spaceId);
+        if (space && !this.#spaceEnabled(instance, definition, space)) continue;
+      }
+      const distanceSq = squaredDistance(position, anchor.position);
+      if (distanceSq < bestDistanceSq ||
+          (distanceSq === bestDistanceSq && anchor.id.localeCompare(best?.id ?? "") < 0)) {
+        best = anchor;
+        bestDistanceSq = distanceSq;
+      }
+    }
+
+    return best ? {
+      ...best,
+      placeId: instance.id,
+      domainId,
+      distance: Math.sqrt(bestDistanceSq)
+    } : null;
+  }
+
+  findNearestPortal(domainId, position, options = {}) {
+    let best = null;
+    let bestDistanceSq = Infinity;
+
+    for (const portal of this.getPortalsForDomain(domainId)) {
+      if (options.traversableOnly !== false && !portal.traversable) continue;
+      if (options.kind != null && portal.kind !== options.kind) continue;
+      if (options.tag != null && !portal.tags?.includes(options.tag)) continue;
+
+      const endpoint = portal.a.domainId === domainId
+        ? portal.a
+        : portal.b.domainId === domainId
+          ? portal.b
+          : null;
+      if (!endpoint) continue;
+
+      const distanceSq = squaredDistance(position, endpoint.position);
+      if (distanceSq < bestDistanceSq ||
+          (distanceSq === bestDistanceSq && portal.key.localeCompare(best?.portal.key ?? "") < 0)) {
+        best = { portal, endpoint };
+        bestDistanceSq = distanceSq;
+      }
+    }
+
+    return best ? {
+      portal: best.portal,
+      endpoint: best.endpoint,
+      distance: Math.sqrt(bestDistanceSq)
+    } : null;
+  }
+
+  getBoundariesForDomain(domainId, options = {}) {
+    const binding = this.#domainBindings.get(domainId);
+    if (!binding) return [];
+    const instance = this.#instances.get(binding.instanceId);
+    if (!instance) return [];
+    const definition = this.#definitions.get(instance.definitionId);
+
+    const result = [];
+    for (const boundary of definition.boundaries) {
+      if (boundary.layerId !== binding.layerId) continue;
+      const resolved = this.getBoundary(instance.id, boundary.id);
+      if (options.enabledOnly === true && !resolved.enabled) continue;
+      if (options.kind != null && resolved.kind !== options.kind) continue;
+      if (options.tag != null && !resolved.tags?.includes(options.tag)) continue;
+      result.push({ ...resolved, placeId: instance.id, domainId });
+    }
+    return result;
+  }
+
+  boundariesIntersectingBounds(domainId, bounds, options = {}) {
+    return this.getBoundariesForDomain(domainId, options)
+      .filter((boundary) => segmentIntersectsBounds(boundary.a, boundary.b, bounds));
+  }
+
+  findNearestBoundary(domainId, position, options = {}) {
+    let best = null;
+    let bestDistanceSq = Infinity;
+    for (const boundary of this.getBoundariesForDomain(domainId, options)) {
+      const distanceSq = squaredDistancePointToSegment(position, boundary.a, boundary.b);
+      if (distanceSq < bestDistanceSq ||
+          (distanceSq === bestDistanceSq && boundary.id.localeCompare(best?.id ?? "") < 0)) {
+        best = boundary;
+        bestDistanceSq = distanceSq;
+      }
+    }
+    return best ? { boundary: best, distance: Math.sqrt(bestDistanceSq) } : null;
+  }
+
+  placesInBounds(domainId, bounds) {
+    const index = this.#exteriorIndexes.get(domainId);
+    if (!index) return [];
+    const result = [];
+    for (const instanceId of index.queryBounds(bounds)) {
+      const instance = this.#instances.get(instanceId);
+      if (!instance) continue;
+      result.push(instance);
+    }
+    result.sort((a, b) => typedIdKey(a.id).localeCompare(typedIdKey(b.id)));
+    return result;
   }
 
   createPlace(input) {
