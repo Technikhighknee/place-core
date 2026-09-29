@@ -1,19 +1,79 @@
 import { createHash } from "node:crypto";
 
 export function assertId(id, label = "id") {
-  if ((typeof id !== "string" && typeof id !== "number") || String(id).length === 0) {
-    throw new TypeError(`${label} must be a non-empty string or number`);
+  const validString = typeof id === "string" && id.length > 0;
+  const validNumber = typeof id === "number" && Number.isFinite(id);
+  if (!validString && !validNumber) {
+    throw new TypeError(`${label} must be a non-empty string or finite number`);
   }
   return id;
 }
 
 export function assertStringId(id, label = "id") {
-  if (typeof id !== "string" || id.length === 0) throw new TypeError(`${label} must be a non-empty string`);
+  if (typeof id !== "string" || id.length === 0) {
+    throw new TypeError(`${label} must be a non-empty string`);
+  }
   return id;
 }
 
+function isPlainObject(value) {
+  if (!value || typeof value !== "object") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function cloneJsonValue(value, path) {
+  if (value === null) return null;
+
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return value;
+    case "number":
+      if (!Number.isFinite(value)) {
+        throw new TypeError(`${path} contains a non-finite number`);
+      }
+      return value;
+    case "undefined":
+      throw new TypeError(`${path} contains undefined, which is not JSON-safe`);
+    case "bigint":
+    case "function":
+    case "symbol":
+      throw new TypeError(`${path} contains non-JSON value of type ${typeof value}`);
+    case "object":
+      break;
+    default:
+      throw new TypeError(`${path} contains unsupported value`);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item, index) =>
+      cloneJsonValue(item, `${path}[${index}]`)
+    );
+  }
+
+  if (!isPlainObject(value)) {
+    const typeName = value?.constructor?.name ?? "object";
+    throw new TypeError(
+      `${path} contains non-JSON object ${typeName}`
+    );
+  }
+
+  const result = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (item === undefined) {
+      throw new TypeError(
+        `${path}.${key} contains undefined, which is not JSON-safe`
+      );
+    }
+    result[key] = cloneJsonValue(item, `${path}.${key}`);
+  }
+  return result;
+}
+
 export function cloneJson(value) {
-  return value === undefined ? undefined : structuredClone(value);
+  if (value === undefined) return undefined;
+  return cloneJsonValue(value, "value");
 }
 
 export function deepFreeze(value, seen = new Set()) {
@@ -28,32 +88,72 @@ export function deepFreeze(value, seen = new Set()) {
 }
 
 export function canonicalize(value) {
-  if (value === null || typeof value !== "object") {
-    if (typeof value === "number" && !Number.isFinite(value)) throw new TypeError("non-finite number cannot be canonicalized");
-    return value;
+  if (value === null) return null;
+
+  switch (typeof value) {
+    case "string":
+    case "boolean":
+      return value;
+    case "number":
+      if (!Number.isFinite(value)) {
+        throw new TypeError("non-finite number cannot be canonicalized");
+      }
+      return value;
+    case "undefined":
+      return undefined;
+    case "bigint":
+    case "function":
+    case "symbol":
+      throw new TypeError(
+        `non-JSON value of type ${typeof value} cannot be canonicalized`
+      );
+    case "object":
+      break;
+    default:
+      throw new TypeError("unsupported value cannot be canonicalized");
   }
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (value instanceof Map) {
-    return [...value.entries()]
-      .sort(([a], [b]) => String(a).localeCompare(String(b)))
-      .map(([k, v]) => [k, canonicalize(v)]);
+
+  if (Array.isArray(value)) {
+    return value.map((item, index) => {
+      if (item === undefined) {
+        throw new TypeError(
+          `undefined array entry at index ${index} cannot be canonicalized`
+        );
+      }
+      return canonicalize(item);
+    });
   }
-  if (value instanceof Set) {
-    return [...value.values()].sort((a, b) => String(a).localeCompare(String(b))).map(canonicalize);
+
+  if (!isPlainObject(value)) {
+    const typeName = value?.constructor?.name ?? "object";
+    throw new TypeError(
+      `non-JSON object ${typeName} cannot be canonicalized`
+    );
   }
+
   const result = {};
   for (const key of Object.keys(value).sort()) {
-    if (value[key] !== undefined) result[key] = canonicalize(value[key]);
+    const item = value[key];
+    if (item === undefined) continue;
+    result[key] = canonicalize(item);
   }
   return result;
 }
 
 export function canonicalStringify(value) {
-  return JSON.stringify(canonicalize(value));
+  const canonical = canonicalize(value);
+  const serialized = JSON.stringify(canonical);
+  if (serialized === undefined) {
+    throw new TypeError("value cannot be serialized canonically");
+  }
+  return serialized;
 }
 
 export function sha256(value) {
-  return createHash("sha256").update(typeof value === "string" ? value : canonicalStringify(value)).digest("hex");
+  const serialized = typeof value === "string"
+    ? value
+    : canonicalStringify(value);
+  return createHash("sha256").update(serialized).digest("hex");
 }
 
 export class BoundedEventQueue {
