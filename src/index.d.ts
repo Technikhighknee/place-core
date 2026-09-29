@@ -33,7 +33,14 @@ export type Geometry =
   | { type: "polygon"; points: readonly Vec2[] };
 
 export interface PlaceNavigationSpec {
-  options?: Record<string, unknown>;
+  options?: {
+    spatialCellSize?: number;
+    routeCacheSize?: number;
+    routeCacheMaxLegs?: number;
+    routeCacheMaxTotalLegs?: number;
+    hierarchicalRouteCacheSize?: number;
+    regionalRouteCacheSize?: number;
+  };
   regions?: readonly { id: string }[];
   nodes?: readonly {
     id: string;
