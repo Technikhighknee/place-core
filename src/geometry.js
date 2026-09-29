@@ -581,12 +581,37 @@ export class DynamicAabbIndex {
   }
 
   queryBounds(bounds) {
+    const minX = Math.floor(bounds.minX / this.#cellSize);
+    const minY = Math.floor(bounds.minY / this.#cellSize);
+    const maxX = Math.floor(bounds.maxX / this.#cellSize);
+    const maxY = Math.floor(bounds.maxY / this.#cellSize);
+    const width = maxX - minX + 1;
+    const height = maxY - minY + 1;
+    const queryCellCount = width * height;
     const candidates = new Set();
-    for (const key of this.#keysForBounds(bounds)) {
-      const bucket = this.#cells.get(key);
-      if (!bucket) continue;
-      for (const id of bucket) candidates.add(id);
+
+    // Never let a sparse query spend time proportional to empty world area.
+    // Small windows probe their cells directly; huge windows scan the
+    // occupied-cell map instead.
+    if (Number.isSafeInteger(queryCellCount) &&
+        queryCellCount <= this.#cells.size) {
+      for (let y = minY; y <= maxY; y += 1) {
+        for (let x = minX; x <= maxX; x += 1) {
+          const bucket = this.#cells.get(`${x},${y}`);
+          if (!bucket) continue;
+          for (const id of bucket) candidates.add(id);
+        }
+      }
+    } else {
+      for (const [key, bucket] of this.#cells) {
+        const comma = key.indexOf(",");
+        const x = Number(key.slice(0, comma));
+        const y = Number(key.slice(comma + 1));
+        if (x < minX || x > maxX || y < minY || y > maxY) continue;
+        for (const id of bucket) candidates.add(id);
+      }
     }
+
     const result = [];
     for (const id of candidates) {
       const itemBounds = this.#bounds.get(id);
@@ -616,5 +641,276 @@ export class DynamicAabbIndex {
     for (let y = minY; y <= maxY; y += 1) {
       for (let x = minX; x <= maxX; x += 1) yield `${x},${y}`;
     }
+  }
+}
+
+
+function lowerBoundNumber(values, target) {
+  let low = 0;
+  let high = values.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (values[mid] < target) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+function axisDistanceToCell(value, coordinate, cellSize) {
+  const min = coordinate * cellSize;
+  const max = min + cellSize;
+  if (value < min) return min - value;
+  if (value > max) return value - max;
+  return 0;
+}
+
+function *coordinatesByDistance(values, value, cellSize) {
+  if (values.length === 0) return;
+
+  const cell = Math.floor(value / cellSize);
+  let right = lowerBoundNumber(values, cell);
+  let left = right - 1;
+
+  while (left >= 0 || right < values.length) {
+    const leftDistance = left >= 0
+      ? axisDistanceToCell(value, values[left], cellSize)
+      : Infinity;
+    const rightDistance = right < values.length
+      ? axisDistanceToCell(value, values[right], cellSize)
+      : Infinity;
+
+    if (leftDistance <= rightDistance) {
+      yield { coordinate: values[left], distance: leftDistance };
+      left -= 1;
+    } else {
+      yield { coordinate: values[right], distance: rightDistance };
+      right += 1;
+    }
+  }
+}
+
+/**
+ * Dynamic sparse point index.
+ *
+ * Nearest/radius queries iterate occupied rows/cells only; their runtime is
+ * independent of the amount of empty coordinate space between points.
+ */
+export class DynamicPointIndex {
+  #cellSize;
+  #points = new Map();
+  #rows = new Map();
+  #sortedRows = null;
+  #sortedColumns = new Map();
+  #cellCount = 0;
+
+  constructor(cellSize = 64) {
+    if (!Number.isFinite(cellSize) || cellSize <= 0) {
+      throw new RangeError("cellSize must be > 0");
+    }
+    this.#cellSize = cellSize;
+  }
+
+  set(id, point) {
+    assertVec2(point);
+    this.delete(id);
+
+    const x = Math.floor(point.x / this.#cellSize);
+    const y = Math.floor(point.y / this.#cellSize);
+
+    let row = this.#rows.get(y);
+    if (!row) {
+      row = new Map();
+      this.#rows.set(y, row);
+      this.#sortedRows = null;
+    }
+
+    let bucket = row.get(x);
+    if (!bucket) {
+      bucket = new Set();
+      row.set(x, bucket);
+      this.#sortedColumns.delete(y);
+      this.#cellCount += 1;
+    }
+
+    bucket.add(id);
+    this.#points.set(id, {
+      x: point.x,
+      y: point.y,
+      cellX: x,
+      cellY: y
+    });
+    return this;
+  }
+
+  delete(id) {
+    const record = this.#points.get(id);
+    if (!record) return false;
+
+    const row = this.#rows.get(record.cellY);
+    const bucket = row?.get(record.cellX);
+    bucket?.delete(id);
+
+    if (bucket?.size === 0) {
+      row.delete(record.cellX);
+      this.#sortedColumns.delete(record.cellY);
+      this.#cellCount -= 1;
+    }
+    if (row?.size === 0) {
+      this.#rows.delete(record.cellY);
+      this.#sortedRows = null;
+      this.#sortedColumns.delete(record.cellY);
+    }
+
+    this.#points.delete(id);
+    return true;
+  }
+
+  getPoint(id) {
+    const record = this.#points.get(id);
+    return record ? { x: record.x, y: record.y } : null;
+  }
+
+  queryRadius(point, radius, predicate = null) {
+    assertVec2(point);
+    if (!Number.isFinite(radius) || radius < 0) {
+      throw new RangeError("radius must be a finite number >= 0");
+    }
+    if (this.#points.size === 0) return [];
+
+    const minCellY = Math.floor((point.y - radius) / this.#cellSize);
+    const maxCellY = Math.floor((point.y + radius) / this.#cellSize);
+    const minCellX = Math.floor((point.x - radius) / this.#cellSize);
+    const maxCellX = Math.floor((point.x + radius) / this.#cellSize);
+    const radiusSq = radius * radius;
+    const result = [];
+
+    const rows = this.#rowCoordinates();
+    const rowStart = lowerBoundNumber(rows, minCellY);
+    for (let ri = rowStart; ri < rows.length; ri += 1) {
+      const y = rows[ri];
+      if (y > maxCellY) break;
+
+      const columns = this.#columnCoordinates(y);
+      const columnStart = lowerBoundNumber(columns, minCellX);
+      for (let ci = columnStart; ci < columns.length; ci += 1) {
+        const x = columns[ci];
+        if (x > maxCellX) break;
+
+        const bucket = this.#rows.get(y)?.get(x);
+        if (!bucket) continue;
+        for (const id of bucket) {
+          const record = this.#points.get(id);
+          if (!record) continue;
+          if (predicate && !predicate(id, record)) continue;
+          const dx = record.x - point.x;
+          const dy = record.y - point.y;
+          const distanceSq = dx * dx + dy * dy;
+          if (distanceSq <= radiusSq) {
+            result.push({
+              id,
+              point: { x: record.x, y: record.y },
+              distance: Math.sqrt(distanceSq)
+            });
+          }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  findNearest(point, {
+    maxDistance = Infinity,
+    predicate = null,
+    compareIds = null
+  } = {}) {
+    assertVec2(point);
+    if (maxDistance !== Infinity &&
+        (!Number.isFinite(maxDistance) || maxDistance < 0)) {
+      throw new RangeError(
+        "maxDistance must be a finite number >= 0 or Infinity"
+      );
+    }
+    if (this.#points.size === 0) return null;
+
+    let best = null;
+    let bestDistanceSq = maxDistance * maxDistance;
+    const rows = this.#rowCoordinates();
+
+    for (const rowCandidate of coordinatesByDistance(
+      rows,
+      point.y,
+      this.#cellSize
+    )) {
+      const dy = rowCandidate.distance;
+      if (dy * dy > bestDistanceSq) break;
+
+      const y = rowCandidate.coordinate;
+      const columns = this.#columnCoordinates(y);
+
+      for (const columnCandidate of coordinatesByDistance(
+        columns,
+        point.x,
+        this.#cellSize
+      )) {
+        const dx = columnCandidate.distance;
+        const cellDistanceSq = dx * dx + dy * dy;
+        if (cellDistanceSq > bestDistanceSq) break;
+
+        const bucket = this.#rows.get(y)?.get(columnCandidate.coordinate);
+        if (!bucket) continue;
+
+        for (const id of bucket) {
+          const record = this.#points.get(id);
+          if (!record) continue;
+          if (predicate && !predicate(id, record)) continue;
+
+          const exactX = record.x - point.x;
+          const exactY = record.y - point.y;
+          const distanceSq = exactX * exactX + exactY * exactY;
+          if (distanceSq > bestDistanceSq) continue;
+
+          const winsTie =
+            best != null &&
+            distanceSq === bestDistanceSq &&
+            compareIds != null &&
+            compareIds(id, best.id) < 0;
+
+          if (best == null ||
+              distanceSq < bestDistanceSq ||
+              winsTie) {
+            best = {
+              id,
+              point: { x: record.x, y: record.y },
+              distance: Math.sqrt(distanceSq)
+            };
+            bestDistanceSq = distanceSq;
+          }
+        }
+      }
+    }
+
+    return best;
+  }
+
+  get size() { return this.#points.size; }
+  get cellSize() { return this.#cellSize; }
+  get cellCount() { return this.#cellCount; }
+
+  #rowCoordinates() {
+    if (!this.#sortedRows) {
+      this.#sortedRows = [...this.#rows.keys()].sort((a, b) => a - b);
+    }
+    return this.#sortedRows;
+  }
+
+  #columnCoordinates(rowY) {
+    let cached = this.#sortedColumns.get(rowY);
+    if (!cached) {
+      cached = [...(this.#rows.get(rowY)?.keys() ?? [])]
+        .sort((a, b) => a - b);
+      this.#sortedColumns.set(rowY, cached);
+    }
+    return cached;
   }
 }
