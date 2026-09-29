@@ -385,3 +385,158 @@ test("snapshot validation rejects invalid placement transforms", () => {
     /placement scale must be > 0/
   );
 });
+
+
+test("snapshot validation rejects static attachment threshold mismatch before restore", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "snapshot-threshold-place",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 },
+          { id: "c", x: 0, y: 1 }
+        ],
+        roads: [
+          { id: "ab", from: "a", to: "b" },
+          { id: "ac", from: "a", to: "c" }
+        ]
+      }
+    }],
+    portals: [{
+      id: "door",
+      a: { kind: "external", slot: "outside" },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 1, y: 0 },
+        nodeId: "b"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "ab"
+      }]
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "hall",
+    definitionId: "snapshot-threshold-place",
+    attachments: {
+      outside: {
+        domainId: "street",
+        position: { x: 10, y: 0 },
+        nodeId: "street-door"
+      }
+    }
+  });
+  const snapshot = serializePlaceCore(places);
+  const item = snapshot.instances[0];
+
+  item.attachments.outside = {
+    domainId: place.layerDomains.get("inside"),
+    position: { x: 0, y: 1 },
+    nodeId: "c"
+  };
+
+  assert.throws(
+    () => validatePlaceCoreSnapshot(snapshot),
+    /road binding ab does not connect its endpoint nodes/
+  );
+});
+
+test("snapshot validation rejects dynamic threshold node mismatch", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "dynamic-snapshot-threshold",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 },
+          { id: "c", x: 0, y: 1 }
+        ],
+        roads: [{
+          id: "ab",
+          from: "a",
+          to: "b"
+        }]
+      }
+    }]
+  });
+  const place = places.createPlace({
+    id: "hall",
+    definitionId: "dynamic-snapshot-threshold"
+  });
+  const domainId = place.layerDomains.get("inside");
+
+  places.addPortal("hall", {
+    id: "door",
+    a: {
+      domainId,
+      position: { x: 0, y: 0 },
+      nodeId: "a",
+      layerId: "inside"
+    },
+    b: {
+      domainId,
+      position: { x: 1, y: 0 },
+      nodeId: "b",
+      layerId: "inside"
+    },
+    roadBindings: [{
+      layerId: "inside",
+      roadId: "ab"
+    }]
+  });
+
+  const snapshot = serializePlaceCore(places);
+  snapshot.instances[0].dynamicPortals[0].b = {
+    ...snapshot.instances[0].dynamicPortals[0].b,
+    position: { x: 0, y: 1 },
+    nodeId: "c"
+  };
+
+  assert.throws(
+    () => validatePlaceCoreSnapshot(snapshot),
+    /road binding ab does not connect its endpoint nodes/
+  );
+});
+
+test("snapshot validation requires topology-backed dynamic road bindings", () => {
+  const snapshot = snapshotFixture();
+  snapshot.instances[0].dynamicPortals.push({
+    id: "bad-topology-binding",
+    a: {
+      domainId: "street",
+      position: { x: 0, y: 0 }
+    },
+    b: {
+      domainId: "other",
+      position: { x: 0, y: 0 }
+    },
+    roadBindings: [{
+      layerId: "cellar",
+      roadId: "imaginary"
+    }]
+  });
+
+  const definition = snapshot.definitions[0].blueprint;
+  const cellar = definition.layers.find((layer) => layer.id === "cellar");
+  cellar.navigation = null;
+  cellar.topologyId = null;
+
+  // Re-hash after intentionally producing a structurally valid definition
+  // whose dynamic binding points at a layer without navigation ownership.
+  const compiled = compilePlace(definition);
+  snapshot.definitions[0].contentHash = compiled.contentHash;
+  snapshot.definitions[0].revision = compiled.revision;
+
+  assert.throws(
+    () => validatePlaceCoreSnapshot(snapshot),
+    /road binding requires navigation topology on layer cellar/
+  );
+});
