@@ -245,16 +245,15 @@ export class PlaceRegistry {
     return best ? { ...best, placeId: instanceId, domainId: instance.layerDomains.get(best.layerId), distance: Math.sqrt(bestDistanceSq) } : null;
   }
 
-  findNearestAnchorInDomain(domainId, position, options = {}) {
+  getAnchorsForDomain(domainId, options = {}) {
     const binding = this.#domainBindings.get(domainId);
-    if (!binding) return null;
+    if (!binding) return [];
     const instance = this.#instances.get(binding.instanceId);
-    if (!instance) return null;
+    if (!instance) return [];
     const definition = this.#definitions.get(instance.definitionId);
     const candidates = options.tag ? definition.getAnchorsByTag(options.tag) : definition.anchors;
+    const result = [];
 
-    let best = null;
-    let bestDistanceSq = Infinity;
     for (const anchor of candidates) {
       if (anchor.layerId !== binding.layerId) continue;
       if (options.kind != null && anchor.kind !== options.kind) continue;
@@ -263,6 +262,22 @@ export class PlaceRegistry {
         const space = definition.getSpace(anchor.spaceId);
         if (space && !this.#spaceEnabled(instance, definition, space)) continue;
       }
+      result.push({
+        ...anchor,
+        placeId: instance.id,
+        domainId
+      });
+    }
+
+    result.sort((a, b) => a.id.localeCompare(b.id));
+    return result;
+  }
+
+  findNearestAnchorInDomain(domainId, position, options = {}) {
+    let best = null;
+    let bestDistanceSq = Infinity;
+
+    for (const anchor of this.getAnchorsForDomain(domainId, options)) {
       const distanceSq = squaredDistance(position, anchor.position);
       if (distanceSq < bestDistanceSq ||
           (distanceSq === bestDistanceSq && anchor.id.localeCompare(best?.id ?? "") < 0)) {
@@ -273,8 +288,6 @@ export class PlaceRegistry {
 
     return best ? {
       ...best,
-      placeId: instance.id,
-      domainId,
       distance: Math.sqrt(bestDistanceSq)
     } : null;
   }
