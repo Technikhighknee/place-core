@@ -1870,6 +1870,13 @@ export class PlaceRegistry {
       instanceCount: this.#instances.size,
       domainBindingCount: this.#domainBindings.size,
       portalRecordCount: this.#portalRecords.size,
+      portalEndpointCount: this.#portalEndpointRecords.size,
+      portalEndpointDomainCount: this.#portalEndpointIndexes.size,
+      traversablePortalEndpointDomainCount:
+        this.#traversablePortalEndpointIndexes.size,
+      traversablePortalEndpointCount:
+        [...this.#traversablePortalEndpointIndexes.values()]
+          .reduce((sum, index) => sum + index.size, 0),
       portalOverrideCount,
       boundaryOverrideCount,
       spaceOverrideCount,
