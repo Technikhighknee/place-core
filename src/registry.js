@@ -159,6 +159,67 @@ function assertSameDomainPortalEnforceable(instance, portal, label = "portal") {
   }
 }
 
+function validateDynamicPortalRoadBindings(
+  instance,
+  definition,
+  portal
+) {
+  for (const binding of portal.roadBindings ?? []) {
+    const layer = definition.getLayer(binding.layerId);
+    if (!layer) {
+      throw new Error(
+        `dynamic portal ${portal.id} road binding references unknown layer ${binding.layerId}`
+      );
+    }
+    if (layer.topologyId == null) {
+      throw new Error(
+        `dynamic portal ${portal.id} road binding requires navigation topology on layer ${binding.layerId}`
+      );
+    }
+
+    if (layer.navigation) {
+      const road = layer.navigation.roads.find(
+        (candidate) => candidate.id === binding.roadId
+      );
+      if (!road) {
+        throw new Error(
+          `dynamic portal ${portal.id} references unknown navigation road ${binding.roadId}`
+        );
+      }
+
+      const domainId = instance.layerDomains.get(binding.layerId);
+      if (portal.a.domainId === domainId &&
+          portal.b.domainId === domainId) {
+        if (portal.a.nodeId == null || portal.b.nodeId == null) {
+          throw new Error(
+            `dynamic same-domain portal ${portal.id} with a threshold road binding requires nodeId on both endpoints`
+          );
+        }
+
+        const forward =
+          road.from === portal.a.nodeId &&
+          road.to === portal.b.nodeId;
+        const reverse =
+          road.from === portal.b.nodeId &&
+          road.to === portal.a.nodeId;
+
+        if (!forward && !reverse) {
+          throw new Error(
+            `dynamic portal ${portal.id} road binding ${binding.roadId} does not connect its endpoint nodes`
+          );
+        }
+
+        if (portal.bidirectional === false &&
+            (!forward || road.bidirectional !== false)) {
+          throw new Error(
+            `dynamic unidirectional portal ${portal.id} requires a one-way threshold road from endpoint a to b`
+          );
+        }
+      }
+    }
+  }
+}
+
 export class PlaceInstance {
   #portalOverrides = new Map();
   #boundaryOverrides = new Map();
@@ -1416,6 +1477,11 @@ export class PlaceRegistry {
       connected: true,
       traversable: portalTraversableState(portal)
     };
+    validateDynamicPortalRoadBindings(
+      instance,
+      definition,
+      resolvedPortal
+    );
     assertSameDomainPortalEnforceable(
       instance,
       resolvedPortal,
