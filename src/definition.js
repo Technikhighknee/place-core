@@ -325,13 +325,27 @@ export class CompiledPlaceDefinition {
   locateSpaces(layerId, position) {
     const index = this.#spaceIndexes.get(layerId);
     if (!index) return [];
+
+    // Ordered from least-specific to most-specific so consumers can use the
+    // final entry as the primary/deepest semantic space.
     return index.queryPoint(position).sort((a, b) => {
-      const depthDelta = this.getSpaceDepth(a.id) - this.getSpaceDepth(b.id);
+      const depthDelta =
+        this.getSpaceDepth(a.id) -
+        this.getSpaceDepth(b.id);
       if (depthDelta !== 0) return depthDelta;
+
       const priorityDelta = a.priority - b.priority;
       if (priorityDelta !== 0) return priorityDelta;
-      return a.id.localeCompare(b.id);
+
+      // The final entry wins. Reverse lexical order here so the smaller ID is
+      // the deterministic winner when depth and priority are identical.
+      return b.id.localeCompare(a.id);
     });
+  }
+
+  primarySpaceAt(layerId, position) {
+    const spaces = this.locateSpaces(layerId, position);
+    return spaces.length ? spaces[spaces.length - 1] : null;
   }
 
   getDiagnostics() {
