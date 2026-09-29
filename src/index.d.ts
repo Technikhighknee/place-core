@@ -310,15 +310,27 @@ export interface ResolvedPortal {
 export class PlaceInstance {
   readonly id: PlaceId;
   readonly definitionId: string;
-  parentId: PlaceId | null;
-  readonly layerDomains: Map<string, string>;
-  readonly attachments: Map<string, PlaceAttachment>;
-  placement: PlacePlacement | null;
-  metadata: JsonValue;
-  readonly portalOverrides: Map<string, Record<string, boolean>>;
-  readonly boundaryOverrides: Map<string, { enabled?: boolean }>;
-  readonly spaceOverrides: Map<string, { enabled?: boolean }>;
-  readonly dynamicPortals: Map<string, DynamicPortalInput>;
+  readonly parentId: PlaceId | null;
+  readonly layerDomains: ReadonlyMap<string, string>;
+  readonly attachments: ReadonlyMap<string, PlaceAttachment>;
+  readonly placement: PlacePlacement | null;
+  readonly metadata: JsonValue;
+  readonly portalOverrides: ReadonlyMap<
+    string,
+    Readonly<Record<string, boolean>>
+  >;
+  readonly boundaryOverrides: ReadonlyMap<
+    string,
+    Readonly<{ enabled?: boolean }>
+  >;
+  readonly spaceOverrides: ReadonlyMap<
+    string,
+    Readonly<{ enabled?: boolean }>
+  >;
+  readonly dynamicPortals: ReadonlyMap<
+    string,
+    Readonly<DynamicPortalInput>
+  >;
   getMembership(
     parentPlaceId: PlaceId,
     kind?: string
