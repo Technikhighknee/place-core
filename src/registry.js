@@ -1290,7 +1290,13 @@ export class PlaceRegistry {
     this.#registerMembershipDependencies(instance);
     this.#registerPlacementDependency(instance);
     for (const [layerId, domainId] of layerDomains) {
-      this.#domainBindings.set(domainId, { instanceId: instance.id, layerId });
+      this.#domainBindings.set(
+        domainId,
+        deepFreeze({
+          instanceId: instance.id,
+          layerId
+        })
+      );
     }
     this.#indexExterior(instance, definition);
     this.#reindexInstancePortals(instance, definition);
