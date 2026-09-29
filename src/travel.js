@@ -549,12 +549,162 @@ function optimizeAllShortestDomainPaths(
   return best;
 }
 
+function anchorTargetKey(anchor) {
+  return `${typeof anchor.placeId}:${String(anchor.placeId)}\u0000${anchor.id}`;
+}
+
+function planNearestTaggedAnchor(registry, bridge, entity, target, options = {}) {
+  const startDomainId = entity.domainId ?? "default";
+  const excludedPortalKeys = new Set(options.excludedPortalKeys ?? []);
+  const searchOptions = { ...options, excludedPortalKeys };
+  const routeCache = new Map();
+  const queue = new MinHeap();
+  const bestCostByState = new Map();
+  const maxExpansions = options.maxNearestTargetExpansions ?? 250_000;
+  const maxCost = Number.isFinite(options.maxCost) ? options.maxCost : Infinity;
+
+  const start = {
+    key: "start",
+    cost: 0,
+    domainId: startDomainId,
+    position: entity.position,
+    steps: [],
+    domains: [startDomainId]
+  };
+  bestCostByState.set(start.key, 0);
+  queue.push(start);
+
+  let bestGoal = null;
+  let expansions = 0;
+
+  while (queue.size) {
+    const state = queue.pop();
+    if (state.cost !== bestCostByState.get(state.key)) continue;
+    if (state.cost >= maxCost) continue;
+    if (bestGoal && state.cost >= bestGoal.cost) break;
+    if (++expansions > maxExpansions) {
+      throw new Error("nearest semantic target search exceeded maxNearestTargetExpansions");
+    }
+
+    const anchors = registry.getAnchorsForDomain(state.domainId, {
+      tag: target.tag,
+      kind: target.anchorKind,
+      spaceId: target.spaceId
+    });
+
+    for (const anchor of anchors) {
+      if (target.placeId != null && anchor.placeId !== target.placeId) continue;
+      if (typeof options.anchorPredicate === "function" &&
+          options.anchorPredicate(anchor) !== true) continue;
+
+      const resolvedTarget = deepFreeze({
+        placeId: anchor.placeId,
+        anchorId: anchor.id,
+        spaceId: anchor.spaceId,
+        layerId: anchor.layerId,
+        domainId: anchor.domainId,
+        position: anchor.position,
+        nodeId: anchor.nodeId
+      });
+
+      const route = localRoute(
+        bridge,
+        entity.mobility,
+        state,
+        resolvedTarget,
+        searchOptions,
+        routeCache,
+        state.key
+      );
+      if (!route) continue;
+
+      const cost = state.cost + route.estimatedSeconds;
+      if (cost > maxCost) continue;
+      const key = anchorTargetKey(anchor);
+      const steps = appendJourney(state.steps, state, resolvedTarget, route);
+
+      if (!bestGoal ||
+          cost < bestGoal.cost ||
+          (cost === bestGoal.cost && key.localeCompare(bestGoal.key) < 0)) {
+        bestGoal = {
+          key,
+          cost,
+          steps,
+          domains: state.domains,
+          resolvedTarget
+        };
+      }
+    }
+
+    for (const edge of transitionsFrom(registry, state.domainId, searchOptions)) {
+      const route = localRoute(
+        bridge,
+        entity.mobility,
+        state,
+        edge.from,
+        searchOptions,
+        routeCache,
+        state.key
+      );
+      if (!route) continue;
+
+      const cost = state.cost + route.estimatedSeconds + (edge.portal.transitionCost ?? 0);
+      if (cost > maxCost || (bestGoal && cost >= bestGoal.cost)) continue;
+
+      const key = transitionKey(edge);
+      const previous = bestCostByState.get(key);
+      if (previous != null && previous <= cost) continue;
+
+      const journeySteps = appendJourney(state.steps, state, edge.from, route);
+      bestCostByState.set(key, cost);
+      queue.push({
+        key,
+        cost,
+        domainId: edge.to.domainId,
+        position: edge.to.position,
+        domains: [...state.domains, edge.to.domainId],
+        steps: [...journeySteps, deepFreeze({
+          type: "traverse-portal",
+          portalKey: edge.portalKey,
+          placeId: edge.portal.instanceId,
+          portalId: edge.portal.id,
+          fromDomainId: edge.from.domainId,
+          toDomainId: edge.to.domainId,
+          destinationPosition: edge.to.position,
+          transitionCost: edge.portal.transitionCost ?? 0
+        })]
+      });
+    }
+  }
+
+  if (!bestGoal) return null;
+
+  const steps = Object.freeze(bestGoal.steps);
+  return deepFreeze({
+    entityId: entity.id,
+    target: cloneJson(target),
+    resolvedTarget: bestGoal.resolvedTarget,
+    graphRevision: registry.graphRevision,
+    startDomainId,
+    domainPath: Object.freeze([...bestGoal.domains]),
+    steps,
+    legs: steps,
+    estimatedSeconds: bestGoal.cost,
+    rejectedDomainPairs: Object.freeze([]),
+    searchExpansions: expansions
+  });
+}
+
 export function planTravel(registry, a, b, c, d) {
   const { bridge, entityOrId, target, options } = resolvePlanCall(registry, a, b, c, d);
   if (!bridge) throw new Error("planTravel requires a WorldCoreBridge");
   const entity = typeof entityOrId === "object" ? entityOrId : bridge.getEntity(entityOrId);
   if (!entity) throw new Error(`unknown entity ${String(entityOrId)}`);
   if (!entity.mobility) throw new Error(`entity ${String(entity.id)} has no mobility profile`);
+
+  if (target?.kind === "nearest" && target.tag) {
+    return planNearestTaggedAnchor(registry, bridge, entity, target, options);
+  }
 
   const resolvedTarget = resolveTravelTarget(registry, target);
   const startDomainId = entity.domainId ?? "default";
