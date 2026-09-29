@@ -45,14 +45,16 @@ function buildIntegratedWorld() {
     stopJourney
   });
 
-  const places = new PlaceRegistry({ captureEvents: true });
-  places.attachWorldCoreBridge(bridge);
+  const places = new PlaceRegistry({
+    bridge,
+    captureEvents: true
+  });
   places.registerDefinition(tavernBlueprint());
 
   const home = places.createPlace({
     id: "home",
     definitionId: "tavern",
-    externalBindings: {
+    attachments: {
       street: {
         domainId: "street",
         position: { x: 0, y: 0 },
@@ -64,7 +66,7 @@ function buildIntegratedWorld() {
   const goose = places.createPlace({
     id: "golden-goose",
     definitionId: "tavern",
-    externalBindings: {
+    attachments: {
       street: {
         domainId: "street",
         position: { x: 40, y: 0 },

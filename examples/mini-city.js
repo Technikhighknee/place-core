@@ -75,14 +75,13 @@ const bridge = new WorldCoreBridge({
   stopJourney
 });
 
-const places = new PlaceRegistry();
-places.attachWorldCoreBridge(bridge);
+const places = new PlaceRegistry({ bridge });
 places.registerDefinition(building);
 
 const home = places.createPlace({
   id: "home",
   definitionId: "small-building",
-  externalBindings: {
+  attachments: {
     street: { domainId: "street", position: { x: 0, y: 0 }, nodeId: "home-door" }
   }
 });
@@ -90,7 +89,7 @@ const home = places.createPlace({
 places.createPlace({
   id: "inn",
   definitionId: "small-building",
-  externalBindings: {
+  attachments: {
     street: { domainId: "street", position: { x: 30, y: 0 }, nodeId: "inn-door" }
   }
 });
