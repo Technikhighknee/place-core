@@ -141,7 +141,8 @@ export class PlaceRegistry {
   #captureEvents;
   #bridge = null;
   #sequence = 0;
-  #graphRevision = 0;
+  #stateRevision = 0;
+  #travelRevision = 0;
 
   constructor(options = {}) {
     this.#captureEvents = options.captureEvents === true;
@@ -163,8 +164,15 @@ export class PlaceRegistry {
     if (!this._pendingTravels) this._pendingTravels = [];
     return this._pendingTravels;
   }
-  get graphRevision() { return this.#graphRevision; }
+  get stateRevision() { return this.#stateRevision; }
+  get travelRevision() { return this.#travelRevision; }
+  get graphRevision() { return this.#travelRevision; }
   get bridge() { return this.#bridge; }
+
+  #touchState({ travel = false } = {}) {
+    this.#stateRevision += 1;
+    if (travel) this.#travelRevision += 1;
+  }
 
   attachBridge(bridge) {
     if (!bridge || typeof bridge !== "object") throw new TypeError("bridge must be an object");
@@ -426,7 +434,7 @@ export class PlaceRegistry {
     }
     this.#indexExterior(instance, definition);
     this.#reindexInstancePortals(instance, definition);
-    this.#graphRevision += 1;
+    this.#touchState({ travel: true });
 
     try {
       this.#bridge?.materializePlace?.(instance, definition);
@@ -472,7 +480,7 @@ export class PlaceRegistry {
     this.#unregisterPlacementDependency(instance);
     this.#removeInstancePortals(instance.id);
     this.#instances.delete(instance.id);
-    this.#graphRevision += 1;
+    this.#touchState({ travel: true });
     this.emit("place-removed", { placeId: instanceId, definitionId: instance.definitionId });
     return true;
   }
@@ -546,7 +554,7 @@ export class PlaceRegistry {
       ? (instance.getBoundaryOverride(boundaryId)?.enabled ?? boundary.enabled)
       : Boolean(patch.enabled);
     instance.setBoundaryOverride(boundaryId, enabled === boundary.enabled ? null : { enabled });
-    this.#graphRevision += 1;
+    this.#touchState({ travel: true });
     const resolved = { ...boundary, enabled };
     this.#bridge?.syncBoundaryState?.(instance, resolved);
     this.emit("boundary-state-changed", { placeId: instanceId, boundaryId, enabled });
@@ -565,7 +573,7 @@ export class PlaceRegistry {
       ? (instance.getSpaceOverride(spaceId)?.enabled ?? baseEnabled)
       : Boolean(patch.enabled);
     instance.setSpaceOverride(spaceId, enabled === baseEnabled ? null : { enabled });
-    this.#graphRevision += 1;
+    this.#touchState({ travel: true });
     this.#refreshTrackedOccupancy(affectedEntities);
     this.emit("space-state-changed", { placeId: instanceId, spaceId, enabled });
     return { ...space, enabled };
@@ -578,7 +586,7 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     instance.attachments.set(slot, normalizeAttachment(value, `attachment.${slot}`));
     this.#reindexInstancePortals(instance, definition);
-    this.#graphRevision += 1;
+    this.#touchState({ travel: true });
     for (const portal of definition.portals) {
       if ([portal.a, portal.b].some((endpoint) => endpoint.kind === "external" && endpoint.slot === slot)) {
         this.#bridge?.syncPortalState?.(instance, portal, this.resolvePortal(instanceId, portal.id));
@@ -597,7 +605,7 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     instance.attachments.delete(slot);
     this.#reindexInstancePortals(instance, definition);
-    this.#graphRevision += 1;
+    this.#touchState({ travel: true });
 
     for (const portal of definition.portals) {
       if ([portal.a, portal.b].some((endpoint) =>
@@ -650,7 +658,7 @@ export class PlaceRegistry {
       affectedEntities.add(entityId);
     }
 
-    this.#graphRevision += 1;
+    this.#touchState();
     this.#refreshTrackedOccupancy(affectedEntities);
     this.emit("place-placement-changed", {
       placeId: instanceId,
@@ -682,7 +690,7 @@ export class PlaceRegistry {
     this.#unregisterSemanticDependency(instance);
     instance.parentId = parentId ?? null;
     this.#registerSemanticDependency(instance);
-    this.#graphRevision += 1;
+    this.#touchState();
     this.#refreshTrackedOccupancy(affectedEntities);
     this.emit("place-parent-changed", { placeId: instanceId, parentId: instance.parentId });
     return instance;
@@ -700,7 +708,7 @@ export class PlaceRegistry {
         if (patch[key] !== undefined) dynamic[key] = Boolean(patch[key]);
       }
       this.#reindexInstancePortals(instance, definition);
-      this.#graphRevision += 1;
+      this.#touchState({ travel: true });
       const resolved = this.resolvePortal(instanceId, portalId);
       this.#bridge?.syncPortalState?.(instance, dynamic, resolved);
       this.emit("portal-state-changed", { placeId: instanceId, portalId, state: cloneState(resolved) });
@@ -715,7 +723,7 @@ export class PlaceRegistry {
     }
     instance.setPortalOverride(portalId, next);
     this.#reindexInstancePortals(instance, definition);
-    this.#graphRevision += 1;
+    this.#touchState({ travel: true });
     const resolved = this.resolvePortal(instanceId, portalId);
     this.#bridge?.syncPortalState?.(instance, base, resolved);
     this.emit("portal-state-changed", { placeId: instanceId, portalId, state: cloneState(resolved) });
@@ -767,7 +775,7 @@ export class PlaceRegistry {
     };
     instance.addDynamicPortal(portal);
     this.#reindexInstancePortals(instance, definition);
-    this.#graphRevision += 1;
+    this.#touchState({ travel: true });
     this.#bridge?.syncDynamicPortal?.(instance, portal, this.resolvePortal(instanceId, portal.id));
     this.emit("portal-added", { placeId: instanceId, portalId: portal.id });
     return this.resolvePortal(instanceId, portal.id);
@@ -781,7 +789,7 @@ export class PlaceRegistry {
     instance.removeDynamicPortal(portalId);
     const definition = this.#definitions.get(instance.definitionId);
     this.#reindexInstancePortals(instance, definition);
-    this.#graphRevision += 1;
+    this.#touchState({ travel: true });
     this.emit("portal-removed", { placeId: instanceId, portalId });
     return true;
   }
@@ -931,7 +939,9 @@ export class PlaceRegistry {
       dynamicPortalCount,
       occupiedEntityCount: this.#occupancy.size,
       occupancySpatialDomainCount: this.#occupancySpatialIndexes.size,
-      graphRevision: this.#graphRevision,
+      stateRevision: this.#stateRevision,
+      travelRevision: this.#travelRevision,
+      graphRevision: this.#travelRevision,
       footprintIndexCells,
       eventQueueSize: this.#events.size,
       droppedEventCount: this.#events.dropped
