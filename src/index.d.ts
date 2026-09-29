@@ -604,7 +604,8 @@ export interface TravelOptions {
   excludedPortalKeys?: Iterable<string>;
   excludedDomainPairs?: Iterable<string>;
   maxDomainPathAttempts?: number;
-  maxDomainSearchDomains?: number;
+  maxShortestDomainPaths?: number;
+  allowPartialShortestPathSearch?: boolean;
   maxConcreteStatesPerLayer?: number;
   maxNearestTargetExpansions?: number;
   maxCost?: number;
