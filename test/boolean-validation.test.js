@@ -192,3 +192,134 @@ test("registry event capture configuration is strict", () => {
     /event capture must be a boolean/
   );
 });
+
+
+test("live mutation patches reject unknown fields atomically", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "strict-patch-place",
+    layers: [{ id: "inside" }],
+    spaces: [{
+      id: "room",
+      layerId: "inside",
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 2,
+        maxY: 2
+      }
+    }],
+    boundaries: [{
+      id: "wall",
+      layerId: "inside",
+      a: { x: 0, y: 0 },
+      b: { x: 1, y: 0 }
+    }],
+    portals: [{
+      id: "door",
+      a: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 }
+      },
+      b: {
+        kind: "external",
+        slot: "outside"
+      }
+    }]
+  });
+  places.createPlace({
+    id: "house",
+    definitionId: "strict-patch-place"
+  });
+
+  const stateRevision = places.stateRevision;
+  const travelRevision = places.travelRevision;
+
+  assert.throws(
+    () => places.setPortalState(
+      "house",
+      "door",
+      { lokced: true }
+    ),
+    /portal state patch contains unknown field lokced/
+  );
+  assert.throws(
+    () => places.setBoundaryState(
+      "house",
+      "wall",
+      { visible: false }
+    ),
+    /boundary state patch contains unknown field visible/
+  );
+  assert.throws(
+    () => places.setSpaceState(
+      "house",
+      "room",
+      { active: false }
+    ),
+    /space state patch contains unknown field active/
+  );
+
+  assert.equal(
+    places.getPortal("house", "door").locked,
+    false
+  );
+  assert.equal(
+    places.getBoundary("house", "wall").enabled,
+    true
+  );
+  assert.equal(
+    places.getSpace("house", "room").enabled,
+    true
+  );
+  assert.equal(places.stateRevision, stateRevision);
+  assert.equal(places.travelRevision, travelRevision);
+});
+
+test("live mutation patches must be plain objects", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "plain-patch-place",
+    layers: [{ id: "inside" }],
+    spaces: [{
+      id: "room",
+      layerId: "inside",
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 1,
+        maxY: 1
+      }
+    }],
+    boundaries: [{
+      id: "wall",
+      layerId: "inside",
+      a: { x: 0, y: 0 },
+      b: { x: 1, y: 0 }
+    }]
+  });
+  places.createPlace({
+    id: "house",
+    definitionId: "plain-patch-place"
+  });
+
+  assert.throws(
+    () => places.setBoundaryState(
+      "house",
+      "wall",
+      []
+    ),
+    /must be a plain object/
+  );
+  assert.throws(
+    () => places.setSpaceState(
+      "house",
+      "room",
+      null
+    ),
+    /must be a plain object/
+  );
+});
