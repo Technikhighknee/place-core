@@ -189,3 +189,125 @@ test("attachment cannot create unenforceable same-domain delay", () => {
     "failed attachment change must roll back atomically"
   );
 });
+
+
+test("dynamic road bindings reject unknown embedded roads and wrong endpoint connections", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "dynamic-road-validation",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 },
+          { id: "c", x: 0, y: 1 }
+        ],
+        roads: [
+          {
+            id: "ab",
+            from: "a",
+            to: "b",
+            bidirectional: true
+          },
+          {
+            id: "ac",
+            from: "a",
+            to: "c",
+            bidirectional: true
+          }
+        ]
+      }
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "hall",
+    definitionId: "dynamic-road-validation"
+  });
+  const domainId = place.layerDomains.get("inside");
+  const beforeState = places.stateRevision;
+  const beforeTravel = places.travelRevision;
+
+  assert.throws(
+    () => places.addPortal("hall", {
+      id: "missing-road",
+      a: {
+        domainId,
+        position: { x: 0, y: 0 },
+        nodeId: "a",
+        layerId: "inside"
+      },
+      b: {
+        domainId: "outside",
+        position: { x: 0, y: 0 }
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "missing"
+      }]
+    }),
+    /unknown navigation road missing/
+  );
+
+  assert.throws(
+    () => places.addPortal("hall", {
+      id: "wrong-threshold",
+      transitionCost: 1,
+      a: {
+        domainId,
+        position: { x: 0, y: 0 },
+        nodeId: "a",
+        layerId: "inside"
+      },
+      b: {
+        domainId,
+        position: { x: 1, y: 0 },
+        nodeId: "b",
+        layerId: "inside"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "ac"
+      }]
+    }),
+    /does not connect its endpoint nodes/
+  );
+
+  assert.equal(place.dynamicPortals.size, 0);
+  assert.equal(places.stateRevision, beforeState);
+  assert.equal(places.travelRevision, beforeTravel);
+  places.assertInternalConsistency();
+});
+
+test("dynamic road bindings require a topology-backed owner layer", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "no-topology-dynamic",
+    layers: [{ id: "inside" }]
+  });
+  const place = places.createPlace({
+    id: "hall",
+    definitionId: "no-topology-dynamic"
+  });
+  const domainId = place.layerDomains.get("inside");
+
+  assert.throws(
+    () => places.addPortal("hall", {
+      id: "bad-binding",
+      a: {
+        domainId,
+        position: { x: 0, y: 0 }
+      },
+      b: {
+        domainId: "outside",
+        position: { x: 0, y: 0 }
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "road"
+      }]
+    }),
+    /road binding requires navigation topology/
+  );
+});
