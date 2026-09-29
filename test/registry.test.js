@@ -10,7 +10,7 @@ import {
 import { tavernBlueprint } from "./fixtures.js";
 
 function buildRegistry() {
-  const registry = new PlaceRegistry();
+  const registry = new PlaceRegistry({ captureEvents: true });
   registry.registerDefinition(tavernBlueprint());
   registry.createPlace({
     id: "golden-goose",
