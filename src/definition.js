@@ -741,12 +741,17 @@ export function compilePlace(input, options = {}) {
         );
       }
 
+      let allowsForward = false;
+      let allowsReverse = false;
+      let verifiedThresholdRoad = false;
+
       for (const binding of thresholdBindings) {
         const road = navigationRoadMaps
           .get(binding.layerId)
           ?.get(binding.roadId);
 
         if (road) {
+          verifiedThresholdRoad = true;
           const connectsForward =
             road.from === portal.a.nodeId &&
             road.to === portal.b.nodeId;
@@ -760,13 +765,10 @@ export function compilePlace(input, options = {}) {
             );
           }
 
-          if (portal.bidirectional === false) {
-            if (!connectsForward || road.bidirectional !== false) {
-              throw new Error(
-                `unidirectional portal ${portal.id} requires a one-way threshold road from endpoint a to b`
-              );
-            }
-          }
+          allowsForward ||= connectsForward ||
+            (connectsReverse && road.bidirectional);
+          allowsReverse ||= connectsReverse ||
+            (connectsForward && road.bidirectional);
         }
 
         const ownerKey = `${binding.layerId}\u0000${binding.roadId}`;
@@ -777,6 +779,25 @@ export function compilePlace(input, options = {}) {
           );
         }
         sameDomainPortalRoadOwners.set(ownerKey, portal.id);
+      }
+
+      if (verifiedThresholdRoad) {
+        if (!allowsForward) {
+          throw new Error(
+            `portal ${portal.id} threshold roads do not allow traversal from endpoint a to b`
+          );
+        }
+        if (portal.bidirectional) {
+          if (!allowsReverse) {
+            throw new Error(
+              `portal ${portal.id} is bidirectional but its threshold roads do not allow traversal from endpoint b to a`
+            );
+          }
+        } else if (allowsReverse) {
+          throw new Error(
+            `portal ${portal.id} is unidirectional but its threshold roads allow reverse traversal`
+          );
+        }
       }
     }
   }
