@@ -70,7 +70,10 @@ test("snapshot validation rejects missing parents and malformed dynamic portals"
     a: { domainId: "inn:ground", position: { x: Number.NaN, y: 0 } },
     b: { domainId: "street", position: { x: 0, y: 0 } }
   });
-  assert.throws(() => validatePlaceCoreSnapshot(malformed), /invalid endpoint/);
+  assert.throws(
+    () => validatePlaceCoreSnapshot(malformed),
+    /position must contain finite x\/y/
+  );
 });
 
 
@@ -184,4 +187,201 @@ test("serialized snapshots are byte-stable across irrelevant insertion order", (
 
   assert.equal(aJson, bJson);
   assert.equal(computePlaceCoreStateHash(a), computePlaceCoreStateHash(b));
+});
+
+
+test("snapshot validation rejects definition revision reference drift", () => {
+  const snapshot = snapshotFixture();
+  snapshot.definitions[0].revision = "tampered-revision";
+
+  assert.throws(
+    () => validatePlaceCoreSnapshot(snapshot),
+    /definition revision mismatch/
+  );
+});
+
+test("snapshot validation rejects unknown layer domains and invalid attachments", () => {
+  const extraLayer = snapshotFixture();
+  extraLayer.instances[0].layerDomains.ghost = "ghost-domain";
+  assert.throws(
+    () => validatePlaceCoreSnapshot(extraLayer),
+    /domain for unknown layer ghost/
+  );
+
+  const badAttachment = snapshotFixture();
+  badAttachment.instances[0].attachments.street.position.x = Number.NaN;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(badAttachment),
+    /attachments\.street\.position must contain finite x\/y/
+  );
+});
+
+test("snapshot validation rejects malformed sparse overrides before restore", () => {
+  const badBoolean = snapshotFixture();
+  badBoolean.instances[0].portalOverrides["front-door"].locked = "true";
+  assert.throws(
+    () => validatePlaceCoreSnapshot(badBoolean),
+    /locked must be a boolean/
+  );
+
+  const unknownField = snapshotFixture();
+  unknownField.instances[0].spaceOverrides.taproom.extra = true;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(unknownField),
+    /contains unknown field extra/
+  );
+});
+
+test("snapshot validation rejects invalid dynamic portal semantics", () => {
+  const invalidCost = snapshotFixture();
+  invalidCost.instances[0].dynamicPortals.push({
+    id: "slow-breach",
+    a: {
+      domainId: "inn:ground",
+      position: { x: 1, y: 0 }
+    },
+    b: {
+      domainId: "street",
+      position: { x: 0, y: 0 }
+    },
+    transitionCost: -1
+  });
+  assert.throws(
+    () => validatePlaceCoreSnapshot(invalidCost),
+    /transitionCost must be a finite number >= 0/
+  );
+
+  const invalidBoolean = snapshotFixture();
+  invalidBoolean.instances[0].dynamicPortals.push({
+    id: "weird-breach",
+    a: {
+      domainId: "inn:ground",
+      position: { x: 1, y: 0 }
+    },
+    b: {
+      domainId: "street",
+      position: { x: 0, y: 0 }
+    },
+    locked: "false"
+  });
+  assert.throws(
+    () => validatePlaceCoreSnapshot(invalidBoolean),
+    /locked must be a boolean/
+  );
+
+  const invalidRoad = snapshotFixture();
+  invalidRoad.instances[0].dynamicPortals.push({
+    id: "bad-road",
+    a: {
+      domainId: "inn:ground",
+      position: { x: 0, y: 0 }
+    },
+    b: {
+      domainId: "street",
+      position: { x: 0, y: 0 }
+    },
+    roadBindings: [{
+      layerId: "ground",
+      roadId: "missing-road"
+    }]
+  });
+  assert.throws(
+    () => validatePlaceCoreSnapshot(invalidRoad),
+    /unknown navigation road missing-road/
+  );
+});
+
+test("snapshot validation rejects malformed active travel state", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "travel-snapshot-place",
+    layers: [{ id: "inside" }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      position: { x: 5, y: 0 },
+      nodeId: "target"
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "travel-snapshot-place"
+  });
+
+  const entity = {
+    id: "hans",
+    domainId: place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() { return entity; },
+    planLocalRoute() { return { estimatedSeconds: 5 }; },
+    startLocalJourney() {
+      entity.journey = { destinationNodeId: "target" };
+      return true;
+    },
+    stopLocalJourney() { entity.journey = null; },
+    transferEntity() {}
+  };
+
+  const { startTravel } = await import("../src/index.js");
+  startTravel(
+    places,
+    bridge,
+    "hans",
+    { placeId: "house", anchorId: "target" }
+  );
+
+  const invalidOption = serializePlaceCore(places);
+  invalidOption.activeTravels[0].options.maxDomainPathAttempts = 0;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(invalidOption),
+    /maxDomainPathAttempts must be a positive integer/
+  );
+
+  const invalidBoolean = serializePlaceCore(places);
+  invalidBoolean.activeTravels[0].localStarted = "true";
+  assert.throws(
+    () => validatePlaceCoreSnapshot(invalidBoolean),
+    /localStarted must be a boolean/
+  );
+
+  const invalidStep = serializePlaceCore(places);
+  invalidStep.activeTravels[0].plan.steps[0].estimatedSeconds = -1;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(invalidStep),
+    /estimatedSeconds/
+  );
+
+  const mismatch = serializePlaceCore(places);
+  mismatch.activeTravels[0].plan.target = {
+    placeId: "house",
+    anchorId: "different"
+  };
+  assert.throws(
+    () => validatePlaceCoreSnapshot(mismatch),
+    /plan target mismatch/
+  );
+});
+
+test("snapshot validation rejects invalid placement transforms", () => {
+  const snapshot = snapshotFixture();
+  snapshot.instances[0].placement = {
+    domainId: "street",
+    parentPlaceId: null,
+    containment: "footprint",
+    transform: {
+      x: 0,
+      y: 0,
+      rotation: 0,
+      scale: 0
+    }
+  };
+
+  assert.throws(
+    () => validatePlaceCoreSnapshot(snapshot),
+    /placement scale must be > 0/
+  );
 });
