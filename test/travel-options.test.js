@@ -274,7 +274,7 @@ test("snapshotting refuses to silently drop function predicates", () => {
       id: "target",
       layerId: "inside",
       tags: ["service"],
-      position: { x: 0, y: 0 },
+      position: { x: 5, y: 0 },
       nodeId: "target"
     }]
   });
@@ -292,9 +292,12 @@ test("snapshotting refuses to silently drop function predicates", () => {
   };
   const bridge = {
     getEntity() { return entity; },
-    planLocalRoute() { return { estimatedSeconds: 0 }; },
-    startLocalJourney() { return true; },
-    stopLocalJourney() {},
+    planLocalRoute() { return { estimatedSeconds: 5 }; },
+    startLocalJourney() {
+      entity.journey = { destinationNodeId: "target" };
+      return true;
+    },
+    stopLocalJourney() { entity.journey = null; },
     transferEntity() {}
   };
 
