@@ -36,15 +36,23 @@ function normalizeAttachment(value, label) {
 function normalizePlacement(value) {
   if (!value) return null;
   assertStringId(value.domainId, "placement.domainId");
+  const containment = value.containment ?? "none";
+  if (containment !== "none" && containment !== "footprint") {
+    throw new TypeError("placement.containment must be \"none\" or \"footprint\"");
+  }
   return deepFreeze({
     domainId: value.domainId,
     transform: normalizeTransform(value.transform),
-    containment: value.containment ?? "none"
+    containment
   });
 }
 
+function typedIdKey(id) {
+  return `${typeof id}:${String(id)}`;
+}
+
 function makeSpaceKey(instanceId, spaceId) {
-  return `${String(instanceId)}\u0000${spaceId}`;
+  return `${typedIdKey(instanceId)}\u0000${spaceId}`;
 }
 
 function cloneState(state) {
@@ -297,6 +305,9 @@ export class PlaceRegistry {
       if (child.parentId === instanceId) throw new Error(`cannot remove place ${String(instanceId)} while child ${String(child.id)} exists`);
     }
     const definition = this.#definitions.get(instance.definitionId);
+    if (callBridge && this.#entitiesByPlace.get(instanceId)?.size) {
+      throw new Error(`cannot remove occupied place ${String(instanceId)}`);
+    }
     if (callBridge) this.#bridge?.unmaterializePlace?.(instance, definition);
     this.clearEntityOccupancyForPlace(instanceId);
     for (const domainId of instance.layerDomains.values()) this.#domainBindings.delete(domainId);
@@ -725,7 +736,7 @@ export class PlaceRegistry {
     if (index.size === 0) this.#exteriorIndexes.delete(instance.placement.domainId);
   }
 
-  #portalKey(instanceId, portalId) { return `${String(instanceId)}\u0000${portalId}`; }
+  #portalKey(instanceId, portalId) { return `${typedIdKey(instanceId)}\u0000${portalId}`; }
 
   #removeInstancePortals(instanceId) {
     const keys = this.#instancePortalKeys.get(instanceId);
