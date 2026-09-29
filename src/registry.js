@@ -612,6 +612,7 @@ export class PlaceRegistry {
   #placementChildren = new Map();
   #semanticChildren = new Map();
   #membershipChildren = new Map();
+  #semanticClosureCache = new Map();
   #portalRecords = new Map();
   #portalsByDomain = new Map();
   #portalEndpointIndexes = new Map();
@@ -1404,6 +1405,7 @@ export class PlaceRegistry {
     this.#unregisterMembershipDependencies(instance);
     this.#unregisterPlacementDependency(instance);
     this.#removeInstancePortals(instance.id);
+    this.#semanticClosureCache.delete(instance.id);
     this.#instances.delete(instance.id);
     if (touchRevision) this.#touchState({ travel: true });
     if (emitEvent) {
@@ -1829,6 +1831,9 @@ export class PlaceRegistry {
       PLACE_INSTANCE_MUTATION_TOKEN
     );
     this.#registerSemanticDependency(instance);
+    this.#invalidateSemanticClosureDescendants(
+      instanceId
+    );
     this.#touchState();
     this.#refreshTrackedOccupancy(affectedEntities);
     this.emit("place-parent-changed", {
@@ -1900,6 +1905,9 @@ export class PlaceRegistry {
       instance.id,
       membership
     );
+    this.#invalidateSemanticClosureDescendants(
+      instanceId
+    );
 
     this.#touchState();
     this.#refreshTrackedOccupancy(affectedEntities);
@@ -1939,6 +1947,9 @@ export class PlaceRegistry {
     this.#unregisterMembershipDependency(
       instance.id,
       membership
+    );
+    this.#invalidateSemanticClosureDescendants(
+      instanceId
     );
 
     this.#touchState();
@@ -2538,6 +2549,8 @@ export class PlaceRegistry {
       semanticMembershipCount,
       semanticMembershipParentCount:
         this.#membershipChildren.size,
+      semanticClosureCacheSize:
+        this.#semanticClosureCache.size,
       portalRecordCount: this.#portalRecords.size,
       portalEndpointCount: this.#portalEndpointRecords.size,
       portalEndpointDomainCount: this.#portalEndpointIndexes.size,
@@ -2646,6 +2659,27 @@ export class PlaceRegistry {
       throw new Error(
         "semantic membership reverse index count drift"
       );
+    }
+
+    for (const [instanceId, cached] of
+      this.#semanticClosureCache) {
+      if (!this.#instances.has(instanceId)) {
+        throw new Error(
+          "semantic closure cache references missing instance"
+        );
+      }
+
+      const expected =
+        this.#computeSemanticClosure(instanceId);
+      if (cached.length !== expected.length ||
+          cached.some(
+            (id, index) =>
+              id !== expected[index]
+          )) {
+        throw new Error(
+          `semantic closure cache drift for ${String(instanceId)}`
+        );
+      }
     }
 
     for (const [key, record] of this.#portalRecords) {
@@ -2870,40 +2904,130 @@ export class PlaceRegistry {
     }
   }
 
-  #semanticClosure(instanceIds) {
+  #semanticChildrenOf(instanceId) {
+    const children = new Map();
+
+    for (const childId of
+      this.#semanticChildren.get(instanceId) ?? []) {
+      children.set(
+        typedIdKey(childId),
+        childId
+      );
+    }
+
+    for (const childId of
+      this.#membershipChildren
+        .get(instanceId)
+        ?.keys?.() ?? []) {
+      children.set(
+        typedIdKey(childId),
+        childId
+      );
+    }
+
+    return [...children.values()]
+      .sort((a, b) =>
+        typedIdKey(a).localeCompare(
+          typedIdKey(b)
+        )
+      );
+  }
+
+  #invalidateSemanticClosureDescendants(instanceId) {
+    const queue = [instanceId];
+    const visited = new Set();
+
+    for (let i = 0; i < queue.length; i += 1) {
+      const currentId = queue[i];
+      const key = typedIdKey(currentId);
+      if (visited.has(key)) continue;
+      visited.add(key);
+
+      this.#semanticClosureCache.delete(
+        currentId
+      );
+
+      for (const childId of
+        this.#semanticChildrenOf(currentId)) {
+        queue.push(childId);
+      }
+    }
+  }
+
+  #computeSemanticClosure(instanceId) {
     const output = [];
     const permanent = new Set();
     const temporary = new Set();
 
-    const visit = (instanceId) => {
-      const key = typedIdKey(instanceId);
+    const visit = (currentId) => {
+      const key = typedIdKey(currentId);
       if (permanent.has(key)) return;
       if (temporary.has(key)) {
-        throw new Error("place semantic membership cycle");
+        throw new Error(
+          "place semantic membership cycle"
+        );
       }
 
-      const instance = this.#instances.get(instanceId);
+      const instance =
+        this.#instances.get(currentId);
       if (!instance) return;
 
       temporary.add(key);
-      for (const parentId of this.#semanticParentIds(instanceId)) {
+      for (const parentId of
+        this.#semanticParentIds(currentId)) {
         visit(parentId);
       }
       temporary.delete(key);
       permanent.add(key);
-      output.push(instanceId);
+      output.push(currentId);
     };
 
+    visit(instanceId);
+    return output;
+  }
+
+  #semanticClosureForInstance(instanceId) {
+    const cached =
+      this.#semanticClosureCache.get(
+        instanceId
+      );
+    if (cached) return cached;
+
+    const computed = Object.freeze(
+      this.#computeSemanticClosure(instanceId)
+    );
+    this.#semanticClosureCache.set(
+      instanceId,
+      computed
+    );
+    return computed;
+  }
+
+  #semanticClosure(instanceIds) {
+    const output = [];
+    const seen = new Set();
     const roots = [...instanceIds]
       .sort((a, b) =>
-        typedIdKey(a).localeCompare(typedIdKey(b))
+        typedIdKey(a).localeCompare(
+          typedIdKey(b)
+        )
       );
+
     for (const instanceId of roots) {
-      visit(instanceId);
+      for (const semanticId of
+        this.#semanticClosureForInstance(
+          instanceId
+        )) {
+        const key = typedIdKey(semanticId);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        output.push(semanticId);
+      }
     }
 
     return output;
   }
+
 
   #assertSemanticGraphAcyclic() {
     const permanent = new Set();
