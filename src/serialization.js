@@ -25,6 +25,7 @@ function serializeTravelState(state) {
     localStarted: state.localStarted === true,
     portalEntered: state.portalEntered === true,
     portalTransitionRemaining: state.portalTransitionRemaining ?? 0,
+    worldChangePolicy: state.worldChangePolicy ?? "encounter",
     status: state.status,
     failureReason: state.failureReason ?? null,
     replans: state.replans ?? 0
@@ -216,6 +217,9 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     if (travel.status !== "active") throw new Error("only active travel states may be persisted in activeTravels");
     if (!Number.isInteger(travel.stepIndex) || travel.stepIndex < 0) throw new Error("invalid active travel stepIndex");
     if (!Number.isInteger(travel.replans) || travel.replans < 0) throw new Error("invalid active travel replans");
+    if (travel.worldChangePolicy !== "encounter" && travel.worldChangePolicy !== "eager") {
+      throw new Error("invalid active travel worldChangePolicy");
+    }
     if (travel.plan != null) {
       assertObject(travel.plan, "active travel plan");
       assertArray(travel.plan.steps, "active travel plan.steps");
@@ -287,6 +291,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
   if (options.bridge && options.resumeWorldCoreState === true) {
     for (const saved of active) {
       const state = cloneJson(saved);
+      state.worldChangePolicy ??= "encounter";
       if (state.plan) {
         state.plan.graphRevision = registry.graphRevision;
         Object.freeze(state.plan.steps);
