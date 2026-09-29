@@ -289,3 +289,32 @@ test("registry structural collections are readonly views", () => {
 
   places.assertInternalConsistency();
 });
+
+
+test("domain binding records cannot be mutated through readonly registry views", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(definition());
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "encapsulation-place"
+  });
+
+  const domainId =
+    place.layerDomains.get("inside");
+  const binding =
+    places.domainBindings.get(domainId);
+
+  assert.ok(binding);
+  assert.throws(
+    () => {
+      binding.instanceId = "corrupted";
+    },
+    TypeError
+  );
+  assert.equal(
+    places.getDomainBinding(domainId).instanceId,
+    "house"
+  );
+
+  places.assertInternalConsistency();
+});
