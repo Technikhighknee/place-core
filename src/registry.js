@@ -77,6 +77,7 @@ function cloneState(state) {
 }
 
 function portalTraversableState(portal) {
+  if (portal.connected === false) return false;
   if (!portal.enabled || portal.locked || portal.blocked || portal.destroyed) return false;
   if (portal.blocksWhenClosed && !portal.open) return false;
   return true;
@@ -399,14 +400,6 @@ export class PlaceRegistry {
       assertStringId(slot, "attachment slot");
       attachments.set(slot, normalizeAttachment(value, `attachment.${slot}`));
     }
-    for (const portal of definition.portals) {
-      for (const endpoint of [portal.a, portal.b]) {
-        if (endpoint.kind === "external" && !attachments.has(endpoint.slot)) {
-          throw new Error(`place ${String(input.id)} is missing external attachment slot ${endpoint.slot}`);
-        }
-      }
-    }
-
     const placement = normalizePlacement(input.placement);
     if (placement?.parentPlaceId != null) {
       if (placement.parentPlaceId === input.id) throw new Error("place cannot be placed relative to itself");
@@ -506,7 +499,7 @@ export class PlaceRegistry {
     }
     if (endpoint.kind === "external") {
       const attachment = instance.attachments.get(endpoint.slot);
-      if (!attachment) throw new Error(`missing attachment ${endpoint.slot}`);
+      if (!attachment) return null;
       return {
         ...attachment,
         layerId: null
@@ -525,14 +518,21 @@ export class PlaceRegistry {
     if (!source) return null;
     const override = dynamic ? null : instance.getPortalOverride(portalId);
     const merged = override ? { ...source, ...override } : source;
-    return {
+    const a = this.resolveEndpoint(instanceId, merged.a);
+    const b = this.resolveEndpoint(instanceId, merged.b);
+    const connected = Boolean(a && b);
+    const resolved = {
       ...merged,
       instanceId,
       definitionId: definition.id,
-      a: this.resolveEndpoint(instanceId, merged.a),
-      b: this.resolveEndpoint(instanceId, merged.b),
-      traversable: portalTraversableState(merged),
+      a,
+      b,
+      connected,
       source: dynamic ? "dynamic" : "definition"
+    };
+    return {
+      ...resolved,
+      traversable: portalTraversableState(resolved)
     };
   }
 
@@ -586,6 +586,37 @@ export class PlaceRegistry {
     }
     this.emit("place-attachment-changed", { placeId: instanceId, slot, attachment: cloneJson(instance.attachments.get(slot)) });
     return instance.attachments.get(slot);
+  }
+
+  clearAttachment(instanceId, slot) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
+    assertStringId(slot, "attachment slot");
+    if (!instance.attachments.has(slot)) return false;
+
+    const definition = this.#definitions.get(instance.definitionId);
+    instance.attachments.delete(slot);
+    this.#reindexInstancePortals(instance, definition);
+    this.#graphRevision += 1;
+
+    for (const portal of definition.portals) {
+      if ([portal.a, portal.b].some((endpoint) =>
+        endpoint.kind === "external" && endpoint.slot === slot
+      )) {
+        this.#bridge?.syncPortalState?.(
+          instance,
+          portal,
+          this.resolvePortal(instanceId, portal.id)
+        );
+      }
+    }
+
+    this.emit("place-attachment-changed", {
+      placeId: instanceId,
+      slot,
+      attachment: null
+    });
+    return true;
   }
 
   setPlacement(instanceId, placement) {
@@ -941,6 +972,7 @@ export class PlaceRegistry {
     }
     for (const [key, record] of this.#portalRecords) {
       if (!this.#instances.has(record.instanceId)) throw new Error(`portal record ${key} references missing instance`);
+      if (!record.connected || !record.a || !record.b) throw new Error(`portal record ${key} is disconnected`);
       for (const domainId of [record.a.domainId, record.b.domainId]) {
         if (!this.#portalsByDomain.get(domainId)?.has(key)) throw new Error(`portal record ${key} missing domain adjacency`);
       }
@@ -1097,6 +1129,7 @@ export class PlaceRegistry {
     ];
     for (const portalId of portalIds) {
       const resolved = this.resolvePortal(instance.id, portalId);
+      if (!resolved?.connected || !resolved.a || !resolved.b) continue;
       const key = this.#portalKey(instance.id, portalId);
       const record = deepFreeze({ key, ...resolved });
       this.#portalRecords.set(key, record);
@@ -1107,7 +1140,8 @@ export class PlaceRegistry {
         set.add(key);
       }
     }
-    this.#instancePortalKeys.set(instance.id, keys);
+    if (keys.size > 0) this.#instancePortalKeys.set(instance.id, keys);
+    else this.#instancePortalKeys.delete(instance.id);
   }
 
   #placeChain(instanceId) {
