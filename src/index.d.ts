@@ -582,6 +582,8 @@ export class PlaceRegistry {
     definitionCount: number;
     instanceCount: number;
     domainBindingCount: number;
+    semanticMembershipCount: number;
+    semanticMembershipParentCount: number;
     portalRecordCount: number;
     portalEndpointCount: number;
     portalEndpointDomainCount: number;
