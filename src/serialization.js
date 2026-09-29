@@ -1,6 +1,14 @@
 import { PlaceRegistry } from "./place-registry.js";
 import { compilePlace } from "./definition.js";
-import { canonicalStringify, cloneJson, sha256 } from "./utils.js";
+import {
+  assertId,
+  assertStringId,
+  canonicalStringify,
+  cloneJson,
+  normalizeBoolean,
+  normalizeStringList,
+  sha256
+} from "./utils.js";
 import { startTravel } from "./travel.js";
 
 export const PLACE_CORE_SNAPSHOT_VERSION = 1;
@@ -98,10 +106,385 @@ function assertObject(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${label} must be an object`);
   }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
 }
 
 function assertArray(value, label) {
   if (!Array.isArray(value)) throw new TypeError(`${label} must be an array`);
+}
+
+function assertFiniteVec2(value, label) {
+  assertObject(value, label);
+  if (!Number.isFinite(value.x) || !Number.isFinite(value.y)) {
+    throw new TypeError(`${label} must contain finite x/y`);
+  }
+}
+
+function assertNullableString(value, label) {
+  if (value == null) return;
+  assertStringId(value, label);
+}
+
+function assertJsonSafe(value, label) {
+  try {
+    cloneJson(value);
+  } catch (error) {
+    throw new TypeError(`${label} must be JSON-safe`, { cause: error });
+  }
+}
+
+function assertBooleanPatch(patch, allowedKeys, label) {
+  assertObject(patch, label);
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(patch)) {
+    if (!allowed.has(key)) {
+      throw new Error(`${label} contains unknown field ${key}`);
+    }
+    normalizeBoolean(patch[key], `${label}.${key}`);
+  }
+}
+
+function assertPositiveIntegerOption(value, label) {
+  if (value == null) return;
+  if (!Number.isInteger(value) || value < 1) {
+    throw new RangeError(`${label} must be a positive integer`);
+  }
+}
+
+function assertTravelTarget(target, label = "travel target") {
+  assertObject(target, label);
+
+  if (target.kind === "nearest") {
+    assertStringId(target.tag, `${label}.tag`);
+    assertNullableString(target.anchorKind, `${label}.anchorKind`);
+    assertNullableString(target.spaceId, `${label}.spaceId`);
+    if (target.placeId != null) assertId(target.placeId, `${label}.placeId`);
+    return;
+  }
+
+  if (target.domainId != null) {
+    assertStringId(target.domainId, `${label}.domainId`);
+    assertFiniteVec2(target.position, `${label}.position`);
+    assertNullableString(target.nodeId, `${label}.nodeId`);
+    if (target.placeId != null) assertId(target.placeId, `${label}.placeId`);
+    assertNullableString(target.anchorId, `${label}.anchorId`);
+    assertNullableString(target.spaceId, `${label}.spaceId`);
+    assertNullableString(target.layerId, `${label}.layerId`);
+    return;
+  }
+
+  assertId(target.placeId, `${label}.placeId`);
+  assertNullableString(target.anchorId, `${label}.anchorId`);
+  assertNullableString(target.spaceId, `${label}.spaceId`);
+}
+
+function assertTravelOptions(options, label) {
+  assertObject(options, label);
+
+  const policy = options.worldChangePolicy;
+  if (policy != null && policy !== "encounter" && policy !== "eager") {
+    throw new Error(`invalid ${label}.worldChangePolicy`);
+  }
+
+  if (options.portalEntryTolerance != null &&
+      (!Number.isFinite(options.portalEntryTolerance) ||
+       options.portalEntryTolerance < 0)) {
+    throw new Error(`invalid ${label}.portalEntryTolerance`);
+  }
+
+  for (const key of [
+    "maxDomainPathAttempts",
+    "maxShortestDomainPaths",
+    "maxConcreteStatesPerLayer",
+    "maxNearestTargetExpansions"
+  ]) {
+    assertPositiveIntegerOption(options[key], `${label}.${key}`);
+  }
+
+  if (options.allowPartialShortestPathSearch != null) {
+    normalizeBoolean(
+      options.allowPartialShortestPathSearch,
+      `${label}.allowPartialShortestPathSearch`
+    );
+  }
+
+  if (options.maxCost != null &&
+      (!Number.isFinite(options.maxCost) || options.maxCost < 0)) {
+    throw new Error(`invalid ${label}.maxCost`);
+  }
+
+  for (const key of ["excludedPortalKeys", "excludedDomainPairs"]) {
+    if (options[key] == null) continue;
+    assertArray(options[key], `${label}.${key}`);
+    normalizeStringList(options[key], `${label}.${key}`);
+  }
+
+  if (options.journeyOptions !== undefined) {
+    assertJsonSafe(options.journeyOptions, `${label}.journeyOptions`);
+  }
+
+  if (options.anchorPredicate !== undefined) {
+    throw new Error(`${label}.anchorPredicate cannot be persisted`);
+  }
+}
+
+function assertTravelPlan(plan, entityId) {
+  assertObject(plan, "active travel plan");
+  if (plan.entityId !== entityId) {
+    throw new Error("active travel plan entityId mismatch");
+  }
+  assertTravelTarget(plan.target, "active travel plan.target");
+  assertObject(plan.resolvedTarget, "active travel plan.resolvedTarget");
+  assertStringId(
+    plan.resolvedTarget.domainId,
+    "active travel plan.resolvedTarget.domainId"
+  );
+  assertFiniteVec2(
+    plan.resolvedTarget.position,
+    "active travel plan.resolvedTarget.position"
+  );
+  assertNullableString(
+    plan.resolvedTarget.nodeId,
+    "active travel plan.resolvedTarget.nodeId"
+  );
+
+  assertStringId(plan.startDomainId, "active travel plan.startDomainId");
+  assertArray(plan.domainPath, "active travel plan.domainPath");
+  normalizeStringList(
+    plan.domainPath,
+    "active travel plan.domainPath"
+  );
+  assertArray(plan.steps, "active travel plan.steps");
+
+  for (let i = 0; i < plan.steps.length; i += 1) {
+    const step = plan.steps[i];
+    assertObject(step, `active travel plan.steps[${i}]`);
+
+    if (step.type === "local-journey") {
+      assertStringId(
+        step.domainId,
+        `active travel plan.steps[${i}].domainId`
+      );
+      assertStringId(
+        step.destinationNodeId,
+        `active travel plan.steps[${i}].destinationNodeId`
+      );
+      assertFiniteVec2(
+        step.destinationPosition,
+        `active travel plan.steps[${i}].destinationPosition`
+      );
+      if (!Number.isFinite(step.estimatedSeconds) || step.estimatedSeconds < 0) {
+        throw new Error(
+          `invalid active travel plan.steps[${i}].estimatedSeconds`
+        );
+      }
+      continue;
+    }
+
+    if (step.type === "traverse-portal") {
+      assertStringId(
+        step.portalKey,
+        `active travel plan.steps[${i}].portalKey`
+      );
+      assertId(
+        step.placeId,
+        `active travel plan.steps[${i}].placeId`
+      );
+      assertStringId(
+        step.portalId,
+        `active travel plan.steps[${i}].portalId`
+      );
+      assertStringId(
+        step.fromDomainId,
+        `active travel plan.steps[${i}].fromDomainId`
+      );
+      assertStringId(
+        step.toDomainId,
+        `active travel plan.steps[${i}].toDomainId`
+      );
+      assertFiniteVec2(
+        step.destinationPosition,
+        `active travel plan.steps[${i}].destinationPosition`
+      );
+      if (!Number.isFinite(step.transitionCost) || step.transitionCost < 0) {
+        throw new Error(
+          `invalid active travel plan.steps[${i}].transitionCost`
+        );
+      }
+      continue;
+    }
+
+    throw new Error(
+      `unknown active travel plan step type: ${String(step.type)}`
+    );
+  }
+
+  if (!Number.isFinite(plan.estimatedSeconds) || plan.estimatedSeconds < 0) {
+    throw new Error("invalid active travel plan estimatedSeconds");
+  }
+
+  assertArray(
+    plan.rejectedDomainPairs ?? [],
+    "active travel plan.rejectedDomainPairs"
+  );
+  normalizeStringList(
+    plan.rejectedDomainPairs ?? [],
+    "active travel plan.rejectedDomainPairs"
+  );
+}
+
+function assertAttachment(value, label) {
+  assertObject(value, label);
+  assertStringId(value.domainId, `${label}.domainId`);
+  assertFiniteVec2(value.position, `${label}.position`);
+  assertNullableString(value.nodeId, `${label}.nodeId`);
+  if (value.placeId != null) assertId(value.placeId, `${label}.placeId`);
+  assertNullableString(value.spaceId, `${label}.spaceId`);
+  if (value.metadata !== undefined) {
+    assertJsonSafe(value.metadata, `${label}.metadata`);
+  }
+}
+
+function assertDynamicPortal(portal, definition, item, dynamicIds) {
+  assertObject(portal, "dynamic portal");
+  assertStringId(portal.id, "dynamic portal.id");
+
+  if (dynamicIds.has(portal.id) || definition.getPortal(portal.id)) {
+    throw new Error(
+      `duplicate dynamic portal ${portal.id} on instance ${String(item.id)}`
+    );
+  }
+  dynamicIds.add(portal.id);
+
+  assertStringId(portal.kind ?? "portal", `dynamic portal ${portal.id}.kind`);
+  normalizeStringList(
+    portal.tags,
+    `dynamic portal ${portal.id}.tags`,
+    { defaultValue: [] }
+  );
+
+  const transitionCost = portal.transitionCost ?? 0;
+  if (!Number.isFinite(transitionCost) || transitionCost < 0) {
+    throw new RangeError(
+      `dynamic portal ${portal.id} transitionCost must be a finite number >= 0`
+    );
+  }
+
+  for (const key of [
+    "bidirectional",
+    "enabled",
+    "open",
+    "locked",
+    "blocked",
+    "destroyed",
+    "blocksWhenClosed"
+  ]) {
+    if (portal[key] !== undefined) {
+      normalizeBoolean(
+        portal[key],
+        `dynamic portal ${portal.id}.${key}`
+      );
+    }
+  }
+
+  for (const [side, endpoint] of [["a", portal.a], ["b", portal.b]]) {
+    assertObject(endpoint, `dynamic portal ${portal.id}.${side}`);
+    assertStringId(
+      endpoint.domainId,
+      `dynamic portal ${portal.id}.${side}.domainId`
+    );
+    assertFiniteVec2(
+      endpoint.position,
+      `dynamic portal ${portal.id}.${side}.position`
+    );
+    assertNullableString(
+      endpoint.nodeId,
+      `dynamic portal ${portal.id}.${side}.nodeId`
+    );
+    if (endpoint.placeId != null) {
+      assertId(
+        endpoint.placeId,
+        `dynamic portal ${portal.id}.${side}.placeId`
+      );
+    }
+    assertNullableString(
+      endpoint.spaceId,
+      `dynamic portal ${portal.id}.${side}.spaceId`
+    );
+    assertNullableString(
+      endpoint.layerId,
+      `dynamic portal ${portal.id}.${side}.layerId`
+    );
+    if (endpoint.metadata !== undefined) {
+      assertJsonSafe(
+        endpoint.metadata,
+        `dynamic portal ${portal.id}.${side}.metadata`
+      );
+    }
+  }
+
+  assertArray(
+    portal.roadBindings ?? [],
+    `dynamic portal ${portal.id}.roadBindings`
+  );
+  const layerDomains = item.layerDomains;
+  for (let i = 0; i < (portal.roadBindings ?? []).length; i += 1) {
+    const binding = portal.roadBindings[i];
+    assertObject(
+      binding,
+      `dynamic portal ${portal.id}.roadBindings[${i}]`
+    );
+    assertStringId(
+      binding.layerId,
+      `dynamic portal ${portal.id}.roadBindings[${i}].layerId`
+    );
+    assertStringId(
+      binding.roadId,
+      `dynamic portal ${portal.id}.roadBindings[${i}].roadId`
+    );
+    const layer = definition.getLayer(binding.layerId);
+    if (!layer) {
+      throw new Error(
+        `dynamic portal ${portal.id} road binding references unknown layer ${binding.layerId}`
+      );
+    }
+    if (layer.navigation &&
+        !layer.navigation.roads.some((road) => road.id === binding.roadId)) {
+      throw new Error(
+        `dynamic portal ${portal.id} references unknown navigation road ${binding.roadId}`
+      );
+    }
+  }
+
+  if (portal.metadata !== undefined) {
+    assertJsonSafe(portal.metadata, `dynamic portal ${portal.id}.metadata`);
+  }
+
+  const a = portal.a;
+  const b = portal.b;
+  const traversable =
+    (portal.enabled ?? true) &&
+    !(portal.locked ?? false) &&
+    !(portal.blocked ?? false) &&
+    !(portal.destroyed ?? false) &&
+    (!(portal.blocksWhenClosed ?? false) || (portal.open ?? true));
+  const needsPhysicalEnforcement =
+    a.domainId === b.domainId &&
+    (transitionCost > 0 || !traversable);
+
+  if (needsPhysicalEnforcement) {
+    const hasBinding = (portal.roadBindings ?? []).some(
+      (binding) => layerDomains[binding.layerId] === a.domainId
+    );
+    if (!hasBinding) {
+      throw new Error(
+        `dynamic portal ${portal.id} requires a road binding in domain ${a.domainId} for same-domain physical enforcement`
+      );
+    }
+  }
 }
 
 export function validatePlaceCoreSnapshot(snapshot, options = {}) {
