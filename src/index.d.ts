@@ -531,7 +531,8 @@ export class WorldCoreBridge {
   readonly world: any;
   readonly navigation: any;
 
-  attachRegistry(registry: PlaceRegistry): void;
+  attachRegistry(registry: PlaceRegistry): this;
+  dispose(): boolean;
   materializePlace(instance: PlaceInstance, definition: CompiledPlaceDefinition): void;
   unmaterializePlace(instance: PlaceInstance, definition: CompiledPlaceDefinition): void;
   ensureLayerTopology(definition: CompiledPlaceDefinition, layer: CompiledPlaceLayer): any;
