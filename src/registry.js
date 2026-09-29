@@ -648,7 +648,7 @@ export class PlaceRegistry {
       limit: options.eventQueueLimit ?? 10_000,
       overflowPolicy: options.eventOverflowPolicy ?? "drop-newest"
     });
-    if (options.bridge) this.attachBridge(options.bridge);
+    if (options.bridge) this.attachWorldCoreBridge(options.bridge);
   }
 
   get definitions() { return this.#definitionsView; }
@@ -671,7 +671,7 @@ export class PlaceRegistry {
     if (travel) this.#travelRevision += 1;
   }
 
-  attachBridge(bridge) {
+  attachWorldCoreBridge(bridge) {
     if (!bridge || typeof bridge !== "object") {
       throw new TypeError("bridge must be an object");
     }
@@ -701,7 +701,7 @@ export class PlaceRegistry {
           for (const boundary of definition.boundaries) {
             bridge.syncBoundaryState?.(
               instance,
-              this.getBoundary(instance.id, boundary.id)
+              this.resolveBoundary(instance.id, boundary.id)
             );
           }
           for (const portal of definition.portals) {
@@ -793,7 +793,7 @@ export class PlaceRegistry {
     return { ...space, enabled: this.#spaceEnabled(instance, definition, space) };
   }
 
-  getBoundary(instanceId, boundaryId) {
+  resolveBoundary(instanceId, boundaryId) {
     const instance = this.#instances.get(instanceId);
     if (!instance) return null;
     const definition = this.#definitions.get(instance.definitionId);
@@ -802,9 +802,7 @@ export class PlaceRegistry {
     return { ...boundary, enabled: instance.getBoundaryOverride(boundaryId)?.enabled ?? boundary.enabled };
   }
 
-  getPortal(instanceId, portalId) { return this.resolvePortal(instanceId, portalId); }
-
-  findAnchor(instanceId, anchorId) {
+  resolveAnchor(instanceId, anchorId) {
     const instance = this.#instances.get(instanceId);
     if (!instance) return null;
     const definition = this.#definitions.get(instance.definitionId);
@@ -1085,7 +1083,7 @@ export class PlaceRegistry {
     const result = [];
     for (const boundary of definition.boundaries) {
       if (boundary.layerId !== binding.layerId) continue;
-      const resolved = this.getBoundary(instance.id, boundary.id);
+      const resolved = this.resolveBoundary(instance.id, boundary.id);
       if (enabledOnly && !resolved.enabled) continue;
       if (options.kind != null && resolved.kind !== options.kind) continue;
       if (options.tag != null && !resolved.tags?.includes(options.tag)) continue;
@@ -1423,7 +1421,7 @@ export class PlaceRegistry {
   }
 
   getDomainBinding(domainId) { return this.#domainBindings.get(domainId) ?? null; }
-  domainForLayer(instanceId, layerId) {
+  getLayerDomain(instanceId, layerId) {
     return this.#instances.get(instanceId)?.layerDomains.get(layerId) ?? null;
   }
 
@@ -2180,7 +2178,7 @@ export class PlaceRegistry {
     return resolved;
   }
 
-  addInstancePortal(instanceId, spec) {
+  addPortal(instanceId, spec) {
     const instance = this.#instances.get(instanceId);
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
     assertStringId(spec?.id, "dynamic portal id");
@@ -2336,7 +2334,7 @@ export class PlaceRegistry {
     return resolved;
   }
 
-  removeInstancePortal(instanceId, portalId) {
+  removePortal(instanceId, portalId) {
     const instance = this.#instances.get(instanceId);
     if (!instance || !instance.dynamicPortals.has(portalId)) return false;
     const resolved = this.resolvePortal(instanceId, portalId);
@@ -2454,7 +2452,7 @@ export class PlaceRegistry {
     return this.locate(entity.domainId ?? "default", entity.position);
   }
 
-  syncEntityOccupancy(entity) {
+  updateEntityOccupancy(entity) {
     assertId(entity?.id, "entity.id");
     const next = this.locateEntity(entity);
     const previous = this.#occupancy.get(entity.id) ?? null;

@@ -377,7 +377,7 @@ function resolvedTargetAvailable(registry, target) {
   }
 
   if (target.anchorId != null) {
-    const anchor = registry.findAnchor(target.placeId, target.anchorId);
+    const anchor = registry.resolveAnchor(target.placeId, target.anchorId);
     if (!anchor || anchor.domainId !== target.domainId) return false;
     if (!anchorAvailable(registry, target.placeId, anchor)) return false;
   }
@@ -1649,7 +1649,7 @@ function advance(registry, bridge, state, options = {}) {
         );
       }
 
-      registry.syncEntityOccupancy(moved);
+      registry.updateEntityOccupancy(moved);
 
       const movedDomainId = moved.domainId ?? "default";
       const transferPositionValid =
@@ -1773,7 +1773,7 @@ export function stepTravel(registry, a, b, c) {
   const worldChangePolicy = effectiveOptions.worldChangePolicy;
 
   if (worldChangePolicy === "eager" &&
-      (state.travelRevision ?? state.graphRevision) !== registry.travelRevision) {
+      state.travelRevision !== registry.travelRevision) {
     const next = replan(registry, bridge, state, effectiveOptions);
     if (next.status !== "active") return next;
   }
@@ -1783,7 +1783,7 @@ export function stepTravel(registry, a, b, c) {
     const entity = bridge.getEntity(entityId);
     if (!entity) return fail(registry, bridge, state, "entity-missing");
 
-    registry.syncEntityOccupancy(entity);
+    registry.updateEntityOccupancy(entity);
     if (entity.journey != null) return state;
 
     if (entity.lastJourneyFailure?.destinationNodeId === step.destinationNodeId) {

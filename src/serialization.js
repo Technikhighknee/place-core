@@ -30,7 +30,6 @@ function serializePlan(plan) {
   if (!plan) return null;
   const copy = canonicalClone(plan);
   delete copy.travelRevision;
-  delete copy.graphRevision;
   return copy;
 }
 
@@ -1149,7 +1148,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
   // coordinate-frame relationships exist.
   for (const item of orderedInstances) {
     for (const portal of item.dynamicPortals ?? []) {
-      registry.addInstancePortal(item.id, portal);
+      registry.addPortal(item.id, portal);
     }
     for (const [portalId, patch] of Object.entries(
       item.portalOverrides ?? {}
@@ -1196,9 +1195,9 @@ export function deserializePlaceCore(snapshot, options = {}) {
   }
 
   // Materialize the fully restored structural state in one late-attach
-  // transaction. PlaceRegistry.attachBridge rolls all earlier places back if
+  // transaction. PlaceRegistry.attachWorldCoreBridge rolls all earlier places back if
   // any later materialization/sync fails.
-  if (bridge) registry.attachBridge(bridge);
+  if (bridge) registry.attachWorldCoreBridge(bridge);
 
   const retainPending = (saved) => {
     registry.pendingTravels.push({

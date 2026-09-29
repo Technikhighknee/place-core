@@ -359,64 +359,21 @@ export interface LocationContext {
 
 export interface PlaceRegistryOptions {
   bridge?: WorldCoreBridge | null;
-  /** @deprecated Use bridge. */
-  worldCoreBridge?: WorldCoreBridge | null;
   captureEvents?: boolean;
   eventQueueLimit?: number;
   eventOverflowPolicy?: "drop-newest" | "drop-oldest";
 }
 
-type CreatePlaceParentInput =
-  | {
-      parentId?: PlaceId | null;
-      parentPlaceId?: never;
-    }
-  | {
-      parentId?: never;
-      /** @deprecated Use parentId. */
-      parentPlaceId?: PlaceId | null;
-    };
-
-type CreatePlaceAttachmentInput =
-  | {
-      attachments?: Record<string, PlaceAttachment>;
-      externalBindings?: never;
-    }
-  | {
-      attachments?: never;
-      /** @deprecated Use attachments. */
-      externalBindings?: Record<string, PlaceAttachment>;
-    };
-
-type CreatePlacePlacementInput =
-  | {
-      placement?: PlacePlacement | null;
-      placementDomainId?: never;
-      containment?: never;
-    }
-  | {
-      /** @deprecated Use placement: { domainId, transform, containment }. */
-      placement?: Transform2D | null;
-      /** @deprecated Use placement.domainId. */
-      placementDomainId: string;
-      /** @deprecated Use placement.containment. */
-      containment?: "none" | "footprint";
-    }
-  | {
-      placement?: undefined;
-      placementDomainId?: undefined;
-      containment?: undefined;
-    };
-
-export type CreatePlaceInput = {
+export interface CreatePlaceInput {
   id: PlaceId;
   definitionId: string;
-  layerDomains?: Record<string, string> | Map<string, string>;
+  parentId?: PlaceId | null;
+  layerDomains?: Record<string, string>;
+  attachments?: Record<string, PlaceAttachment>;
+  placement?: PlacePlacement | null;
   memberships?: readonly PlaceMembershipInput[];
   metadata?: JsonValue;
-} & CreatePlaceParentInput &
-  CreatePlaceAttachmentInput &
-  CreatePlacePlacementInput;
+}
 
 export interface PlaceEvent {
   sequence: number;
@@ -442,8 +399,6 @@ export class PlaceRegistry {
   readonly travelRevision: number;
   readonly bridge: WorldCoreBridge | null;
 
-  attachBridge(bridge: WorldCoreBridge): this;
-  /** @deprecated Use attachBridge. */
   attachWorldCoreBridge(bridge: WorldCoreBridge): this;
 
   registerDefinition(
@@ -480,14 +435,11 @@ export class PlaceRegistry {
     instanceId: PlaceId;
     layerId: string;
   }> | null;
-  domainForLayer(instanceId: PlaceId, layerId: string): string | null;
   getLayerDomain(instanceId: PlaceId, layerId: string): string | null;
 
   getSpace(instanceId: PlaceId, spaceId: string): (CompiledPlaceSpace & { enabled: boolean }) | null;
-  getBoundary(instanceId: PlaceId, boundaryId: string): (PlaceBoundaryInput & { enabled: boolean }) | null;
   resolveBoundary(instanceId: PlaceId, boundaryId: string): (PlaceBoundaryInput & { enabled: boolean }) | null;
 
-  getPortal(instanceId: PlaceId, portalId: string): ResolvedPortal | null;
   resolvePortal(instanceId: PlaceId, portalId: string): ResolvedPortal | null;
   getPortalRecord(key: string): ResolvedPortal | null;
   getPortalsForDomain(domainId: string): ResolvedPortal[];
@@ -503,16 +455,9 @@ export class PlaceRegistry {
   setSpaceState(instanceId: PlaceId, spaceId: string, patch: { enabled?: boolean }): CompiledPlaceSpace & { enabled: boolean };
   setAttachment(instanceId: PlaceId, slot: string, value: PlaceAttachment): PlaceAttachment;
   clearAttachment(instanceId: PlaceId, slot: string): boolean;
-  /** @deprecated Use setAttachment. */
-  setExternalBinding(instanceId: PlaceId, slot: string, value: PlaceAttachment): PlaceAttachment;
-  /** @deprecated Use clearAttachment. */
-  clearExternalBinding(instanceId: PlaceId, slot: string): boolean;
-  addInstancePortal(instanceId: PlaceId, spec: DynamicPortalInput): ResolvedPortal;
   addPortal(instanceId: PlaceId, spec: DynamicPortalInput): ResolvedPortal;
-  removeInstancePortal(instanceId: PlaceId, portalId: string): boolean;
   removePortal(instanceId: PlaceId, portalId: string): boolean;
 
-  findAnchor(instanceId: PlaceId, anchorId: string): (CompiledPlaceAnchor & { placeId: PlaceId; domainId: string }) | null;
   resolveAnchor(instanceId: PlaceId, anchorId: string): (CompiledPlaceAnchor & { placeId: PlaceId; domainId: string }) | null;
   findAnchorsByTag(instanceId: PlaceId, tag: string): Array<CompiledPlaceAnchor & { placeId: PlaceId; domainId: string }>;
   findAnchors(options?: {
@@ -590,7 +535,6 @@ export class PlaceRegistry {
   locateEntity(entity: { domainId?: string; position: Vec2 }): LocationContext;
   placesAt(domainId: string, position: Vec2): PlaceInstance[];
 
-  syncEntityOccupancy(entity: { id: EntityId; domainId?: string; position: Vec2 }): LocationContext;
   updateEntityOccupancy(entity: { id: EntityId; domainId?: string; position: Vec2 }): LocationContext;
   removeEntityOccupancy(entityId: EntityId): boolean;
   getEntityLocation(entityId: EntityId): LocationContext | null;
@@ -806,9 +750,6 @@ export interface TravelPlanningOptions extends DomainPathOptions {
 export interface TravelStepOptions extends TravelPlanningOptions {
   deltaSeconds?: number;
 }
-
-/** @deprecated Use TravelPlanningOptions or TravelStepOptions explicitly. */
-export type TravelOptions = TravelStepOptions;
 
 export interface StopTravelOptions {
   bridge?: WorldCoreBridge;
