@@ -364,3 +364,133 @@ test("findAnchors can explicitly filter by effective nested-space availability",
     /enabledOnly must be a boolean/
   );
 });
+
+
+test("public spatial queries reject non-finite coordinates and malformed bounds", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "query-validation-place",
+    footprint: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 10,
+      maxY: 10
+    },
+    layers: [{ id: "inside" }],
+    spaces: [{
+      id: "room",
+      layerId: "inside",
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 10,
+        maxY: 10
+      }
+    }],
+    boundaries: [{
+      id: "wall",
+      layerId: "inside",
+      a: { x: 0, y: 0 },
+      b: { x: 10, y: 0 }
+    }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      position: { x: 5, y: 5 }
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "query-validation-place",
+    placement: {
+      domainId: "street",
+      transform: { x: 0, y: 0 },
+      containment: "footprint"
+    }
+  });
+  const inside = place.layerDomains.get("inside");
+
+  for (const call of [
+    () => places.locate(inside, { x: Number.NaN, y: 0 }),
+    () => places.findNearestAnchor("house", {
+      x: 0,
+      y: Number.POSITIVE_INFINITY
+    }),
+    () => places.findNearestAnchorInDomain(inside, {
+      x: Number.NaN,
+      y: 0
+    }),
+    () => places.findNearestBoundary(inside, {
+      x: 0,
+      y: Number.NaN
+    })
+  ]) {
+    assert.throws(call, /finite Vec2/);
+  }
+
+  for (const call of [
+    () => places.placesInBounds("street", {
+      minX: Number.NaN,
+      minY: 0,
+      maxX: 1,
+      maxY: 1
+    }),
+    () => places.boundariesIntersectingBounds(inside, {
+      minX: 2,
+      minY: 0,
+      maxX: 1,
+      maxY: 1
+    })
+  ]) {
+    assert.throws(call, /bounds/);
+  }
+});
+
+test("spatial query options do not silently coerce strings", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "query-option-place",
+    layers: [{ id: "inside" }],
+    boundaries: [{
+      id: "wall",
+      layerId: "inside",
+      a: { x: 0, y: 0 },
+      b: { x: 1, y: 0 }
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "query-option-place"
+  });
+  const inside = place.layerDomains.get("inside");
+
+  assert.throws(
+    () => places.getBoundariesForDomain(inside, {
+      enabledOnly: "true"
+    }),
+    /enabledOnly must be a boolean/
+  );
+
+  assert.throws(
+    () => places.findNearestPortal(inside, { x: 0, y: 0 }, {
+      traversableOnly: "false"
+    }),
+    /traversableOnly must be a boolean/
+  );
+
+  assert.throws(
+    () => places.findNearestPortal(inside, { x: 0, y: 0 }, {
+      maxDistance: "10"
+    }),
+    /maxDistance must be a finite number/
+  );
+
+  assert.throws(
+    () => places.findNearestAnchor("house", { x: 0, y: 0 }, {
+      tag: 123
+    }),
+    /tag must be a non-empty string/
+  );
+});
