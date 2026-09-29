@@ -159,3 +159,51 @@ test("createPlace rejects unknown fields", () => {
 
   assert.equal(registry.instances.size, 0);
 });
+
+
+test("layer IDs that shadow Object.prototype still receive default domains", () => {
+  const registry = new PlaceRegistry();
+  registry.registerDefinition({
+    id: "prototype-layer-place",
+    layers: [{ id: "constructor" }]
+  });
+
+  const place = registry.createPlace({
+    id: "house",
+    definitionId: "prototype-layer-place"
+  });
+
+  assert.equal(
+    place.layerDomains.get("constructor"),
+    "house:constructor"
+  );
+});
+
+test("semantic membership keys cannot collide on embedded separators", () => {
+  const registry = new PlaceRegistry();
+  registry.registerDefinition({
+    id: "semantic-only"
+  });
+
+  for (const id of ["a\u0000b", "a", "child"]) {
+    registry.createPlace({
+      id,
+      definitionId: "semantic-only"
+    });
+  }
+
+  registry.addMembership("child", {
+    parentPlaceId: "a\u0000b",
+    kind: "c"
+  });
+  registry.addMembership("child", {
+    parentPlaceId: "a",
+    kind: "b\u0000c"
+  });
+
+  assert.equal(
+    registry.getMemberships("child").length,
+    2
+  );
+  registry.assertInternalConsistency();
+});

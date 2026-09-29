@@ -170,3 +170,35 @@ test("nested JSON metadata roundtrips without semantic drift", () => {
     }
   );
 });
+
+
+test("JSON metadata preserves own __proto__ keys without prototype mutation", () => {
+  const metadata = JSON.parse(
+    '{"__proto__":{"polluted":true},"safe":1}'
+  );
+
+  const compiled = compilePlace(simpleDefinition({
+    metadata
+  }));
+  const restored = compiled.getBlueprint().metadata;
+
+  assert.equal(Object.hasOwn(restored, "__proto__"), true);
+  assert.deepEqual(restored.__proto__, { polluted: true });
+  assert.equal(Object.getPrototypeOf(restored), Object.prototype);
+  assert.equal(restored.polluted, undefined);
+
+  const withoutProto = compilePlace(simpleDefinition({
+    metadata: { safe: 1 }
+  }));
+  assert.notEqual(compiled.contentHash, withoutProto.contentHash);
+});
+
+test("cyclic JSON metadata is rejected explicitly", () => {
+  const metadata = { name: "cycle" };
+  metadata.self = metadata;
+
+  assert.throws(
+    () => compilePlace(simpleDefinition({ metadata })),
+    /circular/i
+  );
+});

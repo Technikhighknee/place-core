@@ -57,6 +57,16 @@ function definition() {
         }
       }
     ],
+    boundaries: [{
+      id: "b-wall",
+      layerId: "b",
+      enabled: true,
+      a: { x: 1, y: -1 },
+      b: { x: 1, y: 1 },
+      roadBindings: [{
+        roadId: "b-road"
+      }]
+    }],
     portals: [{
       id: "locked-door",
       locked: true,
@@ -164,4 +174,50 @@ test("successful removal still removes all materialized state", () => {
   assert.equal(navigation.domainBindings.has(domainA), false);
   assert.equal(navigation.domainBindings.has(domainB), false);
   places.assertInternalConsistency();
+});
+
+
+test("failed removal rollback restores sparse boundary overrides", () => {
+  const { world, navigation, places, place } = setup();
+  const domainB = place.layerDomains.get("b");
+
+  places.setBoundaryState(
+    "house",
+    "b-wall",
+    { enabled: false }
+  );
+
+  assert.ok(
+    navigation
+      .navigationForDomain(domainB)
+      .findRoute("b0", "b1", mobility),
+    "disabled boundary should leave the road traversable"
+  );
+
+  const originalRemoveDomain = world.removeDomain.bind(world);
+  let removeCalls = 0;
+  world.removeDomain = (domainId) => {
+    removeCalls += 1;
+    if (removeCalls === 2) {
+      throw new Error("synthetic rollback failure point");
+    }
+    return originalRemoveDomain(domainId);
+  };
+
+  assert.throws(
+    () => places.removePlace("house"),
+    /synthetic rollback failure point/
+  );
+  world.removeDomain = originalRemoveDomain;
+
+  assert.equal(
+    places.resolveBoundary("house", "b-wall").enabled,
+    false
+  );
+  assert.ok(
+    navigation
+      .navigationForDomain(domainB)
+      .findRoute("b0", "b1", mobility),
+    "rollback must restore the disabled boundary override"
+  );
 });

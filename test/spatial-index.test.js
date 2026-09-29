@@ -125,3 +125,43 @@ test("DynamicPointIndex updates and deletes without stale nearest entries", () =
   assert.equal(index.size, 0);
   assert.equal(index.cellCount, 0);
 });
+
+
+test("DynamicAabbIndex rejects invalid bounds before mutating existing entries", () => {
+  const index = new DynamicAabbIndex(8);
+  const original = {
+    minX: 1,
+    minY: 2,
+    maxX: 3,
+    maxY: 4
+  };
+  index.set("box", original);
+
+  assert.throws(
+    () => index.set("box", {
+      minX: Number.NaN,
+      minY: 0,
+      maxX: 1,
+      maxY: 1
+    }),
+    /finite bounds/
+  );
+  assert.deepEqual(index.getBounds("box"), original);
+
+  assert.throws(
+    () => index.queryBounds({
+      minX: 5,
+      minY: 0,
+      maxX: 4,
+      maxY: 1
+    }),
+    /ordered bounds/
+  );
+  assert.throws(
+    () => index.queryPoint({
+      x: Number.NaN,
+      y: 0
+    }),
+    /finite Vec2/
+  );
+});

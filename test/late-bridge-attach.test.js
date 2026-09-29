@@ -194,6 +194,13 @@ test("one WorldCoreBridge cannot be silently hijacked by another registry", () =
   assert.equal(two.bridge, null);
 
   bridge.dispose();
+  assert.equal(
+    one.bridge,
+    null,
+    "disposing a bridge must detach the registry side too"
+  );
+
   assert.equal(two.attachWorldCoreBridge(bridge), two);
   assert.equal(two.bridge, bridge);
+  assert.equal(one.bridge, null);
 });
