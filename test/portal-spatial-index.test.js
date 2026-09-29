@@ -51,10 +51,74 @@ test("nearest portal query uses spatially indexed external endpoints", () => {
   assert.equal(nearest.side, "a");
   assert.equal(nearest.distance, 3);
 
-  const diagnostics = places.getDiagnostics();
+  let diagnostics = places.getDiagnostics();
   assert.equal(diagnostics.portalRecordCount, 5_000);
   assert.equal(diagnostics.portalEndpointCount, 10_000);
   assert.equal(diagnostics.portalEndpointDomainCount, 5_001);
+  assert.equal(
+    diagnostics.traversablePortalEndpointCount,
+    10_000
+  );
+  assert.equal(
+    diagnostics.traversablePortalEndpointDomainCount,
+    5_001
+  );
+
+  places.setPortalState(
+    "house-1235",
+    "door",
+    { locked: true }
+  );
+
+  diagnostics = places.getDiagnostics();
+  assert.equal(
+    diagnostics.portalEndpointCount,
+    10_000,
+    "all-endpoint index is independent of traversal state"
+  );
+  assert.equal(
+    diagnostics.traversablePortalEndpointCount,
+    9_998
+  );
+  assert.equal(
+    diagnostics.traversablePortalEndpointDomainCount,
+    5_000
+  );
+  assert.equal(
+    places.findNearestPortal(
+      "city",
+      { x: 12_350, y: 0 },
+      { maxDistance: 1 }
+    ),
+    null
+  );
+  assert.equal(
+    places.findNearestPortal(
+      "city",
+      { x: 12_350, y: 0 },
+      {
+        maxDistance: 1,
+        traversableOnly: false
+      }
+    )?.portal.instanceId,
+    "house-1235"
+  );
+
+  places.setPortalState(
+    "house-1235",
+    "door",
+    { locked: false }
+  );
+
+  diagnostics = places.getDiagnostics();
+  assert.equal(
+    diagnostics.traversablePortalEndpointCount,
+    10_000
+  );
+  assert.equal(
+    diagnostics.traversablePortalEndpointDomainCount,
+    5_001
+  );
   places.assertInternalConsistency();
 });
 
