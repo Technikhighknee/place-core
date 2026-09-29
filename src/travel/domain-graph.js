@@ -55,6 +55,15 @@ export function pairKey(a, b) {
   return tupleKey(a, b);
 }
 
+function legacyPairKey(a, b) {
+  return `${a}\u0000${b}`;
+}
+
+function pairIsExcluded(excludedPairs, a, b) {
+  return excludedPairs.has(pairKey(a, b)) ||
+    excludedPairs.has(legacyPairKey(a, b));
+}
+
 export function transitionKey(edge) {
   return tupleKey(
     edge.portal.key,
@@ -72,12 +81,12 @@ export function transitionsFrom(registry, domainId, options = {}) {
     if (portal.a.domainId === portal.b.domainId) continue;
 
     if (portal.a.domainId === domainId) {
-      if (!excludedPairs.has(pairKey(domainId, portal.b.domainId))) {
+      if (!pairIsExcluded(excludedPairs, domainId, portal.b.domainId)) {
         edges.push({ portal, portalKey: portal.key, side: "a", from: portal.a, to: portal.b });
       }
     }
     if (portal.bidirectional !== false && portal.b.domainId === domainId) {
-      if (!excludedPairs.has(pairKey(domainId, portal.a.domainId))) {
+      if (!pairIsExcluded(excludedPairs, domainId, portal.a.domainId)) {
         edges.push({ portal, portalKey: portal.key, side: "b", from: portal.b, to: portal.a });
       }
     }
@@ -97,12 +106,12 @@ function transitionsInto(registry, domainId, options = {}) {
     if (portal.a.domainId === portal.b.domainId) continue;
 
     if (portal.b.domainId === domainId) {
-      if (!excludedPairs.has(pairKey(portal.a.domainId, domainId))) {
+      if (!pairIsExcluded(excludedPairs, portal.a.domainId, domainId)) {
         edges.push({ portal, portalKey: portal.key, side: "a", from: portal.a, to: portal.b });
       }
     }
     if (portal.bidirectional !== false && portal.a.domainId === domainId) {
-      if (!excludedPairs.has(pairKey(portal.b.domainId, domainId))) {
+      if (!pairIsExcluded(excludedPairs, portal.b.domainId, domainId)) {
         edges.push({ portal, portalKey: portal.key, side: "b", from: portal.b, to: portal.a });
       }
     }
