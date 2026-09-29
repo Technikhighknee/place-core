@@ -253,8 +253,11 @@ export function resolveTravelTarget(registry, target) {
   }
 
   if (target.kind === "nearest" && target.tag && typeof registry.findAnchors === "function") {
-    const candidates = registry.findAnchors({ tag: target.tag });
-    if (!candidates.length) throw new Error(`no anchor matches tag ${target.tag}`);
+    const candidates = registry.findAnchors({ tag: target.tag })
+      .filter((anchor) => anchorAvailable(registry, anchor.placeId, anchor));
+    if (!candidates.length) {
+      throw travelTargetUnavailable(`no enabled anchor matches tag ${target.tag}`);
+    }
     candidates.sort((a, b) => {
       const place = String(a.placeId).localeCompare(String(b.placeId));
       return place || a.id.localeCompare(b.id);
