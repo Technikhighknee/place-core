@@ -4,8 +4,10 @@ import assert from "node:assert/strict";
 import {
   PlaceRegistry,
   deserializePlaceCore,
+  planTravel,
   serializePlaceCore,
   startTravel,
+  stepPlaceSimulation,
   stepTravel
 } from "../src/index.js";
 
@@ -313,5 +315,148 @@ test("snapshotting refuses to silently drop function predicates", () => {
   assert.throws(
     () => serializePlaceCore(places),
     /cannot serialize active travel with anchorPredicate/
+  );
+});
+
+
+test("travel search limits reject invalid values consistently", () => {
+  const { places, bridge } = twoLayerRuntime();
+
+  const invalid = [
+    ["maxDomainPathAttempts", 0],
+    ["maxShortestDomainPaths", 1.5],
+    ["maxConcreteStatesPerLayer", -1],
+    ["maxNearestTargetExpansions", Number.NaN],
+    ["maxCost", -1],
+    ["allowPartialShortestPathSearch", "true"]
+  ];
+
+  for (const [key, value] of invalid) {
+    assert.throws(
+      () => planTravel(
+        places,
+        bridge,
+        "hans",
+        { placeId: "house", anchorId: "target" },
+        { [key]: value }
+      ),
+      new RegExp(key)
+    );
+
+    assert.throws(
+      () => startTravel(
+        places,
+        bridge,
+        "hans",
+        { placeId: "house", anchorId: "target" },
+        { [key]: value }
+      ),
+      new RegExp(key)
+    );
+  }
+});
+
+test("maxCost zero still permits a zero-cost semantic target", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "zero-cost-place",
+    layers: [{ id: "inside" }],
+    anchors: [{
+      id: "here",
+      layerId: "inside",
+      tags: ["service"],
+      position: { x: 0, y: 0 },
+      nodeId: "here"
+    }]
+  });
+  const place = places.createPlace({
+    id: "room",
+    definitionId: "zero-cost-place"
+  });
+
+  const entity = {
+    id: "hans",
+    domainId: place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() { return entity; },
+    planLocalRoute() {
+      throw new Error("zero-cost target must not need local routing");
+    },
+    startLocalJourney() {
+      throw new Error("zero-cost target must not start a journey");
+    },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans",
+    { kind: "nearest", tag: "service" },
+    { maxCost: 0 }
+  );
+
+  assert.ok(plan);
+  assert.equal(plan.estimatedSeconds, 0);
+  assert.equal(plan.resolvedTarget.anchorId, "here");
+});
+
+test("deltaSeconds rejects invalid simulation deltas instead of clamping", () => {
+  const { places, bridge } = twoLayerRuntime();
+
+  const travel = startTravel(
+    places,
+    bridge,
+    "hans",
+    { placeId: "house", anchorId: "target" }
+  );
+  assert.ok(travel);
+
+  for (const deltaSeconds of [
+    -0.1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY
+  ]) {
+    assert.throws(
+      () => stepTravel(
+        places,
+        bridge,
+        "hans",
+        { deltaSeconds }
+      ),
+      /deltaSeconds must be a finite number >= 0/
+    );
+
+    assert.throws(
+      () => stepPlaceSimulation(
+        places,
+        bridge,
+        deltaSeconds
+      ),
+      /deltaSeconds must be a finite number >= 0/
+    );
+  }
+});
+
+test("explicit Infinity maxCost remains snapshot-safe by collapsing to the default", () => {
+  const { places, bridge } = twoLayerRuntime();
+
+  const travel = startTravel(
+    places,
+    bridge,
+    "hans",
+    { placeId: "house", anchorId: "target" },
+    { maxCost: Infinity }
+  );
+  assert.ok(travel);
+  assert.equal("maxCost" in travel.options, false);
+
+  assert.doesNotThrow(() =>
+    JSON.stringify(serializePlaceCore(places))
   );
 });
