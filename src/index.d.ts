@@ -425,7 +425,10 @@ export class PlaceRegistry {
   readonly instances: ReadonlyMap<PlaceId, PlaceInstance>;
   readonly domainBindings: ReadonlyMap<
     string,
-    { instanceId: PlaceId; layerId: string }
+    Readonly<{
+      instanceId: PlaceId;
+      layerId: string;
+    }>
   >;
   readonly activeTravels: Map<EntityId, TravelState>;
   readonly pendingTravels: Array<Record<string, unknown>>;
@@ -466,7 +469,12 @@ export class PlaceRegistry {
   setPlacement(instanceId: PlaceId, placement: PlacePlacement | null): PlacePlacement | null;
   getResolvedPlacement(instanceId: PlaceId): ResolvedPlacePlacement | null;
 
-  getDomainBinding(domainId: string): { instanceId: PlaceId; layerId: string } | null;
+  getDomainBinding(
+    domainId: string
+  ): Readonly<{
+    instanceId: PlaceId;
+    layerId: string;
+  }> | null;
   domainForLayer(instanceId: PlaceId, layerId: string): string | null;
   getLayerDomain(instanceId: PlaceId, layerId: string): string | null;
 
