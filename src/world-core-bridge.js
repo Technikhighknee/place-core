@@ -343,6 +343,21 @@ export class WorldCoreBridge {
       );
     };
 
+    const expectedOptions = expected.options ?? {};
+    const actualOptions = {
+      spatialCellSize: existing.nodeIndex?.cellSize,
+      routeCacheSize: existing.routeCacheSize,
+      routeCacheMaxLegs: existing.routeCacheMaxLegs,
+      routeCacheMaxTotalLegs: existing.routeCacheMaxTotalLegs,
+      hierarchicalRouteCacheSize: existing.hierarchicalRouteCacheSize,
+      regionalRouteCacheSize: existing.regionalRouteCacheSize
+    };
+    for (const [key, value] of Object.entries(expectedOptions)) {
+      if (actualOptions[key] !== value) {
+        mismatch(`navigation option ${key} differs`);
+      }
+    }
+
     const existingRegionIds = [...(existing.regions?.keys?.() ?? [])].sort();
     const expectedRegionIds = expected.regions.map((region) => region.id).sort();
     if (!stringListsEqual(existingRegionIds, expectedRegionIds)) {
