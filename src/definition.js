@@ -49,7 +49,47 @@ function normalizeNullableStringId(value, label) {
 
 function normalizeNavigationSpec(spec, label) {
   if (spec == null) return null;
-  if (typeof spec !== "object") throw new TypeError(`${label} must be an object`);
+  if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+    throw new TypeError(`${label} must be an object`);
+  }
+
+  const rawOptions = spec.options ?? {};
+  if (!rawOptions ||
+      typeof rawOptions !== "object" ||
+      Array.isArray(rawOptions)) {
+    throw new TypeError(`${label}.options must be an object`);
+  }
+
+  const optionDefaults = {
+    spatialCellSize: 50,
+    routeCacheSize: 5000,
+    routeCacheMaxLegs: 256,
+    routeCacheMaxTotalLegs: 100000,
+    hierarchicalRouteCacheSize: 1000,
+    regionalRouteCacheSize: 5000
+  };
+  for (const key of Object.keys(rawOptions)) {
+    if (!Object.hasOwn(optionDefaults, key)) {
+      throw new Error(`${label}.options contains unknown field ${key}`);
+    }
+  }
+
+  const options = {};
+  for (const [key, defaultValue] of Object.entries(optionDefaults)) {
+    const value = rawOptions[key] ?? defaultValue;
+    if (key === "spatialCellSize") {
+      if (!Number.isFinite(value) || value <= 0) {
+        throw new RangeError(
+          `${label}.options.spatialCellSize must be a finite number > 0`
+        );
+      }
+    } else if (!Number.isInteger(value) || value < 0) {
+      throw new RangeError(
+        `${label}.options.${key} must be an integer >= 0`
+      );
+    }
+    options[key] = value;
+  }
   const regions = requireArray(
     spec.regions,
     `${label}.regions`
@@ -157,7 +197,7 @@ function normalizeNavigationSpec(spec, label) {
   });
   uniqueById(roads, `${label}.road`);
   return deepFreeze({
-    options: cloneJson(spec.options ?? {}),
+    options: deepFreeze(options),
     regions: Object.freeze(regions),
     nodes: Object.freeze(nodes),
     roads: Object.freeze(roads)
