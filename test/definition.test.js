@@ -764,3 +764,78 @@ test("optional semantic reference IDs are type-checked even without navigation",
     /nodeId must be a non-empty string/
   );
 });
+
+
+test("embedded navigation options reject unknown fields and invalid bounds", () => {
+  const make = (options) => ({
+    id: "nav-options",
+    layers: [{
+      id: "inside",
+      navigation: {
+        options,
+        nodes: [{ id: "a", x: 0, y: 0 }],
+        roads: []
+      }
+    }]
+  });
+
+  assert.throws(
+    () => compilePlace(make({ typoCacheSize: 10 })),
+    /options contains unknown field typoCacheSize/
+  );
+
+  for (const spatialCellSize of [
+    0,
+    -1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY
+  ]) {
+    assert.throws(
+      () => compilePlace(make({ spatialCellSize })),
+      /spatialCellSize must be a finite number > 0/
+    );
+  }
+
+  for (const [key, value] of [
+    ["routeCacheSize", -1],
+    ["routeCacheMaxLegs", 1.5],
+    ["routeCacheMaxTotalLegs", Number.NaN],
+    ["hierarchicalRouteCacheSize", -1],
+    ["regionalRouteCacheSize", Number.POSITIVE_INFINITY]
+  ]) {
+    assert.throws(
+      () => compilePlace(make({ [key]: value })),
+      new RegExp(`${key} must be an integer >= 0`)
+    );
+  }
+});
+
+test("embedded navigation option defaults are canonical definition identity", () => {
+  const make = (options) => compilePlace({
+    id: "nav-option-defaults",
+    layers: [{
+      id: "inside",
+      navigation: {
+        ...(options === undefined ? {} : { options }),
+        nodes: [{ id: "a", x: 0, y: 0 }],
+        roads: []
+      }
+    }]
+  });
+
+  const omitted = make(undefined);
+  const explicit = make({
+    spatialCellSize: 50,
+    routeCacheSize: 5000,
+    routeCacheMaxLegs: 256,
+    routeCacheMaxTotalLegs: 100000,
+    hierarchicalRouteCacheSize: 1000,
+    regionalRouteCacheSize: 5000
+  });
+
+  assert.equal(omitted.contentHash, explicit.contentHash);
+  assert.deepEqual(
+    omitted.layers[0].navigation.options,
+    explicit.layers[0].navigation.options
+  );
+});
