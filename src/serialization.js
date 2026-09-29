@@ -849,8 +849,25 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 export function deserializePlaceCore(snapshot, options = {}) {
   validatePlaceCoreSnapshot(snapshot);
 
+  const bridge = options.bridge ?? null;
+  const resumeWorldCoreState = normalizeBoolean(
+    options.resumeWorldCoreState,
+    "resumeWorldCoreState",
+    { defaultValue: false }
+  );
+  const restartTravels = normalizeBoolean(
+    options.restartTravels,
+    "restartTravels",
+    { defaultValue: true }
+  );
+
+  if (resumeWorldCoreState && !bridge) {
+    throw new Error(
+      "resumeWorldCoreState requires a WorldCoreBridge"
+    );
+  }
+
   const registry = new PlaceRegistry({
-    bridge: options.bridge,
     captureEvents: normalizeBoolean(
       options.captureEvents,
       "deserialize captureEvents",
@@ -908,7 +925,33 @@ export function deserializePlaceCore(snapshot, options = {}) {
   }
 
   const active = snapshot.activeTravels ?? [];
-  if (options.bridge && options.resumeWorldCoreState === true) {
+
+  // Resume requires a matching restored world. Verify entity coverage before
+  // materializing any place state into that world.
+  if (bridge && resumeWorldCoreState) {
+    for (const saved of active) {
+      if (!bridge.getEntity?.(saved.entityId)) {
+        throw new Error(
+          `resumeWorldCoreState is missing world entity ${String(saved.entityId)}`
+        );
+      }
+    }
+  }
+
+  // Materialize the fully restored structural state in one late-attach
+  // transaction. PlaceRegistry.attachBridge rolls all earlier places back if
+  // any later materialization/sync fails.
+  if (bridge) registry.attachBridge(bridge);
+
+  const retainPending = (saved) => {
+    registry.pendingTravels.push({
+      entityId: saved.entityId,
+      target: cloneJson(saved.target),
+      savedState: cloneJson(saved)
+    });
+  };
+
+  if (bridge && resumeWorldCoreState) {
     for (const saved of active) {
       const state = cloneJson(saved);
       state.worldChangePolicy ??= "encounter";
@@ -932,11 +975,16 @@ export function deserializePlaceCore(snapshot, options = {}) {
       state.graphRevision = registry.travelRevision;
       registry.activeTravels.set(state.entityId, state);
     }
-  } else if (options.bridge && options.restartTravels !== false) {
+  } else if (bridge && restartTravels) {
     for (const saved of active) {
-      startTravel(
+      if (!bridge.getEntity?.(saved.entityId)) {
+        retainPending(saved);
+        continue;
+      }
+
+      const restarted = startTravel(
         registry,
-        options.bridge,
+        bridge,
         saved.entityId,
         saved.target,
         saved.options ?? {
@@ -944,15 +992,10 @@ export function deserializePlaceCore(snapshot, options = {}) {
           portalEntryTolerance: 0.25
         }
       );
+      if (!restarted) retainPending(saved);
     }
   } else {
-    for (const saved of active) {
-      registry.pendingTravels.push({
-        entityId: saved.entityId,
-        target: cloneJson(saved.target),
-        savedState: cloneJson(saved)
-      });
-    }
+    for (const saved of active) retainPending(saved);
   }
 
   for (const pending of snapshot.pendingTravels ?? []) {
