@@ -402,6 +402,7 @@ export function compilePlace(input, options = {}) {
       anchor.position
     );
   }
+  const sameDomainPortalRoadOwners = new Map();
   for (const portal of portals) {
     for (const endpoint of [portal.a, portal.b]) {
       if (endpoint.kind !== "local" || endpoint.nodeId == null) continue;
@@ -429,19 +430,55 @@ export function compilePlace(input, options = {}) {
       portal.a.nodeId != null &&
       portal.b.nodeId != null
     ) {
-      for (const binding of portal.roadBindings) {
-        if (binding.layerId !== portal.a.layerId) continue;
+      const thresholdBindings = portal.roadBindings
+        .filter((binding) => binding.layerId === portal.a.layerId);
+
+      if (
+        portal.a.spaceId != null &&
+        portal.b.spaceId != null &&
+        portal.a.spaceId !== portal.b.spaceId &&
+        navigationRoadMaps.has(portal.a.layerId) &&
+        thresholdBindings.length === 0
+      ) {
+        throw new Error(
+          `same-domain portal ${portal.id} between spaces requires a threshold road binding`
+        );
+      }
+
+      for (const binding of thresholdBindings) {
         const road = navigationRoadMaps
           .get(binding.layerId)
           ?.get(binding.roadId);
         if (!road) continue;
-        const connectsEndpoints =
-          (road.from === portal.a.nodeId && road.to === portal.b.nodeId) ||
-          (road.from === portal.b.nodeId && road.to === portal.a.nodeId);
-        if (!connectsEndpoints) {
+
+        const connectsForward =
+          road.from === portal.a.nodeId &&
+          road.to === portal.b.nodeId;
+        const connectsReverse =
+          road.from === portal.b.nodeId &&
+          road.to === portal.a.nodeId;
+
+        if (!connectsForward && !connectsReverse) {
           throw new Error(
             `portal ${portal.id} road binding ${binding.roadId} does not connect its endpoint nodes`
           );
+        }
+
+        const ownerKey = `${binding.layerId}\u0000${binding.roadId}`;
+        const owner = sameDomainPortalRoadOwners.get(ownerKey);
+        if (owner != null && owner !== portal.id) {
+          throw new Error(
+            `navigation road ${binding.roadId} is bound as a threshold by multiple portals: ${owner}, ${portal.id}`
+          );
+        }
+        sameDomainPortalRoadOwners.set(ownerKey, portal.id);
+
+        if (portal.bidirectional === false) {
+          if (!connectsForward || road.bidirectional !== false) {
+            throw new Error(
+              `unidirectional portal ${portal.id} requires a one-way threshold road from endpoint a to b`
+            );
+          }
         }
       }
     }
