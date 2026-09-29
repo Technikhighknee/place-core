@@ -41,9 +41,10 @@ export class PlaceRegistry extends CorePlaceRegistry {
     }
 
     if (normalized.placement?.domainId == null && normalized.placementDomainId != null) {
+      const transform = normalized.placement ?? {};
       normalized.placement = {
         domainId: normalized.placementDomainId,
-        transform: normalized.placement ?? {},
+        transform,
         containment: normalized.containment ?? "footprint"
       };
     }
@@ -79,21 +80,18 @@ export class PlaceRegistry extends CorePlaceRegistry {
     return this.syncEntityOccupancy(entity);
   }
 
-  removeEntityOccupancy(entityId) {
-    return super.removeEntityOccupancy(entityId);
-  }
-
   locate(domainId, position) {
     const location = super.locate(domainId, position);
     const binding = this.getDomainBinding(domainId);
-    const deepestSpace = location.spaces.length
-      ? {
-          ...location.spaces[location.spaces.length - 1],
-          id: location.spaces[location.spaces.length - 1].spaceId
-        }
-      : null;
+    const spaces = location.spaces.map((space) => ({
+      ...space,
+      id: space.spaceId
+    }));
+    const deepestSpace = spaces.length ? spaces[spaces.length - 1] : null;
+
     return deepFreeze({
       ...location,
+      spaces,
       placeId: location.places.length ? location.places[location.places.length - 1] : null,
       layerId: binding?.layerId ?? null,
       deepestSpace
@@ -103,6 +101,12 @@ export class PlaceRegistry extends CorePlaceRegistry {
   locateEntity(entity) {
     if (!entity) throw new TypeError("entity is required");
     return this.locate(entity.domainId ?? "default", entity.position);
+  }
+
+  placesAt(domainId, position) {
+    return this.locate(domainId, position).places
+      .map((placeId) => this.getPlace(placeId))
+      .filter(Boolean);
   }
 
   findAnchors({ placeId = null, tag = null, kind = null, spaceId = null } = {}) {
