@@ -608,7 +608,8 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
     domainId: startDomainId,
     position: entity.position,
     steps: [],
-    domains: [startDomainId]
+    domains: [startDomainId],
+    arrivedViaPortalKey: null
   };
   bestCostByState.set(start.key, 0);
   queue.push(start);
@@ -636,7 +637,8 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
       return true;
     });
 
-    const edges = transitionsFrom(registry, state.domainId, searchOptions);
+    const edges = transitionsFrom(registry, state.domainId, searchOptions)
+      .filter((edge) => edge.portalKey !== state.arrivedViaPortalKey);
     const destinationNodeIds = new Set();
 
     for (const anchor of anchors) {
@@ -723,6 +725,7 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
         domainId: edge.to.domainId,
         position: edge.to.position,
         domains: [...state.domains, edge.to.domainId],
+        arrivedViaPortalKey: edge.portalKey,
         steps: [...journeySteps, deepFreeze({
           type: "traverse-portal",
           portalKey: edge.portalKey,
