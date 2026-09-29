@@ -15,6 +15,7 @@ import {
   assertId,
   assertStringId,
   BoundedEventQueue,
+  canonicalStringify,
   cloneJson,
   deepFreeze
 } from "./utils.js";
@@ -56,6 +57,30 @@ function normalizePlacement(value) {
     transform: normalizeTransform(value.transform),
     containment
   });
+}
+
+function attachmentEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.domainId === b.domainId &&
+    a.position.x === b.position.x &&
+    a.position.y === b.position.y &&
+    a.nodeId === b.nodeId &&
+    a.placeId === b.placeId &&
+    a.spaceId === b.spaceId &&
+    canonicalStringify(a.metadata) === canonicalStringify(b.metadata);
+}
+
+function placementEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.domainId === b.domainId &&
+    a.parentPlaceId === b.parentPlaceId &&
+    a.containment === b.containment &&
+    a.transform.x === b.transform.x &&
+    a.transform.y === b.transform.y &&
+    a.transform.rotation === b.transform.rotation &&
+    a.transform.scale === b.transform.scale;
 }
 
 function typedIdKey(id) {
@@ -550,12 +575,13 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     const boundary = definition.getBoundary(boundaryId);
     if (!boundary) throw new Error(`unknown boundary ${boundaryId} on place ${String(instanceId)}`);
-    const enabled = patch.enabled === undefined
-      ? (instance.getBoundaryOverride(boundaryId)?.enabled ?? boundary.enabled)
-      : Boolean(patch.enabled);
-    instance.setBoundaryOverride(boundaryId, enabled === boundary.enabled ? null : { enabled });
-    this.#touchState({ travel: true });
+    const currentEnabled = instance.getBoundaryOverride(boundaryId)?.enabled ?? boundary.enabled;
+    const enabled = patch.enabled === undefined ? currentEnabled : Boolean(patch.enabled);
     const resolved = { ...boundary, enabled };
+    if (enabled === currentEnabled) return resolved;
+
+    instance.setBoundaryOverride(boundaryId, enabled === boundary.enabled ? null : { enabled });
+    this.#touchState({ travel: boundary.roadBindings?.length > 0 });
     this.#bridge?.syncBoundaryState?.(instance, resolved);
     this.emit("boundary-state-changed", { placeId: instanceId, boundaryId, enabled });
     return resolved;
@@ -569,9 +595,10 @@ export class PlaceRegistry {
     if (!space) throw new Error(`unknown space ${spaceId} on place ${String(instanceId)}`);
     const affectedEntities = [...(this.#entitiesByPlace.get(instanceId) ?? [])];
     const baseEnabled = true;
-    const enabled = patch.enabled === undefined
-      ? (instance.getSpaceOverride(spaceId)?.enabled ?? baseEnabled)
-      : Boolean(patch.enabled);
+    const currentEnabled = instance.getSpaceOverride(spaceId)?.enabled ?? baseEnabled;
+    const enabled = patch.enabled === undefined ? currentEnabled : Boolean(patch.enabled);
+    if (enabled === currentEnabled) return { ...space, enabled };
+
     instance.setSpaceOverride(spaceId, enabled === baseEnabled ? null : { enabled });
     this.#touchState({ travel: true });
     this.#refreshTrackedOccupancy(affectedEntities);
@@ -584,9 +611,19 @@ export class PlaceRegistry {
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
     assertStringId(slot, "attachment slot");
     const definition = this.#definitions.get(instance.definitionId);
-    instance.attachments.set(slot, normalizeAttachment(value, `attachment.${slot}`));
+    const nextAttachment = normalizeAttachment(value, `attachment.${slot}`);
+    const previousAttachment = instance.attachments.get(slot) ?? null;
+    if (attachmentEqual(previousAttachment, nextAttachment)) return previousAttachment;
+
+    const referencedByPortal = definition.portals.some((portal) =>
+      [portal.a, portal.b].some((endpoint) =>
+        endpoint.kind === "external" && endpoint.slot === slot
+      )
+    );
+
+    instance.attachments.set(slot, nextAttachment);
     this.#reindexInstancePortals(instance, definition);
-    this.#touchState({ travel: true });
+    this.#touchState({ travel: referencedByPortal });
     for (const portal of definition.portals) {
       if ([portal.a, portal.b].some((endpoint) => endpoint.kind === "external" && endpoint.slot === slot)) {
         this.#bridge?.syncPortalState?.(instance, portal, this.resolvePortal(instanceId, portal.id));
@@ -603,9 +640,14 @@ export class PlaceRegistry {
     if (!instance.attachments.has(slot)) return false;
 
     const definition = this.#definitions.get(instance.definitionId);
+    const referencedByPortal = definition.portals.some((portal) =>
+      [portal.a, portal.b].some((endpoint) =>
+        endpoint.kind === "external" && endpoint.slot === slot
+      )
+    );
     instance.attachments.delete(slot);
     this.#reindexInstancePortals(instance, definition);
-    this.#touchState({ travel: true });
+    this.#touchState({ travel: referencedByPortal });
 
     for (const portal of definition.portals) {
       if ([portal.a, portal.b].some((endpoint) =>
@@ -631,6 +673,7 @@ export class PlaceRegistry {
     const instance = this.#instances.get(instanceId);
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
     const next = normalizePlacement(placement);
+    if (placementEqual(instance.placement, next)) return instance.placement;
     if (next?.parentPlaceId != null) {
       if (!this.#instances.has(next.parentPlaceId)) {
         throw new Error(`unknown placement parent: ${String(next.parentPlaceId)}`);
@@ -704,27 +747,40 @@ export class PlaceRegistry {
     if (!base) {
       const dynamic = instance.dynamicPortals.get(portalId);
       if (!dynamic) throw new Error(`unknown portal ${portalId} on place ${String(instanceId)}`);
+      const before = this.resolvePortal(instanceId, portalId);
+      let changed = false;
       for (const key of PORTAL_STATE_KEYS) {
-        if (patch[key] !== undefined) dynamic[key] = Boolean(patch[key]);
+        if (patch[key] === undefined) continue;
+        const value = Boolean(patch[key]);
+        if (dynamic[key] === value) continue;
+        dynamic[key] = value;
+        changed = true;
       }
+      if (!changed) return before;
+
       this.#reindexInstancePortals(instance, definition);
-      this.#touchState({ travel: true });
       const resolved = this.resolvePortal(instanceId, portalId);
+      this.#touchState({ travel: before.traversable !== resolved.traversable });
       this.#bridge?.syncPortalState?.(instance, dynamic, resolved);
       this.emit("portal-state-changed", { placeId: instanceId, portalId, state: cloneState(resolved) });
       return resolved;
     }
 
     const current = { ...base, ...(instance.getPortalOverride(portalId) ?? {}) };
+    let changed = false;
     const next = {};
     for (const key of PORTAL_STATE_KEYS) {
       const value = patch[key] === undefined ? current[key] : Boolean(patch[key]);
+      if (value !== current[key]) changed = true;
       if (value !== base[key]) next[key] = value;
     }
+    if (!changed) return this.resolvePortal(instanceId, portalId);
+
+    const before = this.resolvePortal(instanceId, portalId);
     instance.setPortalOverride(portalId, next);
     this.#reindexInstancePortals(instance, definition);
-    this.#touchState({ travel: true });
     const resolved = this.resolvePortal(instanceId, portalId);
+    this.#touchState({ travel: before.traversable !== resolved.traversable });
     this.#bridge?.syncPortalState?.(instance, base, resolved);
     this.emit("portal-state-changed", { placeId: instanceId, portalId, state: cloneState(resolved) });
     return resolved;
