@@ -425,6 +425,7 @@ export class PlaceRegistry {
     tag?: string | null;
     kind?: string | null;
     spaceId?: string | null;
+    enabledOnly?: boolean;
   }): Array<CompiledPlaceAnchor & { placeId: PlaceId; domainId: string }>;
   findNearestAnchor(
     instanceId: PlaceId,
