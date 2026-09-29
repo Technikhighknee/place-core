@@ -26,6 +26,22 @@ function canonicalClone(value) {
   return JSON.parse(canonicalStringify(value));
 }
 
+function dynamicPortalInputFromSnapshot(portal) {
+  const endpointInput = (endpoint) => {
+    const {
+      kind: _snapshotKind,
+      ...input
+    } = endpoint;
+    return input;
+  };
+
+  return {
+    ...portal,
+    a: endpointInput(portal.a),
+    b: endpointInput(portal.b)
+  };
+}
+
 function mapToObject(map) {
   return canonicalClone(Object.fromEntries(map.entries()));
 }
@@ -212,7 +228,10 @@ export function deserializePlaceCore(snapshot, options = {}) {
   // coordinate-frame relationships exist.
   for (const item of orderedInstances) {
     for (const portal of item.dynamicPortals ?? []) {
-      registry.addPortal(item.id, portal);
+      registry.addPortal(
+        item.id,
+        dynamicPortalInputFromSnapshot(portal)
+      );
     }
     for (const [portalId, patch] of Object.entries(
       item.portalOverrides ?? {}
