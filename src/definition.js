@@ -27,16 +27,42 @@ function uniqueById(items, label) {
   }
 }
 
+function requireArray(value, label, defaultValue = []) {
+  if (value === undefined) return defaultValue;
+  if (!Array.isArray(value)) {
+    throw new TypeError(`${label} must be an array`);
+  }
+  return value;
+}
+
+function normalizeKind(value, label, defaultValue) {
+  const kind = value ?? defaultValue;
+  assertStringId(kind, label);
+  return kind;
+}
+
+function normalizeNullableStringId(value, label) {
+  if (value == null) return null;
+  assertStringId(value, label);
+  return value;
+}
+
 function normalizeNavigationSpec(spec, label) {
   if (spec == null) return null;
   if (typeof spec !== "object") throw new TypeError(`${label} must be an object`);
-  const regions = (spec.regions ?? []).map((region, index) => {
+  const regions = requireArray(
+    spec.regions,
+    `${label}.regions`
+  ).map((region, index) => {
     assertStringId(region.id, `${label}.regions[${index}].id`);
     return deepFreeze({ id: region.id });
   });
   uniqueById(regions, `${label}.region`);
   const regionIds = new Set(regions.map((x) => x.id));
-  const nodes = (spec.nodes ?? []).map((node, index) => {
+  const nodes = requireArray(
+    spec.nodes,
+    `${label}.nodes`
+  ).map((node, index) => {
     assertStringId(node.id, `${label}.nodes[${index}].id`);
     if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) throw new TypeError(`${label}.node ${node.id} requires finite x/y`);
     if (node.regionId != null && !regionIds.has(node.regionId)) throw new Error(`${label}.node ${node.id} references unknown region ${node.regionId}`);
@@ -56,7 +82,10 @@ function normalizeNavigationSpec(spec, label) {
   });
   uniqueById(nodes, `${label}.node`);
   const nodeIds = new Set(nodes.map((x) => x.id));
-  const roads = (spec.roads ?? []).map((road, index) => {
+  const roads = requireArray(
+    spec.roads,
+    `${label}.roads`
+  ).map((road, index) => {
     assertStringId(road.id, `${label}.roads[${index}].id`);
     assertStringId(road.from, `${label}.road(${road.id}).from`);
     assertStringId(road.to, `${label}.road(${road.id}).to`);
@@ -167,7 +196,11 @@ function normalizeLayer(layer, definitionId) {
 
   return deepFreeze({
     id: layer.id,
-    kind: layer.kind ?? "spatial-layer",
+    kind: normalizeKind(
+      layer.kind,
+      `layer(${layer.id}).kind`,
+      "spatial-layer"
+    ),
     tags: normalizeStringList(layer.tags, `layer(${layer.id}).tags`, { defaultValue: [] }),
     topologyId,
     navigation,
@@ -180,14 +213,26 @@ function normalizeSpace(space, layersById) {
   assertStringId(space.layerId, `space(${space.id}).layerId`);
   if (!layersById.has(space.layerId)) throw new Error(`space ${space.id} references unknown layer ${space.layerId}`);
   const geometry = normalizeGeometry(space.geometry);
+  const parentSpaceId = normalizeNullableStringId(
+    space.parentSpaceId,
+    `space(${space.id}).parentSpaceId`
+  );
+  const defaultAnchorId = normalizeNullableStringId(
+    space.defaultAnchorId,
+    `space(${space.id}).defaultAnchorId`
+  );
   return deepFreeze({
     id: space.id,
     layerId: space.layerId,
-    kind: space.kind ?? "space",
+    kind: normalizeKind(
+      space.kind,
+      `space(${space.id}).kind`,
+      "space"
+    ),
     tags: normalizeStringList(space.tags, `space(${space.id}).tags`, { defaultValue: [] }),
     geometry,
-    parentSpaceId: space.parentSpaceId ?? null,
-    defaultAnchorId: space.defaultAnchorId ?? null,
+    parentSpaceId,
+    defaultAnchorId,
     priority: (() => {
       const value = space.priority ?? 0;
       if (!Number.isFinite(value)) {
@@ -204,14 +249,21 @@ function normalizeBoundary(boundary, layersById) {
   assertStringId(boundary.layerId, `boundary(${boundary.id}).layerId`);
   if (!layersById.has(boundary.layerId)) throw new Error(`boundary ${boundary.id} references unknown layer ${boundary.layerId}`);
   if (!boundary.a || !boundary.b) throw new TypeError(`boundary ${boundary.id} requires endpoints a and b`);
-  const roadBindings = (boundary.roadBindings ?? []).map((binding, index) => {
+  const roadBindings = requireArray(
+    boundary.roadBindings,
+    `boundary(${boundary.id}).roadBindings`
+  ).map((binding, index) => {
     assertStringId(binding.roadId, `boundary(${boundary.id}).roadBindings[${index}].roadId`);
     return deepFreeze({ roadId: binding.roadId });
   });
   return deepFreeze({
     id: boundary.id,
     layerId: boundary.layerId,
-    kind: boundary.kind ?? "wall",
+    kind: normalizeKind(
+      boundary.kind,
+      `boundary(${boundary.id}).kind`,
+      "wall"
+    ),
     tags: normalizeStringList(boundary.tags, `boundary(${boundary.id}).tags`, { defaultValue: [] }),
     a: cloneVec2(boundary.a),
     b: cloneVec2(boundary.b),
@@ -244,6 +296,10 @@ function normalizeEndpoint(endpoint, portalId, layersById, spacesById) {
       }
     }
     const position = cloneVec2(endpoint.position);
+    const nodeId = normalizeNullableStringId(
+      endpoint.nodeId,
+      `portal(${portalId}).endpoint.nodeId`
+    );
     if (space && !pointInGeometry(position, space.geometry)) {
       throw new Error(
         `portal ${portalId} endpoint is outside space ${endpoint.spaceId}`
@@ -254,7 +310,7 @@ function normalizeEndpoint(endpoint, portalId, layersById, spacesById) {
       layerId: endpoint.layerId,
       spaceId: endpoint.spaceId ?? null,
       position,
-      nodeId: endpoint.nodeId ?? null,
+      nodeId,
       metadata: cloneJson(endpoint.metadata ?? null)
     });
   }
@@ -279,7 +335,10 @@ function normalizePortal(portal, layersById, spacesById) {
   }
   const a = normalizeEndpoint(portal.a, portal.id, layersById, spacesById);
   const b = normalizeEndpoint(portal.b, portal.id, layersById, spacesById);
-  const roadBindings = (portal.roadBindings ?? []).map((binding, index) => {
+  const roadBindings = requireArray(
+    portal.roadBindings,
+    `portal(${portal.id}).roadBindings`
+  ).map((binding, index) => {
     assertStringId(binding.layerId, `portal(${portal.id}).roadBindings[${index}].layerId`);
     assertStringId(binding.roadId, `portal(${portal.id}).roadBindings[${index}].roadId`);
     if (!layersById.has(binding.layerId)) throw new Error(`portal ${portal.id} road binding references unknown layer ${binding.layerId}`);
@@ -287,7 +346,11 @@ function normalizePortal(portal, layersById, spacesById) {
   });
   return deepFreeze({
     id: portal.id,
-    kind: portal.kind ?? "portal",
+    kind: normalizeKind(
+      portal.kind,
+      `portal(${portal.id}).kind`,
+      "portal"
+    ),
     tags: normalizeStringList(portal.tags, `portal(${portal.id}).tags`, { defaultValue: [] }),
     a,
     b,
@@ -345,6 +408,10 @@ function normalizeAnchor(anchor, layersById, spacesById) {
     }
   }
   const position = cloneVec2(anchor.position);
+  const nodeId = normalizeNullableStringId(
+    anchor.nodeId,
+    `anchor(${anchor.id}).nodeId`
+  );
   if (space && !pointInGeometry(position, space.geometry)) {
     throw new Error(`anchor ${anchor.id} is outside space ${anchor.spaceId}`);
   }
@@ -353,9 +420,13 @@ function normalizeAnchor(anchor, layersById, spacesById) {
     layerId: anchor.layerId,
     spaceId: anchor.spaceId ?? null,
     position,
-    nodeId: anchor.nodeId ?? null,
+    nodeId,
     tags: normalizeStringList(anchor.tags, `anchor(${anchor.id}).tags`, { defaultValue: [] }),
-    kind: anchor.kind ?? "anchor",
+    kind: normalizeKind(
+      anchor.kind,
+      `anchor(${anchor.id}).kind`,
+      "anchor"
+    ),
     metadata: cloneJson(anchor.metadata ?? null)
   });
 }
@@ -485,11 +556,14 @@ const EMPTY = Object.freeze([]);
 export function compilePlace(input, options = {}) {
   const blueprint = definePlace(input);
   assertStringId(blueprint.id, "place.id");
-  const layersInput = blueprint.layers ?? [];
-  const spacesInput = blueprint.spaces ?? [];
-  const boundariesInput = blueprint.boundaries ?? [];
-  const portalsInput = blueprint.portals ?? [];
-  const anchorsInput = blueprint.anchors ?? [];
+  const layersInput = requireArray(blueprint.layers, "place.layers");
+  const spacesInput = requireArray(blueprint.spaces, "place.spaces");
+  const boundariesInput = requireArray(
+    blueprint.boundaries,
+    "place.boundaries"
+  );
+  const portalsInput = requireArray(blueprint.portals, "place.portals");
+  const anchorsInput = requireArray(blueprint.anchors, "place.anchors");
   uniqueById(layersInput, "layer");
   uniqueById(spacesInput, "space");
   uniqueById(boundariesInput, "boundary");
