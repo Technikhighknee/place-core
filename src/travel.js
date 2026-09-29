@@ -458,6 +458,94 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
 }
 
 
+function domainPathKey(domains) {
+  return domains.join("\u0000");
+}
+
+function exclusionSetKey(excludedPairs) {
+  return [...excludedPairs].sort().join("\u0001");
+}
+
+function shortestDomainPathCandidates(
+  registry,
+  startDomainId,
+  targetDomainId,
+  options = {}
+) {
+  const excludedPortalKeys = new Set(options.excludedPortalKeys ?? []);
+  const baseExcludedPairs = new Set(options.excludedDomainPairs ?? []);
+  const first = findDomainPortalPath(
+    registry,
+    startDomainId,
+    targetDomainId,
+    { excludedPairs: baseExcludedPairs, excludedPortalKeys }
+  );
+  if (!first) return [];
+
+  const firstDomains = first.domains ?? [
+    startDomainId,
+    ...first.map((edge) => edge.to.domainId)
+  ];
+  const minimumHops = firstDomains.length - 1;
+  const maxCandidates = options.maxShortestDomainPaths ?? 32;
+  if (!Number.isInteger(maxCandidates) || maxCandidates < 1) {
+    throw new RangeError("maxShortestDomainPaths must be a positive integer");
+  }
+
+  const pending = [{
+    domains: firstDomains,
+    excludedPairs: baseExcludedPairs
+  }];
+  const seenPaths = new Set();
+  const seenExclusions = new Set([exclusionSetKey(baseExcludedPairs)]);
+  const result = [];
+
+  while (pending.length > 0) {
+    pending.sort((a, b) => domainPathKey(a.domains).localeCompare(domainPathKey(b.domains)));
+    const current = pending.shift();
+    const pathKey = domainPathKey(current.domains);
+    if (seenPaths.has(pathKey)) continue;
+    seenPaths.add(pathKey);
+    result.push(Object.freeze([...current.domains]));
+
+    for (let i = 0; i < current.domains.length - 1; i += 1) {
+      const excludedPairs = new Set(current.excludedPairs);
+      excludedPairs.add(pairKey(current.domains[i], current.domains[i + 1]));
+      const exclusionKey = exclusionSetKey(excludedPairs);
+      if (seenExclusions.has(exclusionKey)) continue;
+      seenExclusions.add(exclusionKey);
+
+      const alternate = findDomainPortalPath(
+        registry,
+        startDomainId,
+        targetDomainId,
+        { excludedPairs, excludedPortalKeys }
+      );
+      if (!alternate) continue;
+
+      const domains = alternate.domains ?? [
+        startDomainId,
+        ...alternate.map((edge) => edge.to.domainId)
+      ];
+      if (domains.length - 1 !== minimumHops) continue;
+      if (!seenPaths.has(domainPathKey(domains))) {
+        pending.push({ domains, excludedPairs });
+      }
+    }
+
+    if (result.length >= maxCandidates) {
+      if (pending.length > 0 && options.allowPartialShortestPathSearch !== true) {
+        throw new Error(
+          `shortest semantic path count exceeds maxShortestDomainPaths (${maxCandidates})`
+        );
+      }
+      break;
+    }
+  }
+
+  return result;
+}
+
 function computeReverseDomainDistances(registry, targetDomainId, options = {}) {
   const distances = new Map([[targetDomainId, 0]]);
   const queue = [targetDomainId];
@@ -774,38 +862,62 @@ export function planTravel(registry, a, b, c, d) {
   const excludedPortalKeys = new Set(options.excludedPortalKeys ?? []);
   const baseSearchOptions = { ...options, excludedPortalKeys };
 
-  const reverseDistances = computeReverseDomainDistances(
+  const candidatePaths = shortestDomainPathCandidates(
     registry,
+    startDomainId,
     resolvedTarget.domainId,
     baseSearchOptions
   );
 
-  const shortest = optimizeAllShortestDomainPaths(
-    registry,
-    bridge,
-    entity,
-    resolvedTarget,
-    baseSearchOptions,
-    reverseDistances
-  );
+  let bestShortest = null;
+  const failedPairs = new Set();
 
-  if (shortest) {
-    const steps = Object.freeze(shortest.steps);
+  for (const domains of candidatePaths) {
+    const optimized = optimizeConcretePath(
+      registry,
+      bridge,
+      entity,
+      domains,
+      resolvedTarget,
+      baseSearchOptions
+    );
+
+    if (!optimized.plan) {
+      if (optimized.failedPair) failedPairs.add(optimized.failedPair);
+      continue;
+    }
+
+    const candidateKey = domainPathKey(domains);
+    if (!bestShortest ||
+        optimized.plan.cost < bestShortest.plan.cost ||
+        (optimized.plan.cost === bestShortest.plan.cost &&
+         candidateKey.localeCompare(bestShortest.key) < 0)) {
+      bestShortest = {
+        key: candidateKey,
+        domains,
+        plan: optimized.plan
+      };
+    }
+  }
+
+  if (bestShortest) {
+    const steps = Object.freeze(bestShortest.plan.steps);
     return deepFreeze({
       entityId: entity.id,
       target: cloneJson(target),
       resolvedTarget,
       graphRevision: registry.graphRevision,
       startDomainId,
-      domainPath: Object.freeze([...shortest.domains]),
+      domainPath: Object.freeze([...bestShortest.domains]),
       steps,
       legs: steps,
-      estimatedSeconds: shortest.cost,
+      estimatedSeconds: bestShortest.plan.cost,
       rejectedDomainPairs: Object.freeze([])
     });
   }
 
   const excludedPairs = new Set(options.excludedDomainPairs ?? []);
+  for (const failedPair of failedPairs) excludedPairs.add(failedPair);
   const maxAttempts = options.maxDomainPathAttempts ?? 32;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
