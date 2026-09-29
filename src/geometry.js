@@ -380,6 +380,7 @@ export class DynamicAabbIndex {
   }
 
   get size() { return this.#bounds.size; }
+  get cellSize() { return this.#cellSize; }
   get cellCount() { return this.#cells.size; }
 
   #key(x, y) {
