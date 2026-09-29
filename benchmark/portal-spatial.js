@@ -3,6 +3,9 @@ import { PlaceRegistry } from "../src/index.js";
 
 const count = Number(process.env.PORTAL_SPATIAL_PLACES ?? 50_000);
 const queries = Number(process.env.PORTAL_SPATIAL_QUERIES ?? 10_000);
+const blockedQueries = Number(
+  process.env.PORTAL_SPATIAL_BLOCKED_QUERIES ?? 1_000
+);
 
 const places = new PlaceRegistry();
 places.registerDefinition({
@@ -63,3 +66,57 @@ console.log(`p95: ${percentile(0.95).toFixed(4)} ms`);
 console.log(`p99: ${percentile(0.99).toFixed(4)} ms`);
 console.log(`portal endpoints: ${places.getDiagnostics().portalEndpointCount.toLocaleString()}`);
 console.log(`checksum: ${checksum}`);
+
+
+const lockStarted = performance.now();
+for (let i = 0; i < count; i += 1) {
+  places.setPortalState(
+    `house-${i}`,
+    "door",
+    { locked: true }
+  );
+}
+const lockElapsed = performance.now() - lockStarted;
+
+const blockedSamples = [];
+const blockedStarted = performance.now();
+for (let i = 0; i < blockedQueries; i += 1) {
+  const index = (i * 3571 + 11) % count;
+  const point = {
+    x: index * 4 + 0.5,
+    y: (index % 17) * 3
+  };
+  const t = performance.now();
+  const hit = places.findNearestPortal("city", point);
+  blockedSamples.push(performance.now() - t);
+  if (hit !== null) {
+    throw new Error(
+      `blocked nearest query ${i} unexpectedly found ${hit.portal.key}`
+    );
+  }
+}
+const blockedElapsed = performance.now() - blockedStarted;
+blockedSamples.sort((a, b) => a - b);
+
+const diagnostics = places.getDiagnostics();
+if (diagnostics.traversablePortalEndpointCount !== 0) {
+  throw new Error(
+    `expected zero traversable endpoints after locking all portals, got ${diagnostics.traversablePortalEndpointCount}`
+  );
+}
+
+const blockedPercentile = p =>
+  blockedSamples[
+    Math.min(
+      blockedSamples.length - 1,
+      Math.floor(blockedSamples.length * p)
+    )
+  ];
+
+console.log("--- all-portals-blocked phase ---");
+console.log(`lock mutations: ${lockElapsed.toFixed(2)} ms`);
+console.log(`blocked queries: ${blockedQueries.toLocaleString()}`);
+console.log(`blocked elapsed: ${blockedElapsed.toFixed(2)} ms`);
+console.log(`blocked p50: ${blockedPercentile(0.50).toFixed(4)} ms`);
+console.log(`blocked p95: ${blockedPercentile(0.95).toFixed(4)} ms`);
+console.log(`blocked p99: ${blockedPercentile(0.99).toFixed(4)} ms`);
