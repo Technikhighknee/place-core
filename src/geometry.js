@@ -282,9 +282,53 @@ export function pointOnSegment(point, a, b) {
   return dot <= len2 + EPSILON;
 }
 
+function validateSimplePolygon(points) {
+  const count = points.length;
+
+  let signedArea2 = 0;
+  for (let i = 0; i < count; i += 1) {
+    const a = points[i];
+    const b = points[(i + 1) % count];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    if (dx * dx + dy * dy <= EPSILON * EPSILON) {
+      throw new RangeError(
+        "polygon geometry cannot contain zero-length edges or repeated closing points"
+      );
+    }
+    signedArea2 += a.x * b.y - b.x * a.y;
+  }
+
+  if (Math.abs(signedArea2) <= EPSILON) {
+    throw new RangeError("polygon geometry must have non-zero area");
+  }
+
+  for (let i = 0; i < count; i += 1) {
+    const a1 = points[i];
+    const a2 = points[(i + 1) % count];
+
+    for (let j = i + 1; j < count; j += 1) {
+      const adjacent =
+        j === i ||
+        j === (i + 1) % count ||
+        i === (j + 1) % count;
+      if (adjacent) continue;
+
+      const b1 = points[j];
+      const b2 = points[(j + 1) % count];
+      if (segmentIntersectionParameters(a1, a2, b1, b2).length > 0) {
+        throw new RangeError(
+          "polygon geometry must be simple and cannot self-intersect"
+        );
+      }
+    }
+  }
+}
+
 export function normalizeGeometry(geometry) {
   geometryBounds(geometry);
   if (geometry.type === "polygon") {
+    validateSimplePolygon(geometry.points);
     return Object.freeze({
       type: "polygon",
       points: Object.freeze(geometry.points.map(cloneVec2))
