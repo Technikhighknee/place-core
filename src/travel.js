@@ -39,7 +39,7 @@ function assertOptionalStringId(value, label) {
   return value;
 }
 
-function validateTravelTarget(target) {
+export function validateTravelTarget(target) {
   assertPlainObject(target, "travel target");
 
   if (target.kind != null) {
