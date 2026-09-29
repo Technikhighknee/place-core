@@ -409,6 +409,10 @@ export class PlaceRegistry {
     position: Vec2,
     options?: { tag?: string; layerId?: string }
   ): (CompiledPlaceAnchor & { placeId: PlaceId; domainId: string; distance: number }) | null;
+  getAnchorsForDomain(
+    domainId: string,
+    options?: { tag?: string; kind?: string; spaceId?: string }
+  ): Array<CompiledPlaceAnchor & { placeId: PlaceId; domainId: string }>;
   findNearestAnchorInDomain(
     domainId: string,
     position: Vec2,
@@ -523,7 +527,13 @@ export type TravelTarget =
       spaceId?: string | null;
       layerId?: string | null;
     }
-  | { kind: "nearest"; tag: string };
+  | {
+      kind: "nearest";
+      tag: string;
+      anchorKind?: string;
+      placeId?: PlaceId;
+      spaceId?: string;
+    };
 
 export type TravelStep =
   | {
@@ -582,7 +592,11 @@ export interface TravelOptions {
   excludedPortalKeys?: Iterable<string>;
   excludedDomainPairs?: Iterable<string>;
   maxDomainPathAttempts?: number;
+  maxDomainSearchDomains?: number;
   maxConcreteStatesPerLayer?: number;
+  maxNearestTargetExpansions?: number;
+  maxCost?: number;
+  anchorPredicate?: (anchor: CompiledPlaceAnchor & { placeId: PlaceId; domainId: string }) => boolean;
   deltaSeconds?: number;
 }
 
