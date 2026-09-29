@@ -409,6 +409,34 @@ export class PlaceRegistry {
     position: Vec2,
     options?: { tag?: string; layerId?: string }
   ): (CompiledPlaceAnchor & { placeId: PlaceId; domainId: string; distance: number }) | null;
+  findNearestAnchorInDomain(
+    domainId: string,
+    position: Vec2,
+    options?: { tag?: string; kind?: string; spaceId?: string }
+  ): (CompiledPlaceAnchor & { placeId: PlaceId; domainId: string; distance: number }) | null;
+  findNearestPortal(
+    domainId: string,
+    position: Vec2,
+    options?: { traversableOnly?: boolean; kind?: string; tag?: string }
+  ): { portal: ResolvedPortal; endpoint: ResolvedPortalEndpoint; distance: number } | null;
+  getBoundariesForDomain(
+    domainId: string,
+    options?: { enabledOnly?: boolean; kind?: string; tag?: string }
+  ): Array<PlaceBoundaryInput & { enabled: boolean; placeId: PlaceId; domainId: string }>;
+  boundariesIntersectingBounds(
+    domainId: string,
+    bounds: Bounds,
+    options?: { enabledOnly?: boolean; kind?: string; tag?: string }
+  ): Array<PlaceBoundaryInput & { enabled: boolean; placeId: PlaceId; domainId: string }>;
+  findNearestBoundary(
+    domainId: string,
+    position: Vec2,
+    options?: { enabledOnly?: boolean; kind?: string; tag?: string }
+  ): {
+    boundary: PlaceBoundaryInput & { enabled: boolean; placeId: PlaceId; domainId: string };
+    distance: number;
+  } | null;
+  placesInBounds(domainId: string, bounds: Bounds): PlaceInstance[];
 
   locate(domainId: string, position: Vec2): LocationContext;
   locateEntity(entity: { domainId?: string; position: Vec2 }): LocationContext;
@@ -679,6 +707,10 @@ export function pointInGeometry(point: Vec2, geometry: Geometry): boolean;
 export function transformPoint(point: Vec2, transform?: Transform2D): Vec2;
 export function inverseTransformPoint(point: Vec2, transform?: Transform2D): Vec2;
 export function composeTransforms(parent?: Transform2D, child?: Transform2D): Required<Pick<Transform2D, "x" | "y" | "rotation" | "scale">>;
+export function boundsIntersect(a: Bounds, b: Bounds): boolean;
+export function segmentBounds(a: Vec2, b: Vec2): Bounds;
+export function segmentIntersectsBounds(a: Vec2, b: Vec2, bounds: Bounds): boolean;
+export function squaredDistancePointToSegment(point: Vec2, a: Vec2, b: Vec2): number;
 export function transformBounds(bounds: Bounds, transform?: Transform2D): Bounds;
 
 export class StaticGeometryIndex<T = any> {
@@ -699,6 +731,8 @@ export class DynamicAabbIndex {
   set(id: PlaceId, bounds: Bounds): void;
   delete(id: PlaceId): boolean;
   queryPoint(point: Vec2): PlaceId[];
+  queryBounds(bounds: Bounds): PlaceId[];
+  getBounds(id: PlaceId): Bounds | null;
   readonly size: number;
   readonly cellCount: number;
 }
