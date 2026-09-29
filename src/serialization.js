@@ -167,20 +167,43 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   }
 
   for (const item of snapshot.instances) {
-    if (item.parentId == null) continue;
-    if (!instances.has(idKey(item.parentId))) {
+    if (item.parentId != null && !instances.has(idKey(item.parentId))) {
       throw new Error(`instance ${String(item.id)} references missing parent ${String(item.parentId)}`);
+    }
+
+    if (item.placement != null) {
+      assertObject(item.placement, `instance ${String(item.id)}.placement`);
+      const hasDomain = item.placement.domainId != null;
+      const hasParent = item.placement.parentPlaceId != null;
+      if (hasDomain === hasParent) {
+        throw new Error(`instance ${String(item.id)} placement must reference exactly one frame`);
+      }
+      if (hasDomain && (typeof item.placement.domainId !== "string" || !item.placement.domainId)) {
+        throw new Error(`instance ${String(item.id)} placement has invalid domainId`);
+      }
+      if (hasParent && !instances.has(idKey(item.placement.parentPlaceId))) {
+        throw new Error(`instance ${String(item.id)} references missing placement parent ${String(item.placement.parentPlaceId)}`);
+      }
     }
   }
 
   for (const item of snapshot.instances) {
-    const visited = new Set();
+    const semanticVisited = new Set();
     let cursor = item;
     while (cursor?.parentId != null) {
       const key = idKey(cursor.id);
-      if (visited.has(key)) throw new Error(`place parent cycle involving ${String(cursor.id)}`);
-      visited.add(key);
+      if (semanticVisited.has(key)) throw new Error(`place parent cycle involving ${String(cursor.id)}`);
+      semanticVisited.add(key);
       cursor = instances.get(idKey(cursor.parentId));
+    }
+
+    const placementVisited = new Set();
+    cursor = item;
+    while (cursor?.placement?.parentPlaceId != null) {
+      const key = idKey(cursor.id);
+      if (placementVisited.has(key)) throw new Error(`place placement cycle involving ${String(cursor.id)}`);
+      placementVisited.add(key);
+      cursor = instances.get(idKey(cursor.placement.parentPlaceId));
     }
   }
 
@@ -229,6 +252,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
     let progressed = false;
     for (const [key, item] of [...remaining.entries()]) {
       if (item.parentId != null && !registry.getPlace(item.parentId)) continue;
+      if (item.placement?.parentPlaceId != null && !registry.getPlace(item.placement.parentPlaceId)) continue;
 
       registry.createPlace({
         id: item.id,
