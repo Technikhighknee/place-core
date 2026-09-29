@@ -452,3 +452,115 @@ test("space priority must be finite when supplied", () => {
     );
   }
 });
+
+
+test("embedded navigation rejects invalid world-core geometry fields at compile time", () => {
+  const make = (nodePatch = {}, roadPatch = {}) => ({
+    id: "nav-validation",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0, ...nodePatch },
+          { id: "b", x: 1, y: 0 }
+        ],
+        roads: [{
+          id: "road",
+          from: "a",
+          to: "b",
+          ...roadPatch
+        }]
+      }
+    }]
+  });
+
+  for (const junctionRadius of [
+    -1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY
+  ]) {
+    assert.throws(
+      () => compilePlace(make({ junctionRadius })),
+      /junctionRadius must be a finite number >= 0/
+    );
+  }
+
+  for (const width of [
+    0,
+    -1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY
+  ]) {
+    assert.throws(
+      () => compilePlace(make({}, { width })),
+      /width must be a finite number > 0/
+    );
+  }
+
+  assert.throws(
+    () => compilePlace(make({}, { surface: "" })),
+    /surface/
+  );
+  assert.throws(
+    () => compilePlace(make({}, { shape: "not-an-array" })),
+    /shape must be an array/
+  );
+  assert.throws(
+    () => compilePlace(make({}, {
+      shape: [{ x: Number.NaN, y: 0 }]
+    })),
+    /shape\[0\] must be a finite Vec2/
+  );
+});
+
+test("embedded navigation canonicalizes world-core defaults", () => {
+  const omitted = compilePlace({
+    id: "canonical-nav",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 }
+        ],
+        roads: [{
+          id: "road",
+          from: "a",
+          to: "b"
+        }]
+      }
+    }]
+  });
+
+  const explicit = compilePlace({
+    id: "canonical-nav",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0, junctionRadius: 0 },
+          { id: "b", x: 1, y: 0, junctionRadius: 0 }
+        ],
+        roads: [{
+          id: "road",
+          from: "a",
+          to: "b",
+          shape: [],
+          width: 4,
+          surface: "street",
+          bidirectional: true,
+          enabled: true,
+          allowedProfiles: null,
+          blockedProfiles: [],
+          tags: []
+        }]
+      }
+    }]
+  });
+
+  assert.equal(omitted.contentHash, explicit.contentHash);
+  assert.deepEqual(
+    omitted.layers[0].navigation.roads[0],
+    explicit.layers[0].navigation.roads[0]
+  );
+});
