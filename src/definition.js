@@ -11,6 +11,7 @@ import {
   canonicalStringify,
   cloneJson,
   deepFreeze,
+  normalizeBoolean,
   normalizeStringList,
   sha256
 } from "./utils.js";
@@ -55,8 +56,16 @@ function normalizeNavigationSpec(spec, label) {
     return deepFreeze({
       id: road.id, from: road.from, to: road.to,
       shape: road.shape ? Object.freeze(road.shape.map(cloneVec2)) : undefined,
-      width: road.width, surface: road.surface, bidirectional: road.bidirectional,
-      enabled: road.enabled,
+      width: road.width,
+      surface: road.surface,
+      bidirectional: normalizeBoolean(
+        road.bidirectional,
+        `${label}.road(${road.id}).bidirectional`
+      ),
+      enabled: normalizeBoolean(
+        road.enabled,
+        `${label}.road(${road.id}).enabled`
+      ),
       allowedProfiles: normalizeStringList(
         road.allowedProfiles,
         `${label}.road(${road.id}).allowedProfiles`,
@@ -147,7 +156,11 @@ function normalizeBoundary(boundary, layersById) {
     tags: normalizeStringList(boundary.tags, `boundary(${boundary.id}).tags`, { defaultValue: [] }),
     a: cloneVec2(boundary.a),
     b: cloneVec2(boundary.b),
-    enabled: boundary.enabled !== false,
+    enabled: normalizeBoolean(
+      boundary.enabled,
+      `boundary(${boundary.id}).enabled`,
+      { defaultValue: true }
+    ),
     roadBindings: Object.freeze(roadBindings),
     metadata: cloneJson(boundary.metadata ?? null)
   });
@@ -219,14 +232,42 @@ function normalizePortal(portal, layersById, spacesById) {
     tags: normalizeStringList(portal.tags, `portal(${portal.id}).tags`, { defaultValue: [] }),
     a,
     b,
-    bidirectional: portal.bidirectional !== false,
+    bidirectional: normalizeBoolean(
+      portal.bidirectional,
+      `portal(${portal.id}).bidirectional`,
+      { defaultValue: true }
+    ),
     transitionCost,
-    enabled: portal.enabled !== false,
-    open: portal.open !== false,
-    locked: portal.locked === true,
-    blocked: portal.blocked === true,
-    destroyed: portal.destroyed === true,
-    blocksWhenClosed: portal.blocksWhenClosed === true,
+    enabled: normalizeBoolean(
+      portal.enabled,
+      `portal(${portal.id}).enabled`,
+      { defaultValue: true }
+    ),
+    open: normalizeBoolean(
+      portal.open,
+      `portal(${portal.id}).open`,
+      { defaultValue: true }
+    ),
+    locked: normalizeBoolean(
+      portal.locked,
+      `portal(${portal.id}).locked`,
+      { defaultValue: false }
+    ),
+    blocked: normalizeBoolean(
+      portal.blocked,
+      `portal(${portal.id}).blocked`,
+      { defaultValue: false }
+    ),
+    destroyed: normalizeBoolean(
+      portal.destroyed,
+      `portal(${portal.id}).destroyed`,
+      { defaultValue: false }
+    ),
+    blocksWhenClosed: normalizeBoolean(
+      portal.blocksWhenClosed,
+      `portal(${portal.id}).blocksWhenClosed`,
+      { defaultValue: false }
+    ),
     roadBindings: Object.freeze(roadBindings),
     metadata: cloneJson(portal.metadata ?? null)
   });
