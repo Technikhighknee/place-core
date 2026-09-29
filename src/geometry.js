@@ -195,6 +195,71 @@ export function squaredDistance(a, b) {
   return dx * dx + dy * dy;
 }
 
+export function boundsIntersect(a, b) {
+  return a.minX <= b.maxX + EPSILON &&
+    a.maxX >= b.minX - EPSILON &&
+    a.minY <= b.maxY + EPSILON &&
+    a.maxY >= b.minY - EPSILON;
+}
+
+export function segmentBounds(a, b) {
+  assertVec2(a, "segment.a");
+  assertVec2(b, "segment.b");
+  return {
+    minX: Math.min(a.x, b.x),
+    minY: Math.min(a.y, b.y),
+    maxX: Math.max(a.x, b.x),
+    maxY: Math.max(a.y, b.y)
+  };
+}
+
+export function squaredDistancePointToSegment(point, a, b) {
+  assertVec2(point);
+  assertVec2(a, "segment.a");
+  assertVec2(b, "segment.b");
+  const abX = b.x - a.x;
+  const abY = b.y - a.y;
+  const len2 = abX * abX + abY * abY;
+  if (len2 <= EPSILON) return squaredDistance(point, a);
+  const t = Math.max(0, Math.min(1, ((point.x - a.x) * abX + (point.y - a.y) * abY) / len2));
+  const closest = { x: a.x + abX * t, y: a.y + abY * t };
+  return squaredDistance(point, closest);
+}
+
+export function segmentIntersectsBounds(a, b, bounds) {
+  assertVec2(a, "segment.a");
+  assertVec2(b, "segment.b");
+  if (!boundsIntersect(segmentBounds(a, b), bounds)) return false;
+  if (pointInBounds(a, bounds) || pointInBounds(b, bounds)) return true;
+
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const checks = [
+    [-dx, a.x - bounds.minX],
+    [ dx, bounds.maxX - a.x],
+    [-dy, a.y - bounds.minY],
+    [ dy, bounds.maxY - a.y]
+  ];
+
+  for (const [p, q] of checks) {
+    if (Math.abs(p) <= EPSILON) {
+      if (q < 0) return false;
+      continue;
+    }
+    const ratio = q / p;
+    if (p < 0) {
+      if (ratio > t1) return false;
+      if (ratio > t0) t0 = ratio;
+    } else {
+      if (ratio < t0) return false;
+      if (ratio < t1) t1 = ratio;
+    }
+  }
+  return t0 <= t1 + EPSILON;
+}
+
 export class StaticGeometryIndex {
   #cellSize;
   #cells = new Map();
@@ -292,6 +357,26 @@ export class DynamicAabbIndex {
       if (bounds && pointInBounds(point, bounds)) result.push(id);
     }
     return result;
+  }
+
+  queryBounds(bounds) {
+    const candidates = new Set();
+    for (const key of this.#keysForBounds(bounds)) {
+      const bucket = this.#cells.get(key);
+      if (!bucket) continue;
+      for (const id of bucket) candidates.add(id);
+    }
+    const result = [];
+    for (const id of candidates) {
+      const itemBounds = this.#bounds.get(id);
+      if (itemBounds && boundsIntersect(itemBounds, bounds)) result.push(id);
+    }
+    return result;
+  }
+
+  getBounds(id) {
+    const bounds = this.#bounds.get(id);
+    return bounds ? { ...bounds } : null;
   }
 
   get size() { return this.#bounds.size; }
