@@ -521,3 +521,63 @@ test("version-1 snapshots without memberships remain backward compatible", () =>
   );
   restored.assertInternalConsistency();
 });
+
+
+test("snapshot restore supports cross-graph dependency cycles between semantics and placement", () => {
+  const places = registry();
+
+  add(places, "a");
+  add(places, "b");
+
+  places.addMembership("a", {
+    parentPlaceId: "b",
+    kind: "jurisdiction"
+  });
+
+  places.setPlacement("a", {
+    domainId: "world",
+    transform: {
+      x: 10,
+      y: 20,
+      rotation: 0.25,
+      scale: 1
+    },
+    containment: "footprint"
+  });
+
+  places.setPlacement("b", {
+    parentPlaceId: "a",
+    transform: {
+      x: 3,
+      y: 4,
+      rotation: 0.5,
+      scale: 2
+    },
+    containment: "footprint"
+  });
+
+  const snapshot = serializePlaceCore(places);
+  const beforeHash = computePlaceCoreStateHash(places);
+
+  const restored = deserializePlaceCore(
+    JSON.parse(JSON.stringify(snapshot))
+  );
+
+  assert.equal(
+    computePlaceCoreStateHash(restored),
+    beforeHash
+  );
+  assert.deepEqual(
+    restored.getMemberships("a"),
+    [{
+      parentPlaceId: "b",
+      kind: "jurisdiction",
+      metadata: null
+    }]
+  );
+  assert.deepEqual(
+    restored.getResolvedPlacement("b"),
+    places.getResolvedPlacement("b")
+  );
+  restored.assertInternalConsistency();
+});
