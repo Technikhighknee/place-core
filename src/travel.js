@@ -672,6 +672,230 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
   });
 }
 
+function planConcreteDetour(
+  registry,
+  bridge,
+  entity,
+  target,
+  resolvedTarget,
+  options
+) {
+  const startDomainId = entity.domainId ?? "default";
+  const excludedPortalKeys =
+    new Set(options.excludedPortalKeys ?? []);
+  const excludedPairs =
+    new Set(options.excludedDomainPairs ?? []);
+  const searchOptions = {
+    excludedPortalKeys,
+    excludedPairs
+  };
+  const queue = new MinHeap();
+  const bestCostByState = new Map();
+  const maxExpansions =
+    options.maxNearestTargetExpansions;
+  const maxCost = options.maxCost;
+
+  const start = {
+    key: "start",
+    cost: 0,
+    domainId: startDomainId,
+    position: entity.position,
+    steps: [],
+    domains: [startDomainId],
+    arrivedViaPortalKey: null
+  };
+  bestCostByState.set(start.key, 0);
+  queue.push(start);
+
+  let bestGoal = null;
+  let expansions = 0;
+
+  while (queue.size) {
+    const state = queue.pop();
+    if (state.cost !== bestCostByState.get(state.key)) {
+      continue;
+    }
+    if (state.cost > maxCost) continue;
+    if (bestGoal && state.cost > bestGoal.cost) break;
+    if (++expansions > maxExpansions) {
+      throw new Error(
+        "explicit semantic detour search exceeded maxNearestTargetExpansions"
+      );
+    }
+
+    const edges = transitionsFrom(
+      registry,
+      state.domainId,
+      searchOptions
+    ).filter(
+      (edge) =>
+        edge.portalKey !== state.arrivedViaPortalKey
+    );
+
+    const destinationNodeIds = new Set();
+    const canReachTargetDomain =
+      state.domainId === resolvedTarget.domainId;
+
+    if (
+      canReachTargetDomain &&
+      resolvedTarget.nodeId != null &&
+      squaredDistance(
+        state.position,
+        resolvedTarget.position
+      ) > POSITION_EPSILON_SQ
+    ) {
+      destinationNodeIds.add(
+        resolvedTarget.nodeId
+      );
+    }
+
+    for (const edge of edges) {
+      if (
+        edge.from.nodeId != null &&
+        squaredDistance(
+          state.position,
+          edge.from.position
+        ) > POSITION_EPSILON_SQ
+      ) {
+        destinationNodeIds.add(edge.from.nodeId);
+      }
+    }
+
+    const routeCosts = localRouteCostsToMany(
+      bridge,
+      {
+        domainId: state.domainId,
+        position: state.position,
+        destinationNodeIds,
+        mobility: entity.mobility,
+        options: options.journeyOptions
+      }
+    );
+
+    const costTo = (destination) => {
+      if (
+        squaredDistance(
+          state.position,
+          destination.position
+        ) <= POSITION_EPSILON_SQ
+      ) {
+        return 0;
+      }
+      if (destination.nodeId == null) return null;
+      return routeCosts.get(destination.nodeId) ?? null;
+    };
+
+    if (canReachTargetDomain) {
+      const localSeconds = costTo(resolvedTarget);
+      if (localSeconds != null) {
+        const cost = state.cost + localSeconds;
+        if (cost <= maxCost) {
+          const steps = appendJourney(
+            state.steps,
+            state,
+            resolvedTarget,
+            { estimatedSeconds: localSeconds }
+          );
+          if (
+            !bestGoal ||
+            cost < bestGoal.cost ||
+            (
+              cost === bestGoal.cost &&
+              state.key.localeCompare(
+                bestGoal.key
+              ) < 0
+            )
+          ) {
+            bestGoal = {
+              key: state.key,
+              cost,
+              steps,
+              domains: state.domains
+            };
+          }
+        }
+      }
+    }
+
+    for (const edge of edges) {
+      const localSeconds = costTo(edge.from);
+      if (localSeconds == null) continue;
+
+      const cost =
+        state.cost +
+        localSeconds +
+        (edge.portal.transitionCost ?? 0);
+      if (
+        cost > maxCost ||
+        (bestGoal && cost > bestGoal.cost)
+      ) {
+        continue;
+      }
+
+      const key = transitionKey(edge);
+      const previous = bestCostByState.get(key);
+      if (previous != null && previous <= cost) {
+        continue;
+      }
+
+      const journeySteps = appendJourney(
+        state.steps,
+        state,
+        edge.from,
+        { estimatedSeconds: localSeconds }
+      );
+      bestCostByState.set(key, cost);
+      queue.push({
+        key,
+        cost,
+        domainId: edge.to.domainId,
+        position: edge.to.position,
+        domains: [
+          ...state.domains,
+          edge.to.domainId
+        ],
+        arrivedViaPortalKey: edge.portalKey,
+        steps: [
+          ...journeySteps,
+          deepFreeze({
+            type: "traverse-portal",
+            portalKey: edge.portalKey,
+            placeId: edge.portal.instanceId,
+            portalId: edge.portal.id,
+            fromDomainId: edge.from.domainId,
+            toDomainId: edge.to.domainId,
+            destinationPosition: edge.to.position,
+            transitionCost:
+              edge.portal.transitionCost ?? 0
+          })
+        ]
+      });
+    }
+  }
+
+  if (!bestGoal) return null;
+
+  const steps = Object.freeze(bestGoal.steps);
+  return deepFreeze({
+    entityId: entity.id,
+    target: cloneJson(target),
+    resolvedTarget,
+    travelRevision: registry.travelRevision,
+    startDomainId,
+    domainPath: Object.freeze([
+      ...bestGoal.domains
+    ]),
+    steps,
+    legs: steps,
+    estimatedSeconds: bestGoal.cost,
+    rejectedDomainPairs:
+      Object.freeze([
+        ...excludedPairs
+      ]),
+    searchExpansions: expansions
+  });
+}
+
 export function planTravel(registry, a, b, c, d) {
   const {
     bridge,
@@ -762,7 +986,7 @@ export function planTravel(registry, a, b, c, d) {
       resolvedTarget.domainId,
       { excludedPairs, excludedPortalKeys }
     );
-    if (topological == null) return null;
+    if (topological == null) break;
 
     const domains = topological.domains ?? [
       startDomainId,
@@ -794,11 +1018,23 @@ export function planTravel(registry, a, b, c, d) {
       });
     }
 
-    if (!optimized.failedPair || excludedPairs.has(optimized.failedPair)) return null;
+    if (
+      !optimized.failedPair ||
+      excludedPairs.has(optimized.failedPair)
+    ) {
+      break;
+    }
     excludedPairs.add(optimized.failedPair);
   }
 
-  return null;
+  return planConcreteDetour(
+    registry,
+    bridge,
+    entity,
+    target,
+    resolvedTarget,
+    options
+  );
 }
 
 function resolveStartCall(registry, a, b, c, d) {
@@ -1070,13 +1306,24 @@ export function startTravel(registry, a, b, c, d) {
   const { bridge, entityId, target, options } = resolveStartCall(registry, a, b, c, d);
   if (!bridge) throw new Error("startTravel requires a WorldCoreBridge");
 
-  if (registry.activeTravels.has(entityId)) {
-    stopTravel(registry, bridge, entityId, { reason: "replaced" });
-  }
-
   const capturedOptions = captureTravelOptions(options);
-  const plan = planTravel(registry, bridge, entityId, target, capturedOptions);
+  const plan = planTravel(
+    registry,
+    bridge,
+    entityId,
+    target,
+    capturedOptions
+  );
   if (!plan) return null;
+
+  if (registry.activeTravels.has(entityId)) {
+    stopTravel(
+      registry,
+      bridge,
+      entityId,
+      { reason: "replaced" }
+    );
+  }
 
   const state = {
     entityId,
