@@ -6,7 +6,8 @@ import {
   serializePlaceCore,
   deserializePlaceCore,
   validatePlaceCoreSnapshot,
-  computePlaceCoreStateHash
+  computePlaceCoreStateHash,
+  startTravel
 } from "../src/index.js";
 import { tavernBlueprint } from "./fixtures.js";
 
@@ -326,7 +327,6 @@ test("snapshot validation rejects malformed active travel state", () => {
     transferEntity() {}
   };
 
-  const { startTravel } = await import("../src/index.js");
   startTravel(
     places,
     bridge,
