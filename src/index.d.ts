@@ -383,6 +383,7 @@ export class PlaceRegistry {
   resolvePortal(instanceId: PlaceId, portalId: string): ResolvedPortal | null;
   getPortalRecord(key: string): ResolvedPortal | null;
   getPortalsForDomain(domainId: string): ResolvedPortal[];
+  getPortalsForRoad(domainId: string, roadId: string): ResolvedPortal[];
   resolvedPortals(placeId?: PlaceId | null): IterableIterator<ResolvedPortal>;
 
   setPortalState(
@@ -498,6 +499,8 @@ export class PlaceRegistry {
     portalRecordCount: number;
     portalEndpointCount: number;
     portalEndpointDomainCount: number;
+    portalRoadBindingCount: number;
+    portalRoadDomainCount: number;
     portalOverrideCount: number;
     boundaryOverrideCount: number;
     spaceOverrideCount: number;
