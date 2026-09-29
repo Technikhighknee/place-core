@@ -205,3 +205,120 @@ test("eager travel still replans on travel-affecting mutations", () => {
 
   assert.ok(travel.replans >= 1 || travel.status === "failed");
 });
+
+
+test("identical mutations are true no-ops", () => {
+  const places = setup();
+
+  const state = places.stateRevision;
+  const travel = places.travelRevision;
+
+  const placement = places.getPlace("house").placement;
+  places.setPlacement("house", placement);
+  places.setParent("house", null);
+  places.setPortalState("house", "door", { locked: false });
+  places.setSpaceState("house", "room", { enabled: true });
+  places.setBoundaryState("house", "wall", { enabled: true });
+  places.setAttachment("house", "street", {
+    domainId: "street",
+    position: { x: 10, y: 0 },
+    nodeId: "house-street"
+  });
+
+  assert.equal(places.stateRevision, state);
+  assert.equal(places.travelRevision, travel);
+});
+
+test("state-only portal and boundary changes do not invalidate travel", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "state-only",
+    layers: [{ id: "inside" }],
+    boundaries: [{
+      id: "painted-line",
+      layerId: "inside",
+      a: { x: 0, y: 0 },
+      b: { x: 1, y: 0 }
+    }],
+    portals: [{
+      id: "arch",
+      blocksWhenClosed: false,
+      a: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 }
+      },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 1, y: 0 }
+      }
+    }]
+  });
+  places.createPlace({ id: "p", definitionId: "state-only" });
+
+  let state = places.stateRevision;
+  const travel = places.travelRevision;
+
+  places.setPortalState("p", "arch", { open: false });
+  assert.equal(places.stateRevision, ++state);
+  assert.equal(places.travelRevision, travel);
+  assert.equal(places.resolvePortal("p", "arch").traversable, true);
+
+  places.setBoundaryState("p", "painted-line", { enabled: false });
+  assert.equal(places.stateRevision, ++state);
+  assert.equal(places.travelRevision, travel);
+});
+
+test("portal revision advances only when traversability actually changes", () => {
+  const places = setup();
+
+  const state = places.stateRevision;
+  const travel = places.travelRevision;
+
+  places.setPortalState("house", "door", { open: false });
+  assert.equal(places.stateRevision, state + 1);
+  assert.equal(
+    places.travelRevision,
+    travel,
+    "open state does not matter when blocksWhenClosed is false"
+  );
+
+  places.setPortalState("house", "door", { locked: true });
+  assert.equal(places.stateRevision, state + 2);
+  assert.equal(places.travelRevision, travel + 1);
+
+  places.setPortalState("house", "door", { blocked: true });
+  assert.equal(places.stateRevision, state + 3);
+  assert.equal(
+    places.travelRevision,
+    travel + 1,
+    "already-untraversable portal stays travel-equivalent"
+  );
+
+  places.setPortalState("house", "door", { locked: false });
+  assert.equal(places.stateRevision, state + 4);
+  assert.equal(
+    places.travelRevision,
+    travel + 1,
+    "blocked portal remains untraversable after unlocking"
+  );
+
+  places.setPortalState("house", "door", { blocked: false });
+  assert.equal(places.travelRevision, travel + 2);
+});
+
+test("unreferenced attachment metadata is state-only", () => {
+  const places = setup();
+  const state = places.stateRevision;
+  const travel = places.travelRevision;
+
+  places.setAttachment("house", "note-only", {
+    domainId: "street",
+    position: { x: 0, y: 0 },
+    metadata: { purpose: "annotation" }
+  });
+
+  assert.equal(places.stateRevision, state + 1);
+  assert.equal(places.travelRevision, travel);
+});
