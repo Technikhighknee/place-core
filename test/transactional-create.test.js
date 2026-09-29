@@ -77,7 +77,7 @@ test("failed bridge sync rolls place creation back atomically", () => {
   const domainId = "broken:inside";
   assert.equal(places.getPlace("broken"), null);
   assert.equal(places.getDomainBinding(domainId), null);
-  assert.equal(world.getDomain(domainId), null);
+  assert.equal(world.getDomain(domainId), undefined);
   assert.equal(navigation.domainBindings.has(domainId), false);
   assert.equal(places.stateRevision, stateRevision);
   assert.equal(places.travelRevision, travelRevision);
