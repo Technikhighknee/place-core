@@ -22,11 +22,24 @@ function serializePlan(plan) {
   return copy;
 }
 
+function serializeTravelOptions(options = {}) {
+  if (typeof options.anchorPredicate === "function") {
+    throw new Error(
+      "cannot serialize active travel with anchorPredicate; use declarative target filters or stop the travel before snapshotting"
+    );
+  }
+  return canonicalClone(options);
+}
+
 function serializeTravelState(state) {
   return {
     entityId: state.entityId,
     target: canonicalClone(state.target),
     plan: serializePlan(state.plan),
+    options: serializeTravelOptions(state.options ?? {
+      worldChangePolicy: state.worldChangePolicy ?? "encounter",
+      portalEntryTolerance: 0.25
+    }),
     stepIndex: state.stepIndex,
     localStarted: state.localStarted === true,
     portalEntered: state.portalEntered === true,
@@ -226,6 +239,24 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     if (travel.worldChangePolicy !== "encounter" && travel.worldChangePolicy !== "eager") {
       throw new Error("invalid active travel worldChangePolicy");
     }
+    if (travel.options != null) {
+      assertObject(travel.options, "active travel options");
+      const policy = travel.options.worldChangePolicy ?? travel.worldChangePolicy;
+      if (policy !== "encounter" && policy !== "eager") {
+        throw new Error("invalid active travel options.worldChangePolicy");
+      }
+      if (travel.options.portalEntryTolerance != null &&
+          (!Number.isFinite(travel.options.portalEntryTolerance) ||
+           travel.options.portalEntryTolerance < 0)) {
+        throw new Error("invalid active travel options.portalEntryTolerance");
+      }
+      if (travel.options.excludedPortalKeys != null) {
+        assertArray(travel.options.excludedPortalKeys, "active travel options.excludedPortalKeys");
+      }
+      if (travel.options.excludedDomainPairs != null) {
+        assertArray(travel.options.excludedDomainPairs, "active travel options.excludedDomainPairs");
+      }
+    }
     if (travel.plan != null) {
       assertObject(travel.plan, "active travel plan");
       assertArray(travel.plan.steps, "active travel plan.steps");
@@ -298,6 +329,16 @@ export function deserializePlaceCore(snapshot, options = {}) {
     for (const saved of active) {
       const state = cloneJson(saved);
       state.worldChangePolicy ??= "encounter";
+      state.options = Object.freeze({
+        ...(state.options ?? {}),
+        worldChangePolicy:
+          state.options?.worldChangePolicy ??
+          state.worldChangePolicy,
+        portalEntryTolerance:
+          state.options?.portalEntryTolerance ??
+          0.25
+      });
+      state.worldChangePolicy = state.options.worldChangePolicy;
       if (state.plan) {
         state.plan.travelRevision = registry.travelRevision;
         state.plan.graphRevision = registry.travelRevision;
@@ -310,7 +351,16 @@ export function deserializePlaceCore(snapshot, options = {}) {
     }
   } else if (options.bridge && options.restartTravels !== false) {
     for (const saved of active) {
-      startTravel(registry, options.bridge, saved.entityId, saved.target);
+      startTravel(
+        registry,
+        options.bridge,
+        saved.entityId,
+        saved.target,
+        saved.options ?? {
+          worldChangePolicy: saved.worldChangePolicy ?? "encounter",
+          portalEntryTolerance: 0.25
+        }
+      );
     }
   } else {
     for (const saved of active) {
