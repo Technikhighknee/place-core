@@ -21,6 +21,12 @@ export class WorldCoreBridge {
     if (!registry || typeof registry !== "object") {
       throw new TypeError("WorldCoreBridge registry is required");
     }
+    if (this.#registry === registry) return this;
+    if (this.#registry && this.#registry !== registry) {
+      throw new Error(
+        "WorldCoreBridge is already attached to a different PlaceRegistry"
+      );
+    }
 
     this.#unsubscribeWorldEvents?.();
     this.#unsubscribeWorldEvents = null;
