@@ -937,6 +937,61 @@ function normalizeWorldChangePolicy(value) {
   return policy;
 }
 
+function normalizePortalEntryTolerance(value) {
+  const tolerance = value ?? 0.25;
+  if (!Number.isFinite(tolerance) || tolerance < 0) {
+    throw new RangeError("portalEntryTolerance must be a finite number >= 0");
+  }
+  return tolerance;
+}
+
+function captureTravelOptions(options = {}) {
+  const captured = {
+    worldChangePolicy: normalizeWorldChangePolicy(options.worldChangePolicy),
+    portalEntryTolerance: normalizePortalEntryTolerance(options.portalEntryTolerance)
+  };
+
+  if (options.journeyOptions !== undefined) {
+    captured.journeyOptions = cloneJson(options.journeyOptions);
+  }
+  if (options.excludedPortalKeys !== undefined) {
+    captured.excludedPortalKeys = Object.freeze([...options.excludedPortalKeys]);
+  }
+  if (options.excludedDomainPairs !== undefined) {
+    captured.excludedDomainPairs = Object.freeze([...options.excludedDomainPairs]);
+  }
+
+  for (const key of [
+    "maxDomainPathAttempts",
+    "maxShortestDomainPaths",
+    "allowPartialShortestPathSearch",
+    "maxConcreteStatesPerLayer",
+    "maxNearestTargetExpansions",
+    "maxCost"
+  ]) {
+    if (options[key] !== undefined) captured[key] = options[key];
+  }
+
+  if (options.anchorPredicate !== undefined) {
+    if (typeof options.anchorPredicate !== "function") {
+      throw new TypeError("anchorPredicate must be a function");
+    }
+    captured.anchorPredicate = options.anchorPredicate;
+  }
+
+  return Object.freeze(captured);
+}
+
+function effectiveTravelOptions(state, runtimeOptions = {}) {
+  return {
+    ...(state.options ?? {
+      worldChangePolicy: state.worldChangePolicy ?? "encounter",
+      portalEntryTolerance: 0.25
+    }),
+    ...runtimeOptions
+  };
+}
+
 function fail(registry, bridge, state, reason) {
   bridge.stopLocalJourney(state.entityId);
   state.status = "failed";
@@ -1070,10 +1125,9 @@ function advance(registry, bridge, state, options = {}) {
         return replan(registry, bridge, state, options);
       }
 
-      const portalEntryTolerance = options.portalEntryTolerance ?? 0.25;
-      if (!Number.isFinite(portalEntryTolerance) || portalEntryTolerance < 0) {
-        throw new RangeError("portalEntryTolerance must be a finite number >= 0");
-      }
+      const portalEntryTolerance = normalizePortalEntryTolerance(
+        options.portalEntryTolerance
+      );
       if (squaredDistance(entity.position, direction.from.position) >
           portalEntryTolerance * portalEntryTolerance) {
         registry.emit("travel-obstacle-encountered", {
@@ -1150,20 +1204,22 @@ export function startTravel(registry, a, b, c, d) {
     stopTravel(registry, bridge, entityId, { reason: "replaced" });
   }
 
-  const plan = planTravel(registry, bridge, entityId, target, options);
+  const capturedOptions = captureTravelOptions(options);
+  const plan = planTravel(registry, bridge, entityId, target, capturedOptions);
   if (!plan) return null;
 
   const state = {
     entityId,
     target: cloneJson(target),
     plan,
+    options: capturedOptions,
     stepIndex: 0,
     localStarted: false,
     portalEntered: false,
     portalTransitionRemaining: 0,
     travelRevision: registry.travelRevision,
     graphRevision: registry.travelRevision,
-    worldChangePolicy: normalizeWorldChangePolicy(options.worldChangePolicy),
+    worldChangePolicy: capturedOptions.worldChangePolicy,
     status: "active",
     failureReason: null,
     replans: 0
@@ -1174,7 +1230,7 @@ export function startTravel(registry, a, b, c, d) {
     target: state.target,
     estimatedSeconds: plan.estimatedSeconds
   });
-  return advance(registry, bridge, state, options);
+  return advance(registry, bridge, state, capturedOptions);
 }
 
 function resolveStepCall(registry, a, b, c) {
@@ -1191,13 +1247,14 @@ export function stepTravel(registry, a, b, c) {
   const state = registry.activeTravels.get(entityId);
   if (!state) return null;
 
-  const worldChangePolicy = options.worldChangePolicy == null
-    ? state.worldChangePolicy
-    : normalizeWorldChangePolicy(options.worldChangePolicy);
+  const effectiveOptions = effectiveTravelOptions(state, options);
+  const worldChangePolicy = normalizeWorldChangePolicy(
+    effectiveOptions.worldChangePolicy
+  );
 
   if (worldChangePolicy === "eager" &&
       (state.travelRevision ?? state.graphRevision) !== registry.travelRevision) {
-    const next = replan(registry, bridge, state, options);
+    const next = replan(registry, bridge, state, effectiveOptions);
     if (next.status !== "active") return next;
   }
 
@@ -1210,7 +1267,7 @@ export function stepTravel(registry, a, b, c) {
     if (entity.journey != null) return state;
 
     if (entity.lastJourneyFailure?.destinationNodeId === step.destinationNodeId) {
-      const next = replan(registry, bridge, state, options);
+      const next = replan(registry, bridge, state, effectiveOptions);
       if (next.status !== "active") return next;
     } else {
       state.stepIndex += 1;
@@ -1218,7 +1275,7 @@ export function stepTravel(registry, a, b, c) {
     }
   }
 
-  return advance(registry, bridge, state, options);
+  return advance(registry, bridge, state, effectiveOptions);
 }
 
 export function stepPlaceSimulation(registry, a = {}, b = 0, c = {}) {
