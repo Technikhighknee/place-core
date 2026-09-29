@@ -33,6 +33,7 @@ export {
 
 export {
   geometryBounds,
+  geometryContainsGeometry,
   pointInGeometry,
   transformPoint,
   inverseTransformPoint,
