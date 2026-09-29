@@ -621,6 +621,7 @@ export interface TravelOptions {
   maxCost?: number;
   anchorPredicate?: (anchor: CompiledPlaceAnchor & { placeId: PlaceId; domainId: string }) => boolean;
   worldChangePolicy?: "encounter" | "eager";
+  portalEntryTolerance?: number;
   deltaSeconds?: number;
 }
 
