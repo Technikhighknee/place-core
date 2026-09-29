@@ -1,14 +1,14 @@
 # place-core
 
-A semantic place, interior, portal and cross-domain travel simulation core.
+A semantic place, structure, occupancy and cross-domain travel core for large simulations.
 
-`world-core` answers **where something physically is and how it moves through metric space**. `place-core` answers **what that location means, how places are structured, how isolated spatial domains connect, and how an entity travels between semantic destinations**.
+`world-core` answers **where something physically is and how it moves through metric space**. `place-core` answers **what that location means, how places are structured, how spatial domains connect, and how an entity travels to a semantic destination across them**.
 
-There is no player/camera/loaded-area concept and no distance-based simulation fidelity.
+There is no player, camera, loaded-area or distance-based simulation-fidelity concept in the core.
 
-## Core model
+## Model
 
-A compiled definition is immutable shared structure. A place instance contains identity, domain bindings, exterior placement and sparse deviations from that shared structure.
+A place definition is immutable shared structure. A place instance is a concrete occurrence with identity, domain bindings, attachments, placement and sparse deviations.
 
 ```text
 PlaceDefinition: small-tavern          PlaceInstance: golden-goose
@@ -30,10 +30,11 @@ First-class concepts:
 - **Portal** — door, gate, stairs, ladder, hatch, bridge, gangplank or breach.
 - **Anchor** — semantic target such as bed, counter, exit, forge or storage position.
 - **Placement** — exterior transform of a place; interiors keep stable local coordinates.
+- **Attachment** — a resolved connection from an external portal slot to another domain.
 
-A room is deliberately **not** a domain. Multiple rooms usually share one continuous layer/domain.
+A room is deliberately **not** a domain. Several rooms usually occupy one continuous layer/domain.
 
-## Definitions and shared navigation
+## Shared definitions and navigation
 
 ```js
 import { compilePlace } from "place-core";
@@ -58,7 +59,13 @@ const house = compilePlace({
   spaces: [{
     id: "room",
     layerId: "ground",
-    geometry: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 10 },
+    geometry: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 10,
+      maxY: 10
+    },
     defaultAnchorId: "bed"
   }],
 
@@ -85,9 +92,9 @@ const house = compilePlace({
 });
 ```
 
-Embedded navigation is compiled into one shared `world-core` topology per layer. Thousands of instances bind domains to that topology instead of cloning graphs.
+Embedded navigation becomes one shared `world-core` topology per layer. Thousands of place instances bind their domains to the same topology instead of cloning nodes, roads, static indexes and route caches.
 
-Compilation validates IDs, containment cycles, portal/anchor references and embedded navigation node/road references. Definitions receive a canonical content hash.
+Compilation validates IDs, containment cycles, portal/anchor references and embedded navigation references. Definitions receive a canonical content hash.
 
 ## world-core integration
 
@@ -105,7 +112,7 @@ import {
   WorldCoreBridge
 } from "place-core";
 
-const world = new World();
+const world = new World({ domains: [{ id: "luebeck" }] });
 const navigation = new NavigationRegistry();
 
 const bridge = new WorldCoreBridge({
@@ -132,59 +139,114 @@ places.createPlace({
 });
 ```
 
-Creating a place can create its domains, register its shared topology once, bind domains, and apply sparse road effects.
+Creating an instance can create its `world-core` domains, register its shared topologies once, bind those domains and apply instance-local road effects.
 
 ## Sparse structural state
 
 ```js
-places.setPortalState("house-17", "front-door", { locked: true });
-places.setBoundaryState("house-17", "west-wall", { enabled: false });
-places.setSpaceState("house-17", "collapsed-room", { enabled: false });
+places.setPortalState("house-17", "front-door", {
+  locked: true
+});
+
+places.setBoundaryState("house-17", "west-wall", {
+  enabled: false
+});
+
+places.setSpaceState("house-17", "collapsed-room", {
+  enabled: false
+});
 ```
 
-Portal state affects traversal. A portal can bind to `world-core` roads so lock/block/destroy state becomes a per-domain road effect.
+Returning a property to its definition value removes the sparse override again.
 
-Boundaries can bind to precompiled breach roads. While the wall exists, those roads remain blocked for that instance. Destroying the boundary removes the road effect without cloning or mutating the shared topology.
+Portals and boundaries can bind to `world-core` roads. A locked door can block an instance-local road; destroying a prepared boundary can remove the corresponding road effect without cloning or mutating the shared topology.
 
-Dynamic instance portals support sparse breaches, gangplanks and temporary cross-domain links.
+Dynamic instance portals support sparse structural changes such as breaches, temporary passages and gangplanks:
+
+```js
+places.addPortal("house-17", {
+  id: "breach-west",
+  kind: "breach",
+  a: {
+    domainId: "house-17:ground",
+    position: { x: 10, y: 5 }
+  },
+  b: {
+    domainId: "luebeck",
+    position: { x: 125, y: 80 }
+  }
+});
+```
+
+The domain→portal index is updated atomically when portal state, attachments or dynamic structure change.
 
 ## Location and occupancy
 
+Physical position remains authoritative in `world-core`. `place-core` derives semantic context:
+
 ```js
-places.locate("golden-goose:ground", { x: 8, y: 7 });
-places.syncEntityOccupancy(world.getEntity("hans"));
+const context = places.locate(
+  "golden-goose:ground",
+  { x: 8, y: 7 }
+);
+
+// context.placeId
+// context.layerId
+// context.spaces
+// context.deepestSpace
+
+places.updateEntityOccupancy(world.getEntity("hans"));
 
 places.entitiesInPlace("golden-goose");
 places.entitiesInSpace("golden-goose", "taproom");
 ```
 
-Physical position remains authoritative in `world-core`. `place-core` derives semantic location and emits bounded deterministic events such as:
+Nested place and space membership is indexed separately from physical position. Event capture is opt-in and bounded. It can emit deterministic structural/location/travel events including:
 
 ```text
-place-enter
-place-leave
-space-enter
-space-leave
-portal-enter
-portal-traverse
-portal-exit
+place-enter / place-leave
+space-enter / space-leave
+portal-enter / portal-traverse / portal-exit
+travel-start / travel-replan / travel-complete / travel-failed
 ```
 
 ## Global semantic travel
 
-```js
-import { startTravel, stepPlaceSimulation } from "place-core";
+A caller targets meaning rather than manually stitching domain transitions:
 
-startTravel(places, "hans", {
-  placeId: "golden-goose",
-  anchorId: "barrel"
-});
+```js
+import {
+  startTravel,
+  stepPlaceSimulation
+} from "place-core";
+
+startTravel(
+  places,
+  "hans",
+  {
+    placeId: "golden-goose",
+    anchorId: "barrel"
+  }
+);
 
 stepSimulation(world, navigation, deltaSeconds);
-stepPlaceSimulation(places);
+stepPlaceSimulation(places, { deltaSeconds });
 ```
 
-A travel plan composes:
+The explicit bridge form is also supported:
+
+```js
+startTravel(
+  places,
+  bridge,
+  "hans",
+  { placeId: "golden-goose", spaceId: "cellar" }
+);
+
+stepPlaceSimulation(places, bridge, deltaSeconds);
+```
+
+A plan is composed from:
 
 ```text
 local world-core journey
@@ -195,25 +257,37 @@ local world-core journey
 → semantic target anchor
 ```
 
-The domain portal search is bidirectional. Every local leg is checked against actual `world-core` navigation. Unreachable entrances can be rejected and alternate portal chains tried deterministically.
+Planning is hierarchical rather than one giant A* over every interior node:
 
-Structural graph revisions invalidate active plans and trigger replanning. If no valid route remains, travel fails instead of following stale topology.
+1. Build the reachable semantic domain structure from indexed portal transitions.
+2. Consider all topologically shortest domain paths.
+3. Optimize concrete portal choices using actual local `world-core` route costs.
+4. Keep deterministic alternatives and fall back to longer semantic detours if shortest paths are locally unroutable.
+5. Assemble executable local-journey and portal-traversal steps.
+
+Portal `transitionCost` contributes to planning cost and execution time. Structural graph revisions invalidate active plans and trigger deterministic replanning. If no route remains, travel fails instead of following stale topology.
 
 ## Moving places
 
-Exterior placement is independent from interior domains:
+Exterior placement is independent from stable interior coordinate frames:
 
 ```js
 places.setPlacement("cog-hildegard", {
   domainId: "luebeck-harbor",
-  transform: { x: 500, y: 220, rotation: 0.7 },
+  transform: {
+    x: 500,
+    y: 220,
+    rotation: 0.7
+  },
   containment: "footprint"
 });
 ```
 
-A ship or wagon can move externally while occupants keep stable local coordinates inside its domains. `setAttachment()` can reconnect entrances such as gangplanks.
+A ship, wagon or other moving place can move externally while occupants retain local coordinates inside its domains. Exterior footprint queries are reindexed when placement changes. `setAttachment()` can reconnect entrances such as gangplanks.
 
-## Save/load and determinism
+## Save/load, validation and determinism
+
+Snapshots are self-contained:
 
 ```js
 import {
@@ -222,23 +296,59 @@ import {
   validatePlaceCoreSnapshot,
   computePlaceCoreStateHash
 } from "place-core";
+
+const snapshot = serializePlaceCore(places);
+validatePlaceCoreSnapshot(snapshot);
+
+const restored = deserializePlaceCore(snapshot);
 ```
 
-Snapshots store definition ID/hash references, instances, hierarchy, bindings, attachments, placements, sparse structural overrides, dynamic portals and travel intents.
+Each shared definition blueprint is stored **once per snapshot**, with its canonical content hash. Instances still store only their sparse state.
 
-Definition geometry is not duplicated per instance or per save. Restore rejects definition hash drift.
+Validation recompiles and hashes definitions before restore and checks:
 
-## Scale
+- definition hashes
+- duplicate IDs/domains
+- hierarchy references and cycles
+- sparse override references
+- dynamic portal endpoints
+- active travel structure
+
+State hashes are canonical across irrelevant insertion order, including dynamic portal creation order.
+
+When restoring alongside matching restored `world-core` state, `resumeWorldCoreState: true` can retain active travel progress. Otherwise travel intents can be restarted through the bridge or retained as pending intents.
+
+## Tests and scale
 
 ```bash
 npm test
+npm run test:stress
+
 npm run bench
 npm run bench:locate
 npm run bench:travel
+npm run bench:snapshot
+npm run bench:mutations
+npm run bench:retention
+npm run bench:guardrails
 ```
 
-The benchmark suite targets 100k place instances and large shared portal graphs. The architecture optimizes representation and query structure instead of deleting simulation truth based on player distance.
+The suite exercises:
+
+- 100k shared-definition place instances
+- large semantic location-query loads
+- large portal graphs
+- sparse structural mutation churn
+- self-contained snapshot validation/restore
+- constant-population retention churn
+- deterministic randomized structural churn
+- real `world-core` cross-domain travel
+- broad performance-regression guardrails
+
+CI runs tests, the real mini-city consumer and a reduced guardrail workload. Full-scale benchmarks remain available for dedicated/manual performance runs.
 
 ## Responsibility boundary
 
-`place-core` owns semantic spatial structure and cross-domain travel orchestration. It does not own NPC cognition, property law, inventory, production, economy, relationships or rendering. Those systems can reference places, spaces, portals and anchors without reimplementing spatial meaning.
+`place-core` owns semantic spatial structure, structural reachability, occupancy and cross-domain travel orchestration.
+
+It does **not** own cognition, property law, inventory, production, economy, relationships or rendering. Those systems can reference places, spaces, portals and anchors without reimplementing spatial meaning.
