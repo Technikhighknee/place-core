@@ -71,6 +71,18 @@ function cloneJsonValue(value, path) {
   return result;
 }
 
+export function normalizeBoolean(
+  value,
+  label = "value",
+  { defaultValue = undefined } = {}
+) {
+  if (value === undefined) return defaultValue;
+  if (typeof value !== "boolean") {
+    throw new TypeError(`${label} must be a boolean`);
+  }
+  return value;
+}
+
 export function normalizeStringList(
   value,
   label = "value",
