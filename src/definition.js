@@ -442,25 +442,43 @@ export function compilePlace(input, options = {}) {
       }
     }
 
-    if (
+    const sameLayerLocal =
       portal.a.kind === "local" &&
       portal.b.kind === "local" &&
-      portal.a.layerId === portal.b.layerId &&
-      portal.a.nodeId != null &&
-      portal.b.nodeId != null
-    ) {
-      const thresholdBindings = portal.roadBindings
-        .filter((binding) => binding.layerId === portal.a.layerId);
+      portal.a.layerId === portal.b.layerId;
 
-      if (
+    if (sameLayerLocal) {
+      const layerId = portal.a.layerId;
+      const thresholdBindings = portal.roadBindings
+        .filter((binding) => binding.layerId === layerId);
+      const crossesSpaces =
         portal.a.spaceId != null &&
         portal.b.spaceId != null &&
-        portal.a.spaceId !== portal.b.spaceId &&
-        navigationRoadMaps.has(portal.a.layerId) &&
-        thresholdBindings.length === 0
+        portal.a.spaceId !== portal.b.spaceId;
+      const initiallyTraversable =
+        portal.enabled &&
+        !portal.locked &&
+        !portal.blocked &&
+        !portal.destroyed &&
+        (!portal.blocksWhenClosed || portal.open);
+      const needsPhysicalEnforcement =
+        crossesSpaces ||
+        portal.transitionCost > 0 ||
+        !initiallyTraversable;
+
+      if (needsPhysicalEnforcement && thresholdBindings.length === 0) {
+        throw new Error(
+          `same-domain portal ${portal.id} requires a threshold road binding for physical enforcement`
+        );
+      }
+
+      if (
+        thresholdBindings.length > 0 &&
+        navigationRoadMaps.has(layerId) &&
+        (portal.a.nodeId == null || portal.b.nodeId == null)
       ) {
         throw new Error(
-          `same-domain portal ${portal.id} between spaces requires a threshold road binding`
+          `same-domain portal ${portal.id} with a threshold road binding requires nodeId on both endpoints`
         );
       }
 
@@ -468,19 +486,28 @@ export function compilePlace(input, options = {}) {
         const road = navigationRoadMaps
           .get(binding.layerId)
           ?.get(binding.roadId);
-        if (!road) continue;
 
-        const connectsForward =
-          road.from === portal.a.nodeId &&
-          road.to === portal.b.nodeId;
-        const connectsReverse =
-          road.from === portal.b.nodeId &&
-          road.to === portal.a.nodeId;
+        if (road) {
+          const connectsForward =
+            road.from === portal.a.nodeId &&
+            road.to === portal.b.nodeId;
+          const connectsReverse =
+            road.from === portal.b.nodeId &&
+            road.to === portal.a.nodeId;
 
-        if (!connectsForward && !connectsReverse) {
-          throw new Error(
-            `portal ${portal.id} road binding ${binding.roadId} does not connect its endpoint nodes`
-          );
+          if (!connectsForward && !connectsReverse) {
+            throw new Error(
+              `portal ${portal.id} road binding ${binding.roadId} does not connect its endpoint nodes`
+            );
+          }
+
+          if (portal.bidirectional === false) {
+            if (!connectsForward || road.bidirectional !== false) {
+              throw new Error(
+                `unidirectional portal ${portal.id} requires a one-way threshold road from endpoint a to b`
+              );
+            }
+          }
         }
 
         const ownerKey = `${binding.layerId}\u0000${binding.roadId}`;
@@ -491,14 +518,6 @@ export function compilePlace(input, options = {}) {
           );
         }
         sameDomainPortalRoadOwners.set(ownerKey, portal.id);
-
-        if (portal.bidirectional === false) {
-          if (!connectsForward || road.bidirectional !== false) {
-            throw new Error(
-              `unidirectional portal ${portal.id} requires a one-way threshold road from endpoint a to b`
-            );
-          }
-        }
       }
     }
   }
