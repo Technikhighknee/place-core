@@ -176,3 +176,24 @@ test("attaching a different bridge after one is active is rejected", () => {
   );
   assert.equal(places.bridge, one.bridge);
 });
+
+
+test("one WorldCoreBridge cannot be silently hijacked by another registry", () => {
+  const one = new PlaceRegistry();
+  const two = new PlaceRegistry();
+  const { bridge } = makeBridge();
+
+  one.attachBridge(bridge);
+
+  assert.throws(
+    () => two.attachBridge(bridge),
+    /already attached to a different PlaceRegistry/
+  );
+
+  assert.equal(one.bridge, bridge);
+  assert.equal(two.bridge, null);
+
+  bridge.dispose();
+  assert.equal(two.attachBridge(bridge), two);
+  assert.equal(two.bridge, bridge);
+});
