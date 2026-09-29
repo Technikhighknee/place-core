@@ -45,7 +45,7 @@ function buildIntegratedWorld() {
     stopJourney
   });
 
-  const places = new PlaceRegistry();
+  const places = new PlaceRegistry({ captureEvents: true });
   places.attachWorldCoreBridge(bridge);
   places.registerDefinition(tavernBlueprint());
 
@@ -103,7 +103,7 @@ test("real world-core executes cross-domain travel through shared interiors", ()
   assert.ok(plan);
   assert.deepEqual(
     plan.legs.map((leg) => leg.type),
-    ["journey", "portal", "journey", "portal", "journey", "portal", "journey"]
+    ["local-journey", "traverse-portal", "local-journey", "traverse-portal", "local-journey", "traverse-portal", "local-journey"]
   );
 
   const state = startTravel(
