@@ -272,6 +272,12 @@ export interface ResolvedPlacePlacement {
   containment: "none" | "footprint";
 }
 
+export interface PlaceMembershipInput {
+  parentPlaceId: PlaceId;
+  kind?: string;
+  metadata?: JsonValue;
+}
+
 export interface PlaceMembership {
   parentPlaceId: PlaceId;
   kind: string;
@@ -388,7 +394,7 @@ export type CreatePlaceInput = {
   id: PlaceId;
   definitionId: string;
   layerDomains?: Record<string, string> | Map<string, string>;
-  memberships?: readonly PlaceMembership[];
+  memberships?: readonly PlaceMembershipInput[];
   metadata?: JsonValue;
 } & CreatePlaceParentInput &
   CreatePlaceAttachmentInput &
@@ -431,7 +437,7 @@ export class PlaceRegistry {
   getMemberships(instanceId: PlaceId): PlaceMembership[];
   addMembership(
     instanceId: PlaceId,
-    membership: PlaceMembership
+    membership: PlaceMembershipInput
   ): PlaceMembership;
   removeMembership(
     instanceId: PlaceId,
