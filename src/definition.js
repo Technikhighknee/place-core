@@ -2,6 +2,7 @@ import {
   StaticGeometryIndex,
   cloneVec2,
   geometryBounds,
+  geometryContainsGeometry,
   normalizeGeometry,
   pointInGeometry
 } from "./geometry.js";
@@ -250,6 +251,11 @@ function computeSpaceDepth(space, spacesById, memo, visiting) {
     const parent = spacesById.get(space.parentSpaceId);
     if (!parent) throw new Error(`space ${space.id} references unknown parent ${space.parentSpaceId}`);
     if (parent.layerId !== space.layerId) throw new Error(`space ${space.id} cannot have a parent in another layer`);
+    if (!geometryContainsGeometry(parent.geometry, space.geometry)) {
+      throw new Error(
+        `space ${space.id} geometry is not fully contained by parent ${parent.id}`
+      );
+    }
     depth = computeSpaceDepth(parent, spacesById, memo, visiting) + 1;
   }
   visiting.delete(space.id);
