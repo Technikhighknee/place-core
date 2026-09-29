@@ -3,6 +3,7 @@ import {
   geometryBounds,
   inverseTransformPoint,
   normalizeTransform,
+  composeTransforms,
   pointInGeometry,
   transformBounds
 } from "./geometry.js";
@@ -35,13 +36,20 @@ function normalizeAttachment(value, label) {
 
 function normalizePlacement(value) {
   if (!value) return null;
-  assertStringId(value.domainId, "placement.domainId");
+  const hasDomain = value.domainId != null;
+  const hasParent = value.parentPlaceId != null;
+  if (hasDomain === hasParent) {
+    throw new TypeError("placement must specify exactly one of domainId or parentPlaceId");
+  }
+  if (hasDomain) assertStringId(value.domainId, "placement.domainId");
+  if (hasParent) assertId(value.parentPlaceId, "placement.parentPlaceId");
   const containment = value.containment ?? "none";
   if (containment !== "none" && containment !== "footprint") {
     throw new TypeError("placement.containment must be \"none\" or \"footprint\"");
   }
   return deepFreeze({
-    domainId: value.domainId,
+    domainId: hasDomain ? value.domainId : null,
+    parentPlaceId: hasParent ? value.parentPlaceId : null,
     transform: normalizeTransform(value.transform),
     containment
   });
@@ -115,6 +123,8 @@ export class PlaceRegistry {
   #instances = new Map();
   #domainBindings = new Map();
   #exteriorIndexes = new Map();
+  #indexedExteriorDomains = new Map();
+  #placementChildren = new Map();
   #portalRecords = new Map();
   #portalsByDomain = new Map();
   #instancePortalKeys = new Map();
@@ -263,17 +273,26 @@ export class PlaceRegistry {
       }
     }
 
+    const placement = normalizePlacement(input.placement);
+    if (placement?.parentPlaceId != null) {
+      if (placement.parentPlaceId === input.id) throw new Error("place cannot be placed relative to itself");
+      if (!this.#instances.has(placement.parentPlaceId)) {
+        throw new Error(`unknown placement parent: ${String(placement.parentPlaceId)}`);
+      }
+    }
+
     const instance = new PlaceInstance({
       id: input.id,
       definitionId: definition.id,
       parentId: input.parentId ?? null,
       layerDomains,
       attachments,
-      placement: normalizePlacement(input.placement),
+      placement,
       metadata: input.metadata
     });
 
     this.#instances.set(instance.id, instance);
+    this.#registerPlacementDependency(instance);
     for (const [layerId, domainId] of layerDomains) {
       this.#domainBindings.set(domainId, { instanceId: instance.id, layerId });
     }
@@ -304,6 +323,10 @@ export class PlaceRegistry {
     for (const child of this.#instances.values()) {
       if (child.parentId === instanceId) throw new Error(`cannot remove place ${String(instanceId)} while child ${String(child.id)} exists`);
     }
+    const placementChildren = this.#placementChildren.get(instanceId);
+    if (placementChildren?.size) {
+      throw new Error(`cannot remove place ${String(instanceId)} while relative placements depend on it`);
+    }
     const definition = this.#definitions.get(instance.definitionId);
     if (callBridge && this.#entitiesByPlace.get(instanceId)?.size) {
       throw new Error(`cannot remove occupied place ${String(instanceId)}`);
@@ -312,6 +335,7 @@ export class PlaceRegistry {
     this.clearEntityOccupancyForPlace(instanceId);
     for (const domainId of instance.layerDomains.values()) this.#domainBindings.delete(domainId);
     this.#unindexExterior(instance);
+    this.#unregisterPlacementDependency(instance);
     this.#removeInstancePortals(instance.id);
     this.#instances.delete(instance.id);
     this.#graphRevision += 1;
@@ -424,13 +448,40 @@ export class PlaceRegistry {
   setPlacement(instanceId, placement) {
     const instance = this.#instances.get(instanceId);
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
-    const definition = this.#definitions.get(instance.definitionId);
-    this.#unindexExterior(instance);
-    instance.placement = normalizePlacement(placement);
-    this.#indexExterior(instance, definition);
+    const next = normalizePlacement(placement);
+    if (next?.parentPlaceId != null) {
+      if (!this.#instances.has(next.parentPlaceId)) {
+        throw new Error(`unknown placement parent: ${String(next.parentPlaceId)}`);
+      }
+      this.#assertPlacementParentDoesNotCycle(instanceId, next.parentPlaceId);
+    }
+
+    const affected = this.#collectPlacementDescendants(instanceId);
+    for (const id of affected) this.#unindexExterior(this.#instances.get(id));
+
+    this.#unregisterPlacementDependency(instance);
+    instance.placement = next;
+    this.#registerPlacementDependency(instance);
+
+    for (const id of affected) {
+      const child = this.#instances.get(id);
+      if (!child) continue;
+      this.#indexExterior(child, this.#definitions.get(child.definitionId));
+    }
+
     this.#graphRevision += 1;
-    this.emit("place-placement-changed", { placeId: instanceId, placement: cloneJson(instance.placement) });
+    this.emit("place-placement-changed", {
+      placeId: instanceId,
+      placement: cloneJson(instance.placement),
+      affectedPlaceCount: affected.length
+    });
     return instance.placement;
+  }
+
+  getResolvedPlacement(instanceId) {
+    const instance = this.#instances.get(instanceId);
+    if (!instance) return null;
+    return this.#resolvePlacement(instanceId);
   }
 
   setParent(instanceId, parentId) {
@@ -585,7 +636,9 @@ export class PlaceRegistry {
         if (!instance?.placement || instance.placement.containment !== "footprint") continue;
         const definition = this.#definitions.get(instance.definitionId);
         if (!definition.footprint) continue;
-        const local = inverseTransformPoint(position, instance.placement.transform);
+        const resolvedPlacement = this.#resolvePlacement(instance.id);
+        if (!resolvedPlacement || resolvedPlacement.domainId !== domainId) continue;
+        const local = inverseTransformPoint(position, resolvedPlacement.transform);
         if (!pointInGeometry(local, definition.footprint)) continue;
         for (const id of this.#placeChain(instance.id)) {
           if (!seenPlaces.has(id)) {
@@ -693,6 +746,15 @@ export class PlaceRegistry {
       const definition = this.#definitions.get(instance.definitionId);
       if (!definition) throw new Error(`instance ${String(instance.id)} references missing definition`);
       if (instance.parentId != null && !this.#instances.has(instance.parentId)) throw new Error(`instance ${String(instance.id)} references missing parent`);
+      if (instance.placement?.parentPlaceId != null) {
+        if (!this.#instances.has(instance.placement.parentPlaceId)) {
+          throw new Error(`instance ${String(instance.id)} references missing placement parent`);
+        }
+        this.#assertPlacementParentDoesNotCycle(instance.id, instance.placement.parentPlaceId);
+        if (!this.#placementChildren.get(instance.placement.parentPlaceId)?.has(instance.id)) {
+          throw new Error(`instance ${String(instance.id)} missing placement dependency index`);
+        }
+      }
       const visited = new Set();
       let current = instance;
       while (current?.parentId != null) {
@@ -720,20 +782,100 @@ export class PlaceRegistry {
   }
 
   #indexExterior(instance, definition) {
-    if (!instance.placement || instance.placement.containment !== "footprint" || !definition.footprint) return;
+    if (!instance?.placement || instance.placement.containment !== "footprint" || !definition?.footprint) return;
+    const resolved = this.#resolvePlacement(instance.id);
+    if (!resolved) return;
     const localBounds = geometryBounds(definition.footprint);
-    const bounds = transformBounds(localBounds, instance.placement.transform);
-    let index = this.#exteriorIndexes.get(instance.placement.domainId);
-    if (!index) this.#exteriorIndexes.set(instance.placement.domainId, index = new DynamicAabbIndex());
+    const bounds = transformBounds(localBounds, resolved.transform);
+    let index = this.#exteriorIndexes.get(resolved.domainId);
+    if (!index) this.#exteriorIndexes.set(resolved.domainId, index = new DynamicAabbIndex());
     index.set(instance.id, bounds);
+    this.#indexedExteriorDomains.set(instance.id, resolved.domainId);
   }
 
   #unindexExterior(instance) {
-    if (!instance.placement) return;
-    const index = this.#exteriorIndexes.get(instance.placement.domainId);
-    if (!index) return;
-    index.delete(instance.id);
-    if (index.size === 0) this.#exteriorIndexes.delete(instance.placement.domainId);
+    if (!instance) return;
+    const domainId = this.#indexedExteriorDomains.get(instance.id);
+    if (domainId == null) return;
+    const index = this.#exteriorIndexes.get(domainId);
+    if (index) {
+      index.delete(instance.id);
+      if (index.size === 0) this.#exteriorIndexes.delete(domainId);
+    }
+    this.#indexedExteriorDomains.delete(instance.id);
+  }
+
+  #registerPlacementDependency(instance) {
+    const parentId = instance?.placement?.parentPlaceId;
+    if (parentId == null) return;
+    let children = this.#placementChildren.get(parentId);
+    if (!children) this.#placementChildren.set(parentId, children = new Set());
+    children.add(instance.id);
+  }
+
+  #unregisterPlacementDependency(instance) {
+    const parentId = instance?.placement?.parentPlaceId;
+    if (parentId == null) return;
+    const children = this.#placementChildren.get(parentId);
+    children?.delete(instance.id);
+    if (children?.size === 0) this.#placementChildren.delete(parentId);
+  }
+
+  #collectPlacementDescendants(instanceId) {
+    const result = [];
+    const queue = [instanceId];
+    const visited = new Set();
+    for (let i = 0; i < queue.length; i += 1) {
+      const id = queue[i];
+      if (visited.has(id)) throw new Error("placement dependency cycle");
+      visited.add(id);
+      result.push(id);
+      const children = this.#placementChildren.get(id);
+      if (children) queue.push(...[...children].sort((a, b) => typedIdKey(a).localeCompare(typedIdKey(b))));
+    }
+    return result;
+  }
+
+  #assertPlacementParentDoesNotCycle(instanceId, parentId) {
+    let cursorId = parentId;
+    const visited = new Set([typedIdKey(instanceId)]);
+    while (cursorId != null) {
+      const key = typedIdKey(cursorId);
+      if (visited.has(key)) throw new Error("place placement cycle");
+      visited.add(key);
+      const cursor = this.#instances.get(cursorId);
+      cursorId = cursor?.placement?.parentPlaceId ?? null;
+    }
+  }
+
+  #resolvePlacement(instanceId) {
+    const chain = [];
+    const visited = new Set();
+    let current = this.#instances.get(instanceId);
+    while (current?.placement) {
+      const key = typedIdKey(current.id);
+      if (visited.has(key)) throw new Error("place placement cycle");
+      visited.add(key);
+      chain.push(current.placement);
+      if (current.placement.domainId != null) break;
+      current = this.#instances.get(current.placement.parentPlaceId);
+    }
+
+    if (!chain.length || chain[chain.length - 1].domainId == null) return null;
+
+    const root = chain.pop();
+    let transform = root.transform;
+    const domainId = root.domainId;
+    while (chain.length) {
+      const child = chain.pop();
+      transform = composeTransforms(transform, child.transform);
+    }
+
+    return deepFreeze({
+      domainId,
+      transform,
+      containment: this.#instances.get(instanceId)?.placement?.containment ?? "none"
+    });
   }
 
   #portalKey(instanceId, portalId) { return `${typedIdKey(instanceId)}\u0000${portalId}`; }
