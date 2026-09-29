@@ -217,3 +217,67 @@ test("instance-local nearest anchor ignores disabled semantic spaces", () => {
     null
   );
 });
+
+
+test("overlapping spaces choose deepest then highest-priority then smallest-ID", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "overlap-place",
+    layers: [{ id: "ground" }],
+    spaces: [
+      {
+        id: "outer",
+        layerId: "ground",
+        geometry: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 10 }
+      },
+      {
+        id: "z-low",
+        layerId: "ground",
+        parentSpaceId: "outer",
+        priority: 1,
+        geometry: { type: "aabb", minX: 2, minY: 2, maxX: 8, maxY: 8 }
+      },
+      {
+        id: "z-high",
+        layerId: "ground",
+        parentSpaceId: "outer",
+        priority: 10,
+        geometry: { type: "aabb", minX: 2, minY: 2, maxX: 8, maxY: 8 }
+      },
+      {
+        id: "a-high",
+        layerId: "ground",
+        parentSpaceId: "outer",
+        priority: 10,
+        geometry: { type: "aabb", minX: 2, minY: 2, maxX: 8, maxY: 8 }
+      }
+    ]
+  });
+
+  const place = places.createPlace({
+    id: "p",
+    definitionId: "overlap-place"
+  });
+  const domain = place.layerDomains.get("ground");
+  const definition = places.getDefinition("overlap-place");
+
+  assert.deepEqual(
+    definition.locateSpaces("ground", { x: 5, y: 5 }).map((space) => space.id),
+    ["outer", "z-low", "z-high", "a-high"]
+  );
+  assert.equal(
+    definition.primarySpaceAt("ground", { x: 5, y: 5 }).id,
+    "a-high"
+  );
+
+  let located = places.locate(domain, { x: 5, y: 5 });
+  assert.equal(located.deepestSpace.id, "a-high");
+
+  places.setSpaceState("p", "a-high", { enabled: false });
+  located = places.locate(domain, { x: 5, y: 5 });
+  assert.equal(located.deepestSpace.id, "z-high");
+
+  places.setSpaceState("p", "z-high", { enabled: false });
+  located = places.locate(domain, { x: 5, y: 5 });
+  assert.equal(located.deepestSpace.id, "z-low");
+});
