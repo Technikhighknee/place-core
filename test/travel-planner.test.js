@@ -231,3 +231,187 @@ test("planner chooses the cheapest among multiple equally short domain paths", (
     ["route-b", "route-b"]
   );
 });
+
+
+test("nearest semantic target chooses the cheapest reachable anchor, not lexical order", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "bed-house",
+    layers: [{ id: "inside" }],
+    spaces: [{
+      id: "room",
+      layerId: "inside",
+      geometry: { type: "aabb", minX: 0, minY: -1, maxX: 6, maxY: 1 }
+    }],
+    portals: [{
+      id: "front-door",
+      a: { kind: "external", slot: "street" },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        nodeId: "door"
+      }
+    }],
+    anchors: [{
+      id: "bed",
+      layerId: "inside",
+      spaceId: "room",
+      kind: "sleep",
+      tags: ["bed"],
+      position: { x: 5, y: 0 },
+      nodeId: "bed"
+    }]
+  });
+
+  places.createPlace({
+    id: "zzz-near-house",
+    definitionId: "bed-house",
+    attachments: {
+      street: {
+        domainId: "street",
+        position: { x: 10, y: 0 },
+        nodeId: "near-street"
+      }
+    }
+  });
+
+  places.createPlace({
+    id: "aaa-far-house",
+    definitionId: "bed-house",
+    attachments: {
+      street: {
+        domainId: "street",
+        position: { x: 100, y: 0 },
+        nodeId: "far-street"
+      }
+    }
+  });
+
+  const entity = {
+    id: "hans",
+    domainId: "street",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const nodeX = new Map([
+    ["near-street", 10],
+    ["far-street", 100],
+    ["door", 0],
+    ["bed", 5]
+  ]);
+
+  const bridge = {
+    getEntity(id) { return id === "hans" ? entity : null; },
+    planLocalRoute({ position, destinationNodeId }) {
+      const x = nodeX.get(destinationNodeId);
+      return x == null ? null : { estimatedSeconds: Math.abs(position.x - x) };
+    },
+    startLocalJourney() { return true; },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const nearest = planTravel(
+    places,
+    bridge,
+    "hans",
+    { kind: "nearest", tag: "bed" }
+  );
+
+  assert.ok(nearest);
+  assert.equal(nearest.resolvedTarget.placeId, "zzz-near-house");
+  assert.equal(nearest.resolvedTarget.anchorId, "bed");
+  assert.equal(nearest.estimatedSeconds, 15);
+
+  places.setPortalState("zzz-near-house", "front-door", { locked: true });
+
+  const rerouted = planTravel(
+    places,
+    bridge,
+    "hans",
+    { kind: "nearest", tag: "bed" }
+  );
+
+  assert.ok(rerouted);
+  assert.equal(rerouted.resolvedTarget.placeId, "aaa-far-house");
+  assert.equal(rerouted.estimatedSeconds, 105);
+});
+
+test("nearest semantic target supports external availability predicates", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "service-place",
+    layers: [{ id: "inside" }],
+    portals: [{
+      id: "door",
+      a: { kind: "external", slot: "street" },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        nodeId: "door"
+      }
+    }],
+    anchors: [{
+      id: "counter",
+      layerId: "inside",
+      tags: ["service"],
+      position: { x: 1, y: 0 },
+      nodeId: "counter"
+    }]
+  });
+
+  for (const [id, x] of [["closed-shop", 5], ["open-shop", 20]]) {
+    places.createPlace({
+      id,
+      definitionId: "service-place",
+      attachments: {
+        street: {
+          domainId: "street",
+          position: { x, y: 0 },
+          nodeId: `${id}-street`
+        }
+      }
+    });
+  }
+
+  const entity = {
+    id: "hans",
+    domainId: "street",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+  const nodeX = new Map([
+    ["closed-shop-street", 5],
+    ["open-shop-street", 20],
+    ["door", 0],
+    ["counter", 1]
+  ]);
+  const bridge = {
+    getEntity(id) { return id === "hans" ? entity : null; },
+    planLocalRoute({ position, destinationNodeId }) {
+      const x = nodeX.get(destinationNodeId);
+      return x == null ? null : { estimatedSeconds: Math.abs(position.x - x) };
+    },
+    startLocalJourney() { return true; },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans",
+    { kind: "nearest", tag: "service" },
+    {
+      anchorPredicate(anchor) {
+        return anchor.placeId === "open-shop";
+      }
+    }
+  );
+
+  assert.ok(plan);
+  assert.equal(plan.resolvedTarget.placeId, "open-shop");
+});
