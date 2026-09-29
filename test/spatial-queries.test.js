@@ -188,3 +188,32 @@ test("placed-place area query uses the exterior spatial index", () => {
     ["shop-10", "shop-11"]
   );
 });
+
+
+test("instance-local nearest anchor ignores disabled semantic spaces", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(definition());
+  places.createPlace({
+    id: "shop",
+    definitionId: "query-place",
+    attachments: {
+      street: { domainId: "street", position: { x: 100, y: 50 } }
+    }
+  });
+
+  assert.equal(
+    places.findNearestAnchor("shop", { x: 8.5, y: 8.5 }).id,
+    "closet-anchor"
+  );
+
+  places.setSpaceState("shop", "closet", { enabled: false });
+
+  assert.equal(
+    places.findNearestAnchor("shop", { x: 8.5, y: 8.5 }).id,
+    "counter"
+  );
+  assert.equal(
+    places.findNearestAnchor("shop", { x: 0, y: 0 }, { kind: "storage" }),
+    null
+  );
+});
