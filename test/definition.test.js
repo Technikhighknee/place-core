@@ -48,3 +48,65 @@ test("definePlace snapshots authoring input", () => {
   source.layers[0].id = "mutated";
   assert.equal(defined.layers[0].id, "ground");
 });
+
+
+test("compiler rejects semantic positions that disagree with spaces", () => {
+  const wrongAnchorLayer = tavernBlueprint();
+  wrongAnchorLayer.anchors[0].spaceId = "cellar-room";
+  assert.throws(
+    () => compilePlace(wrongAnchorLayer),
+    /another layer/
+  );
+
+  const outsideAnchor = tavernBlueprint();
+  outsideAnchor.anchors[1].position = { x: 50, y: 50 };
+  outsideAnchor.anchors[1].nodeId = null;
+  assert.throws(
+    () => compilePlace(outsideAnchor),
+    /outside space/
+  );
+
+  const wrongPortalSpace = tavernBlueprint();
+  wrongPortalSpace.portals[0].b.spaceId = "cellar-room";
+  assert.throws(
+    () => compilePlace(wrongPortalSpace),
+    /another layer/
+  );
+
+  const outsidePortal = tavernBlueprint();
+  outsidePortal.portals[0].b.position = { x: 50, y: 50 };
+  outsidePortal.portals[0].b.nodeId = null;
+  assert.throws(
+    () => compilePlace(outsidePortal),
+    /outside space/
+  );
+});
+
+test("embedded navigation nodes must coincide with semantic target positions", () => {
+  const anchorMismatch = tavernBlueprint();
+  anchorMismatch.anchors[0].position = { x: 0.5, y: 0 };
+  assert.throws(
+    () => compilePlace(anchorMismatch),
+    /position does not match navigation node/
+  );
+
+  const portalMismatch = tavernBlueprint();
+  portalMismatch.portals[1].a.position = { x: 9.5, y: 0 };
+  assert.throws(
+    () => compilePlace(portalMismatch),
+    /position does not match navigation node/
+  );
+});
+
+test("space default anchors must physically lie inside their space", () => {
+  const invalid = tavernBlueprint();
+  invalid.spaces[1].defaultAnchorId = "front";
+  invalid.anchors[0].spaceId = null;
+  invalid.anchors[0].position = { x: 10, y: 0 };
+  invalid.anchors[0].nodeId = "g-stairs";
+
+  assert.throws(
+    () => compilePlace(invalid),
+    /default anchor is outside/
+  );
+});
