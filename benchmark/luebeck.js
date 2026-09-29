@@ -101,7 +101,7 @@ for (let i = 0; i < queryCount; i += 1) {
     },
     { traversableOnly: false }
   );
-  if (hit) checksum += hit.portalId.length;
+  if (hit) checksum += hit.portal.id.length;
 }
 const portalLookupMs =
   performance.now() - started;
