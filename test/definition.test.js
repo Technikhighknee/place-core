@@ -110,3 +110,53 @@ test("space default anchors must physically lie inside their space", () => {
     /default anchor is outside/
   );
 });
+
+
+test("same-domain portal road bindings must connect the portal endpoint nodes", () => {
+  const valid = {
+    id: "threshold-place",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "left", x: 0, y: 0 },
+          { id: "right", x: 1, y: 0 },
+          { id: "other", x: 2, y: 0 }
+        ],
+        roads: [
+          { id: "threshold", from: "left", to: "right", width: 1 },
+          { id: "wrong", from: "right", to: "other", width: 1 }
+        ]
+      }
+    }],
+    portals: [{
+      id: "door",
+      a: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        nodeId: "left"
+      },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 1, y: 0 },
+        nodeId: "right"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "threshold"
+      }]
+    }]
+  };
+
+  assert.doesNotThrow(() => compilePlace(valid));
+
+  const invalid = structuredClone(valid);
+  invalid.portals[0].roadBindings[0].roadId = "wrong";
+
+  assert.throws(
+    () => compilePlace(invalid),
+    /does not connect its endpoint nodes/
+  );
+});
