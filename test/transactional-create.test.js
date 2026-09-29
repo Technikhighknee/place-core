@@ -1,0 +1,134 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  World,
+  Navigation,
+  NavigationRegistry,
+  startJourney,
+  stopJourney
+} from "world-core";
+
+import {
+  PlaceRegistry,
+  WorldCoreBridge
+} from "../src/index.js";
+
+function definition() {
+  return {
+    id: "transaction-place",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 }
+        ],
+        roads: [{
+          id: "road",
+          from: "a",
+          to: "b",
+          width: 2
+        }]
+      }
+    }],
+    boundaries: [{
+      id: "wall",
+      layerId: "inside",
+      a: { x: 0, y: 0 },
+      b: { x: 1, y: 0 }
+    }]
+  };
+}
+
+test("failed bridge sync rolls place creation back atomically", () => {
+  const world = new World({ domains: [{ id: "street" }] });
+  const navigation = new NavigationRegistry();
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    Navigation,
+    startJourney,
+    stopJourney
+  });
+
+  const originalSyncBoundary = bridge.syncBoundaryState.bind(bridge);
+  bridge.syncBoundaryState = () => {
+    throw new Error("synthetic boundary sync failure");
+  };
+
+  const places = new PlaceRegistry({
+    bridge,
+    captureEvents: true
+  });
+  places.registerDefinition(definition());
+
+  const stateRevision = places.stateRevision;
+  const travelRevision = places.travelRevision;
+
+  assert.throws(
+    () => places.createPlace({
+      id: "broken",
+      definitionId: "transaction-place"
+    }),
+    /synthetic boundary sync failure/
+  );
+
+  const domainId = "broken:inside";
+  assert.equal(places.getPlace("broken"), null);
+  assert.equal(places.getDomainBinding(domainId), null);
+  assert.equal(world.getDomain(domainId), null);
+  assert.equal(navigation.domainBindings.has(domainId), false);
+  assert.equal(places.stateRevision, stateRevision);
+  assert.equal(places.travelRevision, travelRevision);
+  assert.deepEqual(places.drainEvents(), []);
+  places.assertInternalConsistency();
+
+  bridge.syncBoundaryState = originalSyncBoundary;
+  const place = places.createPlace({
+    id: "healthy",
+    definitionId: "transaction-place"
+  });
+  assert.ok(place);
+  assert.ok(world.getDomain("healthy:inside"));
+});
+
+test("internal rollback still completes when bridge cleanup itself fails", () => {
+  const bridge = {
+    attachRegistry() {},
+    materializePlace() {},
+    syncBoundaryState() {
+      throw new Error("sync failed");
+    },
+    syncPortalState() {},
+    unmaterializePlace() {
+      throw new Error("cleanup failed");
+    }
+  };
+
+  const places = new PlaceRegistry({
+    bridge,
+    captureEvents: true
+  });
+  places.registerDefinition(definition());
+
+  assert.throws(
+    () => places.createPlace({
+      id: "broken",
+      definitionId: "transaction-place"
+    }),
+    (error) => {
+      assert.ok(error instanceof AggregateError);
+      assert.match(error.message, /rollback bridge state/);
+      assert.equal(error.errors.length, 2);
+      return true;
+    }
+  );
+
+  assert.equal(places.getPlace("broken"), null);
+  assert.equal(places.getDomainBinding("broken:inside"), null);
+  assert.equal(places.stateRevision, 0);
+  assert.equal(places.travelRevision, 0);
+  assert.deepEqual(places.drainEvents(), []);
+  places.assertInternalConsistency();
+});
