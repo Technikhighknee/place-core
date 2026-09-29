@@ -1,6 +1,12 @@
 export type PlaceId = string | number;
 export type EntityId = string | number;
 
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
 export interface Vec2 {
   x: number;
   y: number;
@@ -57,7 +63,7 @@ export interface PlaceLayerInput {
   tags?: readonly string[];
   topologyId?: string | null;
   navigation?: PlaceNavigationSpec | null;
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export interface PlaceSpaceInput {
@@ -69,7 +75,7 @@ export interface PlaceSpaceInput {
   parentSpaceId?: string | null;
   defaultAnchorId?: string | null;
   priority?: number;
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export interface PlaceBoundaryInput {
@@ -81,7 +87,7 @@ export interface PlaceBoundaryInput {
   b: Vec2;
   enabled?: boolean;
   roadBindings?: readonly { roadId: string }[];
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export interface LocalPortalEndpointInput {
@@ -90,13 +96,13 @@ export interface LocalPortalEndpointInput {
   spaceId?: string | null;
   position: Vec2;
   nodeId?: string | null;
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export interface ExternalPortalEndpointInput {
   kind: "external";
   slot: string;
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export interface ResolvedPortalEndpoint {
@@ -123,7 +129,7 @@ export interface PlacePortalInput {
   destroyed?: boolean;
   blocksWhenClosed?: boolean;
   roadBindings?: readonly { layerId: string; roadId: string }[];
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export interface DynamicPortalInput {
@@ -141,7 +147,7 @@ export interface DynamicPortalInput {
   destroyed?: boolean;
   blocksWhenClosed?: boolean;
   roadBindings?: readonly { layerId: string; roadId: string }[];
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export interface PlaceAnchorInput {
@@ -152,7 +158,7 @@ export interface PlaceAnchorInput {
   nodeId?: string | null;
   tags?: readonly string[];
   kind?: string;
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export interface PlaceDefinitionInput {
@@ -167,7 +173,7 @@ export interface PlaceDefinitionInput {
   portals?: readonly PlacePortalInput[];
   anchors?: readonly PlaceAnchorInput[];
   footprint?: Geometry | null;
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export interface CompiledPlaceLayer extends PlaceLayerInput {
@@ -203,7 +209,7 @@ export class CompiledPlaceDefinition {
   readonly portals: readonly PlacePortalInput[];
   readonly anchors: readonly CompiledPlaceAnchor[];
   readonly footprint: Geometry | null;
-  readonly metadata: unknown;
+  readonly metadata: JsonValue;
 
   getLayer(id: string): CompiledPlaceLayer | null;
   getSpace(id: string): CompiledPlaceSpace | null;
@@ -234,7 +240,7 @@ export function compilePlace(
 export function definitionBounds(definition: CompiledPlaceDefinition): Bounds | null;
 
 export interface PlaceAttachment extends ResolvedPortalEndpoint {
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export type PlacePlacement =
@@ -277,7 +283,7 @@ export interface ResolvedPortal {
   blocksWhenClosed: boolean;
   traversable: boolean;
   source: "definition" | "dynamic";
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export class PlaceInstance {
@@ -287,7 +293,7 @@ export class PlaceInstance {
   readonly layerDomains: Map<string, string>;
   readonly attachments: Map<string, PlaceAttachment>;
   placement: PlacePlacement | null;
-  metadata: unknown;
+  metadata: JsonValue;
   readonly portalOverrides: Map<string, Record<string, boolean>>;
   readonly boundaryOverrides: Map<string, { enabled?: boolean }>;
   readonly spaceOverrides: Map<string, { enabled?: boolean }>;
@@ -331,7 +337,7 @@ export interface CreatePlaceInput {
   placement?: PlacePlacement | Transform2D | null;
   placementDomainId?: string | null;
   containment?: "none" | "footprint";
-  metadata?: unknown;
+  metadata?: JsonValue;
 }
 
 export interface PlaceEvent {
@@ -766,7 +772,7 @@ export interface PlaceCoreSnapshot {
     layerDomains: Record<string, string>;
     attachments: Record<string, PlaceAttachment>;
     placement: PlacePlacement | null;
-    metadata: unknown;
+    metadata: JsonValue;
     portalOverrides: Record<string, Record<string, boolean>>;
     boundaryOverrides: Record<string, { enabled?: boolean }>;
     spaceOverrides: Record<string, { enabled?: boolean }>;
