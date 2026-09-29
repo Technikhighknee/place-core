@@ -861,7 +861,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   }
 
   const semanticPermanent = new Set();
-  const semanticTemporary = new Set();
+  const semanticVisiting = new Set();
 
   const semanticParentIds = (item) => {
     const parents = new Map();
@@ -886,27 +886,73 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       );
   };
 
-  const visitSemantic = (item) => {
-    const key = idKey(item.id);
-    if (semanticPermanent.has(key)) return;
-    if (semanticTemporary.has(key)) {
-      throw new Error(
-        `place semantic membership cycle involving ${String(item.id)}`
-      );
-    }
+  const semanticRoots = [...snapshot.instances]
+    .sort((a, b) =>
+      idKey(a.id).localeCompare(idKey(b.id))
+    );
 
-    semanticTemporary.add(key);
-    for (const parentId of semanticParentIds(item)) {
-      visitSemantic(
-        instances.get(idKey(parentId))
-      );
-    }
-    semanticTemporary.delete(key);
-    semanticPermanent.add(key);
-  };
+  for (const item of semanticRoots) {
+    const rootKey = idKey(item.id);
+    if (!semanticPermanent.has(rootKey)) {
+      const stack = [{
+        item,
+        entered: false,
+        parents: null,
+        index: 0
+      }];
 
-  for (const item of snapshot.instances) {
-    visitSemantic(item);
+      while (stack.length) {
+        const frame =
+          stack[stack.length - 1];
+        const key = idKey(frame.item.id);
+
+        if (semanticPermanent.has(key)) {
+          stack.pop();
+          continue;
+        }
+
+        if (!frame.entered) {
+          if (semanticVisiting.has(key)) {
+            throw new Error(
+              `place semantic membership cycle involving ${String(frame.item.id)}`
+            );
+          }
+
+          semanticVisiting.add(key);
+          frame.entered = true;
+          frame.parents =
+            semanticParentIds(frame.item);
+          frame.index = 0;
+        }
+
+        if (frame.index < frame.parents.length) {
+          const parentId =
+            frame.parents[frame.index++];
+          const parentKey = idKey(parentId);
+
+          if (semanticPermanent.has(parentKey)) {
+            continue;
+          }
+          if (semanticVisiting.has(parentKey)) {
+            throw new Error(
+              `place semantic membership cycle involving ${String(parentId)}`
+            );
+          }
+
+          stack.push({
+            item: instances.get(parentKey),
+            entered: false,
+            parents: null,
+            index: 0
+          });
+          continue;
+        }
+
+        semanticVisiting.delete(key);
+        semanticPermanent.add(key);
+        stack.pop();
+      }
+    }
 
     const placementVisited = new Set();
     let cursor = item;
