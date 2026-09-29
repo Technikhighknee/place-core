@@ -160,3 +160,136 @@ test("same-domain portal road bindings must connect the portal endpoint nodes", 
     /does not connect its endpoint nodes/
   );
 });
+
+
+test("same-domain room portals require unique threshold roads", () => {
+  const base = {
+    id: "room-thresholds",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 },
+          { id: "c", x: 2, y: 0 }
+        ],
+        roads: [
+          { id: "ab", from: "a", to: "b", width: 1 },
+          { id: "bc", from: "b", to: "c", width: 1 }
+        ]
+      }
+    }],
+    spaces: [
+      {
+        id: "left",
+        layerId: "inside",
+        geometry: { type: "aabb", minX: -1, minY: -1, maxX: 0.5, maxY: 1 }
+      },
+      {
+        id: "right",
+        layerId: "inside",
+        geometry: { type: "aabb", minX: 0.5, minY: -1, maxX: 3, maxY: 1 }
+      }
+    ],
+    portals: [{
+      id: "door",
+      a: {
+        kind: "local",
+        layerId: "inside",
+        spaceId: "left",
+        position: { x: 0, y: 0 },
+        nodeId: "a"
+      },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        spaceId: "right",
+        position: { x: 1, y: 0 },
+        nodeId: "b"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "ab"
+      }]
+    }]
+  };
+
+  assert.doesNotThrow(() => compilePlace(base));
+
+  const missing = structuredClone(base);
+  missing.portals[0].roadBindings = [];
+  assert.throws(
+    () => compilePlace(missing),
+    /requires a threshold road binding/
+  );
+
+  const duplicate = structuredClone(base);
+  duplicate.portals.push({
+    ...structuredClone(duplicate.portals[0]),
+    id: "second-door"
+  });
+  assert.throws(
+    () => compilePlace(duplicate),
+    /bound as a threshold by multiple portals/
+  );
+});
+
+test("unidirectional same-domain portals require one-way a-to-b threshold roads", () => {
+  const make = (road) => ({
+    id: "one-way-threshold",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 }
+        ],
+        roads: [{ id: "door-road", width: 1, ...road }]
+      }
+    }],
+    portals: [{
+      id: "door",
+      bidirectional: false,
+      a: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        nodeId: "a"
+      },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 1, y: 0 },
+        nodeId: "b"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "door-road"
+      }]
+    }]
+  });
+
+  assert.doesNotThrow(() => compilePlace(make({
+    from: "a",
+    to: "b",
+    bidirectional: false
+  })));
+
+  assert.throws(
+    () => compilePlace(make({
+      from: "a",
+      to: "b",
+      bidirectional: true
+    })),
+    /requires a one-way threshold road/
+  );
+
+  assert.throws(
+    () => compilePlace(make({
+      from: "b",
+      to: "a",
+      bidirectional: false
+    })),
+    /requires a one-way threshold road/
+  );
+});
