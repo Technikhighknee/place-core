@@ -1864,7 +1864,22 @@ export class PlaceRegistry {
       dynamicPortalCount += instance.dynamicPortals.size;
     }
     let footprintIndexCells = 0;
-    for (const index of this.#exteriorIndexes.values()) footprintIndexCells += index.cellCount;
+    for (const index of this.#exteriorIndexes.values()) {
+      footprintIndexCells += index.cellCount;
+    }
+
+    let portalRoadBindingCount = 0;
+    for (const roads of this.#portalsByRoad.values()) {
+      for (const portalKeys of roads.values()) {
+        portalRoadBindingCount += portalKeys.size;
+      }
+    }
+
+    let traversablePortalEndpointCount = 0;
+    for (const index of this.#traversablePortalEndpointIndexes.values()) {
+      traversablePortalEndpointCount += index.size;
+    }
+
     return {
       definitionCount: this.#definitions.size,
       instanceCount: this.#instances.size,
@@ -1872,11 +1887,11 @@ export class PlaceRegistry {
       portalRecordCount: this.#portalRecords.size,
       portalEndpointCount: this.#portalEndpointRecords.size,
       portalEndpointDomainCount: this.#portalEndpointIndexes.size,
+      traversablePortalEndpointCount,
       traversablePortalEndpointDomainCount:
         this.#traversablePortalEndpointIndexes.size,
-      traversablePortalEndpointCount:
-        [...this.#traversablePortalEndpointIndexes.values()]
-          .reduce((sum, index) => sum + index.size, 0),
+      portalRoadBindingCount,
+      portalRoadDomainCount: this.#portalsByRoad.size,
       portalOverrideCount,
       boundaryOverrideCount,
       spaceOverrideCount,
