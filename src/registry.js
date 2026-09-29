@@ -24,6 +24,8 @@ import {
 } from "./utils.js";
 
 const PORTAL_STATE_KEYS = ["enabled", "open", "locked", "blocked", "destroyed"];
+const PLACE_INSTANCE_MUTATION_TOKEN =
+  Symbol("place-core-instance-mutation");
 
 function assertPlainObject(value, label) {
   if (!value ||
@@ -424,7 +426,13 @@ export class PlaceInstance {
     return [...this.#memberships.values()];
   }
 
-  addMembership(membership) {
+  addMembership(membership, token) {
+    if (token !== PLACE_INSTANCE_MUTATION_TOKEN) {
+      throw new Error(
+        "PlaceInstance membership state is registry-managed"
+      );
+    }
+
     const key = membershipKey(
       membership.parentPlaceId,
       membership.kind
@@ -434,7 +442,17 @@ export class PlaceInstance {
     return true;
   }
 
-  removeMembership(parentPlaceId, kind = "member-of") {
+  removeMembership(
+    parentPlaceId,
+    kind = "member-of",
+    token
+  ) {
+    if (token !== PLACE_INSTANCE_MUTATION_TOKEN) {
+      throw new Error(
+        "PlaceInstance membership state is registry-managed"
+      );
+    }
+
     return this.#memberships.delete(
       membershipKey(parentPlaceId, kind)
     );
@@ -1683,7 +1701,10 @@ export class PlaceRegistry {
       ...(this.#entitiesByPlace.get(instanceId) ?? [])
     ];
 
-    instance.addMembership(membership);
+    instance.addMembership(
+      membership,
+      PLACE_INSTANCE_MUTATION_TOKEN
+    );
     this.#registerMembershipDependency(
       instance.id,
       membership
@@ -1719,7 +1740,11 @@ export class PlaceRegistry {
       ...(this.#entitiesByPlace.get(instanceId) ?? [])
     ];
 
-    instance.removeMembership(parentPlaceId, kind);
+    instance.removeMembership(
+      parentPlaceId,
+      kind,
+      PLACE_INSTANCE_MUTATION_TOKEN
+    );
     this.#unregisterMembershipDependency(
       instance.id,
       membership
