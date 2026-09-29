@@ -659,3 +659,38 @@ test("stopTravel accepts only bridge and a non-empty reason", () => {
     false
   );
 });
+
+
+test("delta-only step overrides preserve the travel's retained world-change policy", () => {
+  const { places, bridge } = twoLayerRuntime();
+
+  const travel = startTravel(
+    places,
+    bridge,
+    "hans",
+    { placeId: "house", anchorId: "target" },
+    { worldChangePolicy: "eager" }
+  );
+  assert.ok(travel);
+  assert.equal(travel.worldChangePolicy, "eager");
+
+  places.setPortalState(
+    "house",
+    "stairs",
+    { locked: true }
+  );
+
+  stepTravel(
+    places,
+    bridge,
+    "hans",
+    { deltaSeconds: 0.5 }
+  );
+
+  assert.equal(travel.replans, 1);
+  assert.equal(travel.status, "failed");
+  assert.equal(
+    travel.failureReason,
+    "no-route-after-world-change"
+  );
+});
