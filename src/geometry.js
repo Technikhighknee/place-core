@@ -60,6 +60,183 @@ export function geometryBounds(geometry) {
   }
 }
 
+function cross2(ax, ay, bx, by) {
+  return ax * by - ay * bx;
+}
+
+function geometryVertices(geometry) {
+  if (geometry.type === "aabb") {
+    return [
+      { x: geometry.minX, y: geometry.minY },
+      { x: geometry.maxX, y: geometry.minY },
+      { x: geometry.maxX, y: geometry.maxY },
+      { x: geometry.minX, y: geometry.maxY }
+    ];
+  }
+  if (geometry.type === "polygon") {
+    return geometry.points;
+  }
+  return null;
+}
+
+function boundsContainBounds(parent, child) {
+  return child.minX >= parent.minX - EPSILON &&
+    child.minY >= parent.minY - EPSILON &&
+    child.maxX <= parent.maxX + EPSILON &&
+    child.maxY <= parent.maxY + EPSILON;
+}
+
+function segmentIntersectionParameters(a, b, c, d) {
+  const rx = b.x - a.x;
+  const ry = b.y - a.y;
+  const sx = d.x - c.x;
+  const sy = d.y - c.y;
+  const qx = c.x - a.x;
+  const qy = c.y - a.y;
+  const rxs = cross2(rx, ry, sx, sy);
+  const qxr = cross2(qx, qy, rx, ry);
+
+  if (Math.abs(rxs) <= EPSILON) {
+    if (Math.abs(qxr) > EPSILON) return [];
+    const rr = rx * rx + ry * ry;
+    if (rr <= EPSILON) return [];
+    const t0 = (qx * rx + qy * ry) / rr;
+    const t1 = t0 + (sx * rx + sy * ry) / rr;
+    const lo = Math.max(0, Math.min(t0, t1));
+    const hi = Math.min(1, Math.max(t0, t1));
+    if (hi < lo - EPSILON) return [];
+    return [lo, hi]
+      .map((t) => Math.max(0, Math.min(1, t)));
+  }
+
+  const t = cross2(qx, qy, sx, sy) / rxs;
+  const u = cross2(qx, qy, rx, ry) / rxs;
+  if (
+    t < -EPSILON || t > 1 + EPSILON ||
+    u < -EPSILON || u > 1 + EPSILON
+  ) {
+    return [];
+  }
+  return [Math.max(0, Math.min(1, t))];
+}
+
+function pointAlongSegment(a, b, t) {
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t
+  };
+}
+
+function segmentContainedInPolygon(a, b, polygon) {
+  if (!pointInPolygon(a, polygon) || !pointInPolygon(b, polygon)) {
+    return false;
+  }
+
+  const parameters = [0, 1];
+  for (let i = 0; i < polygon.length; i += 1) {
+    const c = polygon[i];
+    const d = polygon[(i + 1) % polygon.length];
+    parameters.push(...segmentIntersectionParameters(a, b, c, d));
+  }
+
+  parameters.sort((x, y) => x - y);
+  const unique = [];
+  for (const value of parameters) {
+    if (
+      unique.length === 0 ||
+      Math.abs(value - unique[unique.length - 1]) > EPSILON
+    ) {
+      unique.push(value);
+    }
+  }
+
+  for (let i = 0; i < unique.length - 1; i += 1) {
+    const lo = unique[i];
+    const hi = unique[i + 1];
+    if (hi - lo <= EPSILON) continue;
+    const midpoint = pointAlongSegment(a, b, (lo + hi) / 2);
+    if (!pointInPolygon(midpoint, polygon)) return false;
+  }
+
+  return true;
+}
+
+function polygonContainsVerticesAndEdges(parentPoints, childPoints) {
+  for (const point of childPoints) {
+    if (!pointInPolygon(point, parentPoints)) return false;
+  }
+  for (let i = 0; i < childPoints.length; i += 1) {
+    const a = childPoints[i];
+    const b = childPoints[(i + 1) % childPoints.length];
+    if (!segmentContainedInPolygon(a, b, parentPoints)) return false;
+  }
+  return true;
+}
+
+export function geometryContainsGeometry(parent, child) {
+  const parentBounds = geometryBounds(parent);
+  const childBounds = geometryBounds(child);
+  if (!boundsContainBounds(parentBounds, childBounds)) return false;
+
+  if (child.type === "circle") {
+    if (parent.type === "aabb") {
+      return (
+        child.center.x - child.radius >= parent.minX - EPSILON &&
+        child.center.y - child.radius >= parent.minY - EPSILON &&
+        child.center.x + child.radius <= parent.maxX + EPSILON &&
+        child.center.y + child.radius <= parent.maxY + EPSILON
+      );
+    }
+
+    if (parent.type === "circle") {
+      const dx = child.center.x - parent.center.x;
+      const dy = child.center.y - parent.center.y;
+      const centerDistance = Math.sqrt(dx * dx + dy * dy);
+      return centerDistance + child.radius <= parent.radius + EPSILON;
+    }
+
+    if (parent.type === "polygon") {
+      if (!pointInPolygon(child.center, parent.points)) return false;
+      const radiusSq = child.radius * child.radius;
+      for (let i = 0; i < parent.points.length; i += 1) {
+        const a = parent.points[i];
+        const b = parent.points[(i + 1) % parent.points.length];
+        if (
+          squaredDistancePointToSegment(child.center, a, b) <
+          radiusSq - EPSILON
+        ) {
+          return false;
+        }
+      }
+      return true;
+    }
+  }
+
+  const childVertices = geometryVertices(child);
+  if (!childVertices) {
+    throw new TypeError(
+      `unsupported child geometry type: ${child.type}`
+    );
+  }
+
+  if (parent.type === "aabb" || parent.type === "circle") {
+    return childVertices.every((point) =>
+      pointInGeometry(point, parent)
+    );
+  }
+
+  if (parent.type === "polygon") {
+    return polygonContainsVerticesAndEdges(
+      parent.points,
+      childVertices
+    );
+  }
+
+  throw new TypeError(
+    `unsupported parent geometry type: ${parent.type}`
+  );
+}
+
 export function pointInBounds(point, bounds) {
   return point.x >= bounds.minX - EPSILON && point.x <= bounds.maxX + EPSILON &&
     point.y >= bounds.minY - EPSILON && point.y <= bounds.maxY + EPSILON;
