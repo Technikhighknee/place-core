@@ -214,9 +214,82 @@ export class PlaceRegistry {
   }
 
   attachBridge(bridge) {
-    if (!bridge || typeof bridge !== "object") throw new TypeError("bridge must be an object");
+    if (!bridge || typeof bridge !== "object") {
+      throw new TypeError("bridge must be an object");
+    }
+    if (this.#bridge === bridge) return this;
+    if (this.#bridge && this.#bridge !== bridge) {
+      throw new Error("place-core already has a different bridge attached");
+    }
+
+    const materialized = [];
+    let registryAttached = false;
+
+    try {
+      if (typeof bridge.attachRegistry === "function") {
+        bridge.attachRegistry(this);
+        registryAttached = true;
+      }
+
+      if (typeof bridge.materializePlace === "function") {
+        const instances = [...this.#instances.values()]
+          .sort((a, b) => typedIdKey(a.id).localeCompare(typedIdKey(b.id)));
+
+        for (const instance of instances) {
+          const definition = this.#definitions.get(instance.definitionId);
+          bridge.materializePlace(instance, definition);
+          materialized.push({ instance, definition });
+
+          for (const boundary of definition.boundaries) {
+            bridge.syncBoundaryState?.(
+              instance,
+              this.getBoundary(instance.id, boundary.id)
+            );
+          }
+          for (const portal of definition.portals) {
+            bridge.syncPortalState?.(
+              instance,
+              portal,
+              this.resolvePortal(instance.id, portal.id)
+            );
+          }
+          for (const dynamicPortal of instance.dynamicPortals.values()) {
+            bridge.syncDynamicPortal?.(
+              instance,
+              dynamicPortal,
+              this.resolvePortal(instance.id, dynamicPortal.id)
+            );
+          }
+        }
+      }
+    } catch (error) {
+      const rollbackErrors = [];
+      for (const { instance, definition } of materialized.reverse()) {
+        try {
+          bridge.unmaterializePlace?.(instance, definition);
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError);
+        }
+      }
+
+      if (registryAttached) {
+        try {
+          bridge.dispose?.();
+        } catch (rollbackError) {
+          rollbackErrors.push(rollbackError);
+        }
+      }
+
+      if (rollbackErrors.length) {
+        throw new AggregateError(
+          [error, ...rollbackErrors],
+          "failed to attach place-core bridge and rollback materialization"
+        );
+      }
+      throw error;
+    }
+
     this.#bridge = bridge;
-    if (typeof bridge.attachRegistry === "function") bridge.attachRegistry(this);
     return this;
   }
 
