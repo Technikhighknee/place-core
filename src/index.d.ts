@@ -421,9 +421,12 @@ export interface PlaceEvent {
 export class PlaceRegistry {
   constructor(options?: PlaceRegistryOptions);
 
-  readonly definitions: Map<string, CompiledPlaceDefinition>;
-  readonly instances: Map<PlaceId, PlaceInstance>;
-  readonly domainBindings: Map<string, { instanceId: PlaceId; layerId: string }>;
+  readonly definitions: ReadonlyMap<string, CompiledPlaceDefinition>;
+  readonly instances: ReadonlyMap<PlaceId, PlaceInstance>;
+  readonly domainBindings: ReadonlyMap<
+    string,
+    { instanceId: PlaceId; layerId: string }
+  >;
   readonly activeTravels: Map<EntityId, TravelState>;
   readonly pendingTravels: Array<Record<string, unknown>>;
   readonly stateRevision: number;
