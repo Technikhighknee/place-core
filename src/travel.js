@@ -1,9 +1,139 @@
 import { squaredDistance } from "./geometry.js";
 import { isPortalTraversable } from "./registry.js";
-import { cloneJson, deepFreeze, normalizeBoolean } from "./utils.js";
+import {
+  assertId,
+  assertStringId,
+  cloneJson,
+  deepFreeze,
+  normalizeBoolean
+} from "./utils.js";
 
 const EMPTY_SET = new Set();
 const POSITION_EPSILON_SQ = 1e-8;
+
+function assertPlainObject(value, label) {
+  if (!value ||
+      typeof value !== "object" ||
+      Array.isArray(value)) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+  return value;
+}
+
+function assertAllowedKeys(value, allowedKeys, label) {
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new Error(`${label} contains unknown field ${key}`);
+    }
+  }
+}
+
+function assertOptionalStringId(value, label) {
+  if (value == null) return null;
+  assertStringId(value, label);
+  return value;
+}
+
+function validateTravelTarget(target) {
+  assertPlainObject(target, "travel target");
+
+  if (target.kind != null) {
+    if (target.kind !== "nearest") {
+      throw new TypeError(
+        'travel target.kind must be "nearest"'
+      );
+    }
+    assertAllowedKeys(
+      target,
+      ["kind", "tag", "anchorKind", "placeId", "spaceId"],
+      "nearest travel target"
+    );
+    assertStringId(target.tag, "nearest travel target.tag");
+    assertOptionalStringId(
+      target.anchorKind,
+      "nearest travel target.anchorKind"
+    );
+    if (target.placeId != null) {
+      assertId(target.placeId, "nearest travel target.placeId");
+    }
+    assertOptionalStringId(
+      target.spaceId,
+      "nearest travel target.spaceId"
+    );
+    return target;
+  }
+
+  if (target.domainId != null || target.position != null) {
+    assertAllowedKeys(
+      target,
+      [
+        "domainId",
+        "position",
+        "nodeId",
+        "placeId",
+        "anchorId",
+        "spaceId",
+        "layerId"
+      ],
+      "direct travel target"
+    );
+    assertStringId(target.domainId, "direct travel target.domainId");
+    if (!target.position ||
+        typeof target.position !== "object" ||
+        Array.isArray(target.position) ||
+        !Number.isFinite(target.position.x) ||
+        !Number.isFinite(target.position.y)) {
+      throw new TypeError(
+        "direct travel target.position must be a finite Vec2"
+      );
+    }
+    assertOptionalStringId(
+      target.nodeId,
+      "direct travel target.nodeId"
+    );
+    if (target.placeId != null) {
+      assertId(target.placeId, "direct travel target.placeId");
+    }
+    assertOptionalStringId(
+      target.anchorId,
+      "direct travel target.anchorId"
+    );
+    assertOptionalStringId(
+      target.spaceId,
+      "direct travel target.spaceId"
+    );
+    assertOptionalStringId(
+      target.layerId,
+      "direct travel target.layerId"
+    );
+    return target;
+  }
+
+  assertAllowedKeys(
+    target,
+    ["placeId", "anchorId", "spaceId"],
+    "place travel target"
+  );
+  assertId(target.placeId, "place travel target.placeId");
+  assertOptionalStringId(
+    target.anchorId,
+    "place travel target.anchorId"
+  );
+  assertOptionalStringId(
+    target.spaceId,
+    "place travel target.spaceId"
+  );
+  return target;
+}
+
+function travelTargetIdKey(id) {
+  return `${typeof id}:${String(id)}`;
+}
 
 class MinHeap {
   #items = [];
@@ -238,9 +368,9 @@ function availableAnchors(registry, placeId, anchors) {
 }
 
 export function resolveTravelTarget(registry, target) {
-  if (!target || typeof target !== "object") throw new TypeError("travel target is required");
+  validateTravelTarget(target);
 
-  if (typeof target.domainId === "string" && target.position) {
+  if (target.domainId != null) {
     return deepFreeze({
       placeId: target.placeId ?? null,
       anchorId: target.anchorId ?? null,
@@ -252,16 +382,25 @@ export function resolveTravelTarget(registry, target) {
     });
   }
 
-  if (target.kind === "nearest" && target.tag && typeof registry.findAnchors === "function") {
-    const candidates = registry.findAnchors({ tag: target.tag })
-      .filter((anchor) => anchorAvailable(registry, anchor.placeId, anchor));
-    if (!candidates.length) {
-      throw travelTargetUnavailable(`no enabled anchor matches tag ${target.tag}`);
-    }
-    candidates.sort((a, b) => {
-      const place = String(a.placeId).localeCompare(String(b.placeId));
-      return place || a.id.localeCompare(b.id);
+  if (target.kind === "nearest" &&
+      typeof registry.findAnchors === "function") {
+    const candidates = registry.findAnchors({
+      tag: target.tag,
+      kind: target.anchorKind ?? null,
+      placeId: target.placeId ?? null,
+      spaceId: target.spaceId ?? null,
+      enabledOnly: true
     });
+    if (!candidates.length) {
+      throw travelTargetUnavailable(
+        `no enabled anchor matches tag ${target.tag}`
+      );
+    }
+    candidates.sort((a, b) =>
+      travelTargetIdKey(a.placeId)
+        .localeCompare(travelTargetIdKey(b.placeId)) ||
+      a.id.localeCompare(b.id)
+    );
     const anchor = candidates[0];
     return deepFreeze({
       placeId: anchor.placeId,
@@ -291,6 +430,12 @@ export function resolveTravelTarget(registry, target) {
     if (!anchorAvailable(registry, target.placeId, anchor)) {
       throw travelTargetUnavailable(
         `anchor ${target.anchorId} on place ${String(target.placeId)} is in a disabled space`
+      );
+    }
+    if (target.spaceId != null &&
+        anchor.spaceId !== target.spaceId) {
+      throw travelTargetUnavailable(
+        `anchor ${target.anchorId} is not in space ${target.spaceId} on place ${String(target.placeId)}`
       );
     }
   } else if (target.spaceId != null) {
@@ -807,7 +952,10 @@ export function planTravel(registry, a, b, c, d) {
   } = resolvePlanCall(registry, a, b, c, d);
   if (!bridge) throw new Error("planTravel requires a WorldCoreBridge");
   const options = normalizePlanningOptions(rawOptions);
-  const entity = typeof entityOrId === "object" ? entityOrId : bridge.getEntity(entityOrId);
+  validateTravelTarget(target);
+  const entity = typeof entityOrId === "object"
+    ? entityOrId
+    : bridge.getEntity(entityOrId);
   if (!entity) throw new Error(`unknown entity ${String(entityOrId)}`);
   if (!entity.mobility) throw new Error(`entity ${String(entity.id)} has no mobility profile`);
 
