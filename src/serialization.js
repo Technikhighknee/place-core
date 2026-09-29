@@ -9,7 +9,10 @@ import {
   normalizeStringList,
   sha256
 } from "./utils.js";
-import { startTravel } from "./travel.js";
+import {
+  startTravel,
+  validateTravelTarget
+} from "./travel.js";
 
 export const PLACE_CORE_SNAPSHOT_VERSION = 1;
 
@@ -154,31 +157,8 @@ function assertPositiveIntegerOption(value, label) {
   }
 }
 
-function assertTravelTarget(target, label = "travel target") {
-  assertObject(target, label);
-
-  if (target.kind === "nearest") {
-    assertStringId(target.tag, `${label}.tag`);
-    assertNullableString(target.anchorKind, `${label}.anchorKind`);
-    assertNullableString(target.spaceId, `${label}.spaceId`);
-    if (target.placeId != null) assertId(target.placeId, `${label}.placeId`);
-    return;
-  }
-
-  if (target.domainId != null) {
-    assertStringId(target.domainId, `${label}.domainId`);
-    assertFiniteVec2(target.position, `${label}.position`);
-    assertNullableString(target.nodeId, `${label}.nodeId`);
-    if (target.placeId != null) assertId(target.placeId, `${label}.placeId`);
-    assertNullableString(target.anchorId, `${label}.anchorId`);
-    assertNullableString(target.spaceId, `${label}.spaceId`);
-    assertNullableString(target.layerId, `${label}.layerId`);
-    return;
-  }
-
-  assertId(target.placeId, `${label}.placeId`);
-  assertNullableString(target.anchorId, `${label}.anchorId`);
-  assertNullableString(target.spaceId, `${label}.spaceId`);
+function assertTravelTarget(target, _label = "travel target") {
+  return validateTravelTarget(target);
 }
 
 function assertTravelOptions(options, label) {
