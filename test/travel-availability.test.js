@@ -184,3 +184,176 @@ test("encounter travel discovers target unavailability only after reaching it", 
   const events = places.drainEvents();
   assert.ok(events.some((event) => event.type === "travel-target-unavailable"));
 });
+
+
+test("direct nearest target resolution honors all declarative filters", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "nearest-filter-place",
+    layers: [{ id: "inside" }],
+    spaces: [
+      {
+        id: "public",
+        layerId: "inside",
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: 0,
+          maxX: 5,
+          maxY: 5
+        }
+      },
+      {
+        id: "private",
+        layerId: "inside",
+        geometry: {
+          type: "aabb",
+          minX: 5,
+          minY: 0,
+          maxX: 10,
+          maxY: 5
+        }
+      }
+    ],
+    anchors: [
+      {
+        id: "public-service",
+        kind: "counter",
+        layerId: "inside",
+        spaceId: "public",
+        tags: ["service"],
+        position: { x: 1, y: 1 }
+      },
+      {
+        id: "private-service",
+        kind: "bed",
+        layerId: "inside",
+        spaceId: "private",
+        tags: ["service"],
+        position: { x: 8, y: 1 }
+      }
+    ]
+  });
+
+  places.createPlace({
+    id: 1,
+    definitionId: "nearest-filter-place"
+  });
+  places.createPlace({
+    id: "1",
+    definitionId: "nearest-filter-place"
+  });
+
+  let resolved = resolveTravelTarget(places, {
+    kind: "nearest",
+    tag: "service",
+    anchorKind: "bed",
+    placeId: "1",
+    spaceId: "private"
+  });
+
+  assert.equal(resolved.placeId, "1");
+  assert.equal(resolved.anchorId, "private-service");
+
+  places.setSpaceState("1", "private", { enabled: false });
+
+  assert.throws(
+    () => resolveTravelTarget(places, {
+      kind: "nearest",
+      tag: "service",
+      anchorKind: "bed",
+      placeId: "1",
+      spaceId: "private"
+    }),
+    /no enabled anchor matches tag service/
+  );
+
+  // Numeric and string IDs remain distinct and deterministically ordered.
+  resolved = resolveTravelTarget(places, {
+    kind: "nearest",
+    tag: "service",
+    anchorKind: "counter"
+  });
+  assert.equal(resolved.placeId, 1);
+});
+
+test("explicit anchor and space target must describe the same semantic location", () => {
+  const { places } = setup();
+
+  assert.throws(
+    () => resolveTravelTarget(places, {
+      placeId: "house",
+      anchorId: "private-bed",
+      spaceId: "public-room"
+    }),
+    /anchor private-bed is not in space public-room/
+  );
+});
+
+test("travel targets reject ambiguous and malformed runtime shapes", () => {
+  const { places, bridge } = setup();
+
+  const invalidTargets = [
+    {
+      target: {
+        kind: "nearest",
+        tag: "service",
+        domainId: "x"
+      },
+      pattern: /nearest travel target contains unknown field domainId/
+    },
+    {
+      target: {
+        kind: "closest",
+        tag: "service"
+      },
+      pattern: /target\.kind must be "nearest"/
+    },
+    {
+      target: {
+        kind: "nearest",
+        tag: 123
+      },
+      pattern: /target\.tag/
+    },
+    {
+      target: {
+        domainId: "inside",
+        position: {
+          x: Number.NaN,
+          y: 0
+        }
+      },
+      pattern: /position must be a finite Vec2/
+    },
+    {
+      target: {
+        position: { x: 0, y: 0 }
+      },
+      pattern: /domainId/
+    },
+    {
+      target: {
+        placeId: "house",
+        ancorId: "private-bed"
+      },
+      pattern: /contains unknown field ancorId/
+    }
+  ];
+
+  for (const { target, pattern } of invalidTargets) {
+    assert.throws(
+      () => resolveTravelTarget(places, target),
+      pattern
+    );
+    assert.throws(
+      () => planTravel(
+        places,
+        bridge,
+        "hans",
+        target
+      ),
+      pattern
+    );
+  }
+});
