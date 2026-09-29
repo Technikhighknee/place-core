@@ -253,8 +253,7 @@ export function findDomainPortalPath(
   assertStringId(targetDomainId, "targetDomainId");
 
   const pathOptions =
-    options.excludedPairs instanceof Set ||
-    options.excludedPortalKeys instanceof Set
+    options.excludedPairs instanceof Set
       ? options
       : normalizeDomainPathOptions(options);
 
