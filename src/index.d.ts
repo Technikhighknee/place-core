@@ -264,8 +264,9 @@ export interface ResolvedPortal {
   definitionId: string;
   kind: string;
   tags: readonly string[];
-  a: ResolvedPortalEndpoint;
-  b: ResolvedPortalEndpoint;
+  a: ResolvedPortalEndpoint | null;
+  b: ResolvedPortalEndpoint | null;
+  connected: boolean;
   bidirectional: boolean;
   transitionCost: number;
   enabled: boolean;
@@ -389,7 +390,9 @@ export class PlaceRegistry {
   setBoundaryState(instanceId: PlaceId, boundaryId: string, patch: { enabled?: boolean }): PlaceBoundaryInput & { enabled: boolean };
   setSpaceState(instanceId: PlaceId, spaceId: string, patch: { enabled?: boolean }): CompiledPlaceSpace & { enabled: boolean };
   setAttachment(instanceId: PlaceId, slot: string, value: PlaceAttachment): PlaceAttachment;
+  clearAttachment(instanceId: PlaceId, slot: string): boolean;
   setExternalBinding(instanceId: PlaceId, slot: string, value: PlaceAttachment): PlaceAttachment;
+  clearExternalBinding(instanceId: PlaceId, slot: string): boolean;
   addInstancePortal(instanceId: PlaceId, spec: DynamicPortalInput): ResolvedPortal;
   addPortal(instanceId: PlaceId, spec: DynamicPortalInput): ResolvedPortal;
   removeInstancePortal(instanceId: PlaceId, portalId: string): boolean;
