@@ -76,6 +76,10 @@ export class PlaceRegistry extends CorePlaceRegistry {
     return this.setAttachment(placeId, slot, endpoint);
   }
 
+  clearExternalBinding(placeId, slot) {
+    return this.clearAttachment(placeId, slot);
+  }
+
   updateEntityOccupancy(entity) {
     return this.syncEntityOccupancy(entity);
   }
