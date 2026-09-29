@@ -1268,17 +1268,52 @@ function normalizePlanningOptions(options = {}) {
   return normalized;
 }
 
-function normalizeStepOptions(options = {}) {
-  assertPlainObject(options, "travel step options");
+function validateStepOptionsInput(options = {}) {
+  assertTravelOptionKeys(
+    options,
+    [
+      "bridge",
+      "journeyOptions",
+      "excludedPortalKeys",
+      "excludedDomainPairs",
+      "maxDomainPathAttempts",
+      "maxShortestDomainPaths",
+      "allowPartialShortestPathSearch",
+      "maxConcreteStatesPerLayer",
+      "maxNearestTargetExpansions",
+      "maxCost",
+      "anchorPredicate",
+      "worldChangePolicy",
+      "portalEntryTolerance",
+      "deltaSeconds"
+    ],
+    "travel step options"
+  );
 
   const {
     deltaSeconds,
     ...planningInput
   } = options;
 
-  const planning = normalizePlanningOptions(planningInput);
+  // Validate all planning overrides without using the resulting defaults.
+  normalizePlanningOptions(planningInput);
+  if (deltaSeconds !== undefined) {
+    normalizeDeltaSeconds(deltaSeconds);
+  }
+
+  return options;
+}
+
+function normalizeEffectiveStepOptions(options = {}) {
+  validateStepOptionsInput(options);
+
+  const {
+    deltaSeconds,
+    ...planningInput
+  } = options;
+
   return {
-    ...planning,
+    ...normalizePlanningOptions(planningInput),
     deltaSeconds: normalizeDeltaSeconds(deltaSeconds)
   };
 }
@@ -1661,12 +1696,19 @@ function resolveStepCall(registry, a, b, c) {
 }
 
 export function stepTravel(registry, a, b, c) {
-  const { bridge, entityId, options } = resolveStepCall(registry, a, b, c);
-  if (!bridge) throw new Error("stepTravel requires a WorldCoreBridge");
+  const { bridge, entityId, options } =
+    resolveStepCall(registry, a, b, c);
+
+  validateStepOptionsInput(options);
+
+  if (!bridge) {
+    throw new Error("stepTravel requires a WorldCoreBridge");
+  }
+
   const state = registry.activeTravels.get(entityId);
   if (!state) return null;
 
-  const effectiveOptions = normalizeStepOptions(
+  const effectiveOptions = normalizeEffectiveStepOptions(
     effectiveTravelOptions(state, options)
   );
   const worldChangePolicy = effectiveOptions.worldChangePolicy;
@@ -1697,7 +1739,12 @@ export function stepTravel(registry, a, b, c) {
   return advance(registry, bridge, state, effectiveOptions);
 }
 
-export function stepPlaceSimulation(registry, a = {}, b = 0, c = {}) {
+export function stepPlaceSimulation(
+  registry,
+  a = {},
+  b = 0,
+  c = {}
+) {
   let bridge;
   let options;
 
@@ -1706,15 +1753,16 @@ export function stepPlaceSimulation(registry, a = {}, b = 0, c = {}) {
       typeof a.getEntity === "function" &&
       typeof a.planLocalRoute === "function") {
     bridge = a;
-    const runtimeOptions = normalizeStepOptions(c ?? {});
     options = {
-      ...runtimeOptions,
-      deltaSeconds: normalizeDeltaSeconds(b)
+      ...(c ?? {}),
+      deltaSeconds: b
     };
   } else {
-    options = normalizeStepOptions(a ?? {});
+    options = a ?? {};
     bridge = options.bridge ?? registry.bridge;
   }
+
+  validateStepOptionsInput(options);
 
   if (!bridge) {
     throw new Error(
