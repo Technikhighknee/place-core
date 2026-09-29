@@ -1042,7 +1042,8 @@ export class PlaceRegistry {
         nodeId: endpoint.nodeId,
         placeId: instanceId,
         spaceId: endpoint.spaceId,
-        layerId: endpoint.layerId
+        layerId: endpoint.layerId,
+        metadata: endpoint.metadata ?? null
       };
     }
     if (endpoint.kind === "external") {
