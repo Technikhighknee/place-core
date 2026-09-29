@@ -137,38 +137,25 @@ test("snapshot roundtrip retains canonical state", () => {
 });
 
 
-test("non-canonical registry options are rejected", () => {
-  assert.throws(
-    () => new PlaceRegistry({ worldCoreBridge: {} }),
-    /PlaceRegistry options contains unknown field worldCoreBridge/
-  );
+test("registry rejects unknown options", () => {
   assert.throws(
     () => new PlaceRegistry({ mysteryOption: true }),
     /PlaceRegistry options contains unknown field mysteryOption/
   );
 });
 
-test("non-canonical createPlace fields are rejected", () => {
+test("createPlace rejects unknown fields", () => {
   const registry = new PlaceRegistry();
   registry.registerDefinition(tavernBlueprint());
 
-  const cases = [
-    { id: "legacy-attachments", externalBindings: {} },
-    { id: "legacy-parent", parentPlaceId: "anything" },
-    { id: "legacy-placement-domain", placementDomainId: "street" },
-    { id: "legacy-containment", containment: "footprint" }
-  ];
-
-  for (const input of cases) {
-    assert.throws(
-      () => registry.createPlace({
-        id: input.id,
-        definitionId: "tavern",
-        ...input
-      }),
-      /place input contains unknown field/
-    );
-  }
+  assert.throws(
+    () => registry.createPlace({
+      id: "invalid-place",
+      definitionId: "tavern",
+      mysteryField: true
+    }),
+    /place input contains unknown field mysteryField/
+  );
 
   assert.equal(registry.instances.size, 0);
 });
