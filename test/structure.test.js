@@ -126,3 +126,72 @@ test("boundary and sparse state return to zero overrides at base state", () => {
   places.setSpaceState("box", "inner", { enabled: true });
   assert.equal(place.spaceOverrides.size, 0);
 });
+
+
+test("numeric and string place IDs do not collide in portal or occupancy indexes", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "id-place",
+    layers: [{ id: "ground" }],
+    spaces: [{
+      id: "room",
+      layerId: "ground",
+      geometry: { type: "aabb", minX: 0, minY: 0, maxX: 2, maxY: 2 }
+    }],
+    portals: [{
+      id: "door",
+      a: { kind: "local", layerId: "ground", position: { x: 0, y: 0 } },
+      b: { kind: "resolved", domainId: "outside", position: { x: 0, y: 0 } }
+    }]
+  });
+
+  places.createPlace({
+    id: 1,
+    definitionId: "id-place",
+    layerDomains: { ground: "number-one" }
+  });
+  places.createPlace({
+    id: "1",
+    definitionId: "id-place",
+    layerDomains: { ground: "string-one" }
+  });
+
+  assert.equal(places.getPortalsForDomain("number-one").length, 1);
+  assert.equal(places.getPortalsForDomain("string-one").length, 1);
+
+  places.updateEntityOccupancy({ id: "n", domainId: "number-one", position: { x: 1, y: 1 } });
+  places.updateEntityOccupancy({ id: "s", domainId: "string-one", position: { x: 1, y: 1 } });
+  assert.deepEqual([...places.entitiesInSpace(1, "room")], ["n"]);
+  assert.deepEqual([...places.entitiesInSpace("1", "room")], ["s"]);
+});
+
+test("occupied places cannot be removed implicitly", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(roomDefinition());
+  const place = places.createPlace({ id: "occupied", definitionId: "room-box" });
+  places.updateEntityOccupancy({
+    id: "hans",
+    domainId: place.layerDomains.get("ground"),
+    position: { x: 5, y: 5 }
+  });
+
+  assert.throws(() => places.removePlace("occupied"), /cannot remove occupied place/);
+  assert.ok(places.getPlace("occupied"));
+
+  places.removeEntityOccupancy("hans");
+  assert.equal(places.removePlace("occupied"), true);
+});
+
+test("placement rejects unknown containment modes", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(roomDefinition());
+  assert.throws(() => places.createPlace({
+    id: "bad",
+    definitionId: "room-box",
+    placement: {
+      domainId: "street",
+      transform: { x: 0, y: 0 },
+      containment: "magic"
+    }
+  }), /placement\.containment/);
+});
