@@ -4,7 +4,7 @@ import {
   isPortalTraversable
 } from "./registry.js";
 import { compilePlace, CompiledPlaceDefinition } from "./definition.js";
-import { deepFreeze } from "./utils.js";
+import { deepFreeze, normalizeBoolean } from "./utils.js";
 
 export class PlaceRegistry extends CorePlaceRegistry {
   constructor(options = {}) {
@@ -113,15 +113,48 @@ export class PlaceRegistry extends CorePlaceRegistry {
       .filter(Boolean);
   }
 
-  findAnchors({ placeId = null, tag = null, kind = null, spaceId = null } = {}) {
+  findAnchors({
+    placeId = null,
+    tag = null,
+    kind = null,
+    spaceId = null,
+    enabledOnly = false
+  } = {}) {
+    enabledOnly = normalizeBoolean(
+      enabledOnly,
+      "findAnchors.enabledOnly",
+      { defaultValue: false }
+    );
+
     const result = [];
-    const places = placeId == null ? this.instances.values() : [this.getPlace(placeId)].filter(Boolean);
+    const places = placeId == null
+      ? this.instances.values()
+      : [this.getPlace(placeId)].filter(Boolean);
+
     for (const instance of places) {
       const definition = this.getDefinition(instance.definitionId);
-      let anchors = tag != null ? definition.getAnchorsByTag(tag) : definition.anchors;
-      if (spaceId != null) anchors = anchors.filter((anchor) => anchor.spaceId === spaceId);
-      if (kind != null) anchors = anchors.filter((anchor) => anchor.kind === kind);
+      let anchors = tag != null
+        ? definition.getAnchorsByTag(tag)
+        : definition.anchors;
+
+      if (spaceId != null) {
+        anchors = anchors.filter(
+          (anchor) => anchor.spaceId === spaceId
+        );
+      }
+      if (kind != null) {
+        anchors = anchors.filter(
+          (anchor) => anchor.kind === kind
+        );
+      }
+
       for (const anchor of anchors) {
+        if (enabledOnly && anchor.spaceId != null) {
+          if (this.getSpace(instance.id, anchor.spaceId)?.enabled !== true) {
+            continue;
+          }
+        }
+
         result.push({
           ...anchor,
           placeId: instance.id,
