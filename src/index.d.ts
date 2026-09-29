@@ -112,6 +112,7 @@ export interface ResolvedPortalEndpoint {
   placeId?: PlaceId | null;
   layerId?: string | null;
   spaceId?: string | null;
+  metadata?: JsonValue;
 }
 
 export interface PlacePortalInput {
