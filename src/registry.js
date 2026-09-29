@@ -459,17 +459,46 @@ export class PlaceRegistry {
     }
     this.#indexExterior(instance, definition);
     this.#reindexInstancePortals(instance, definition);
-    this.#touchState({ travel: true });
 
+    let materialized = false;
     try {
-      this.#bridge?.materializePlace?.(instance, definition);
-      for (const boundary of definition.boundaries) this.#bridge?.syncBoundaryState?.(instance, boundary);
-      for (const portal of definition.portals) this.#bridge?.syncPortalState?.(instance, portal, this.resolvePortal(instance.id, portal.id));
+      if (this.#bridge?.materializePlace) {
+        this.#bridge.materializePlace(instance, definition);
+        materialized = true;
+      }
+      for (const boundary of definition.boundaries) {
+        this.#bridge?.syncBoundaryState?.(instance, boundary);
+      }
+      for (const portal of definition.portals) {
+        this.#bridge?.syncPortalState?.(
+          instance,
+          portal,
+          this.resolvePortal(instance.id, portal.id)
+        );
+      }
     } catch (error) {
-      this.#removePlaceInternal(instance.id, false);
+      let rollbackError = null;
+      if (materialized) {
+        try {
+          this.#bridge?.unmaterializePlace?.(instance, definition);
+        } catch (cleanupError) {
+          rollbackError = cleanupError;
+        }
+      }
+      this.#removePlaceInternal(instance.id, false, {
+        touchRevision: false,
+        emitEvent: false
+      });
+      if (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `failed to create place ${String(instance.id)} and rollback bridge state`
+        );
+      }
       throw error;
     }
 
+    this.#touchState({ travel: true });
     this.#refreshTrackedOccupancy(
       this.#collectTrackedEntitiesForIndexedPlaces([instance.id])
     );
@@ -481,7 +510,11 @@ export class PlaceRegistry {
     return this.#removePlaceInternal(instanceId, true);
   }
 
-  #removePlaceInternal(instanceId, callBridge) {
+  #removePlaceInternal(
+    instanceId,
+    callBridge,
+    { touchRevision = true, emitEvent = true } = {}
+  ) {
     const instance = this.#instances.get(instanceId);
     if (!instance) return false;
     const semanticChildren = this.#semanticChildren.get(instanceId);
@@ -505,8 +538,13 @@ export class PlaceRegistry {
     this.#unregisterPlacementDependency(instance);
     this.#removeInstancePortals(instance.id);
     this.#instances.delete(instance.id);
-    this.#touchState({ travel: true });
-    this.emit("place-removed", { placeId: instanceId, definitionId: instance.definitionId });
+    if (touchRevision) this.#touchState({ travel: true });
+    if (emitEvent) {
+      this.emit("place-removed", {
+        placeId: instanceId,
+        definitionId: instance.definitionId
+      });
+    }
     return true;
   }
 
