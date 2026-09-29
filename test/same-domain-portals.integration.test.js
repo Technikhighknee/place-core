@@ -94,6 +94,7 @@ function roomDoorDefinition() {
         position: { x: 1, y: 0 },
         nodeId: "kitchen-door"
       },
+      transitionCost: 2,
       roadBindings: [{
         layerId: "ground",
         roadId: "room-threshold"
@@ -149,6 +150,67 @@ function setup() {
     place
   };
 }
+
+test("same-domain portal transition cost becomes physical world-core road delay", () => {
+  const {
+    world,
+    navigation,
+    bridge,
+    places,
+    place
+  } = setup();
+
+  const domainId = place.layerDomains.get("ground");
+  const domainNavigation = navigation.navigationForDomain(domainId);
+  const topologyId = places.getDefinition("same-domain-rooms")
+    .getLayer("ground").topologyId;
+  const sharedTopology = navigation.topologies.get(topologyId);
+  const mobility = world.getEntity("hans").mobility;
+
+  assert.equal(
+    domainNavigation.roadTraversalDelaySeconds("room-threshold"),
+    2
+  );
+
+  const sharedRoute = sharedTopology.findRoute(
+    "start",
+    "target",
+    mobility
+  );
+  const domainRoute = domainNavigation.findRoute(
+    "start",
+    "target",
+    mobility
+  );
+
+  assert.ok(sharedRoute);
+  assert.ok(domainRoute);
+  assert.ok(
+    Math.abs(
+      domainRoute.estimatedSeconds -
+      sharedRoute.estimatedSeconds -
+      2
+    ) < 1e-9
+  );
+
+  const state = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "inn",
+      anchorId: "kitchen-target"
+    }
+  );
+
+  assert.ok(state);
+  assert.ok(
+    Math.abs(
+      state.plan.estimatedSeconds -
+      domainRoute.estimatedSeconds
+    ) < 1e-9
+  );
+});
 
 test("same-domain room doors emit semantic portal traversal events from world-core roads", () => {
   const {
