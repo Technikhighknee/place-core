@@ -414,7 +414,12 @@ export class PlaceRegistry {
   findNearestAnchor(
     instanceId: PlaceId,
     position: Vec2,
-    options?: { tag?: string; layerId?: string }
+    options?: {
+      tag?: string;
+      layerId?: string;
+      kind?: string;
+      spaceId?: string;
+    }
   ): (CompiledPlaceAnchor & { placeId: PlaceId; domainId: string; distance: number }) | null;
   getAnchorsForDomain(
     domainId: string,
