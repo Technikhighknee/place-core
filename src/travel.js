@@ -1207,8 +1207,7 @@ function normalizePlanningOptions(options = {}) {
       "maxCost",
       "anchorPredicate",
       "worldChangePolicy",
-      "portalEntryTolerance",
-      "deltaSeconds"
+      "portalEntryTolerance"
     ],
     "travel options"
   );
@@ -1266,13 +1265,22 @@ function normalizePlanningOptions(options = {}) {
     )
   };
 
-  if (options.deltaSeconds !== undefined) {
-    normalized.deltaSeconds = normalizeDeltaSeconds(
-      options.deltaSeconds
-    );
-  }
-
   return normalized;
+}
+
+function normalizeStepOptions(options = {}) {
+  assertPlainObject(options, "travel step options");
+
+  const {
+    deltaSeconds,
+    ...planningInput
+  } = options;
+
+  const planning = normalizePlanningOptions(planningInput);
+  return {
+    ...planning,
+    deltaSeconds: normalizeDeltaSeconds(deltaSeconds)
+  };
 }
 
 function captureTravelOptions(options = {}) {
@@ -1349,7 +1357,17 @@ function replan(registry, bridge, state, options) {
   bridge.stopLocalJourney(state.entityId);
   let plan;
   try {
-    plan = planTravel(registry, bridge, state.entityId, state.target, options);
+    const {
+      deltaSeconds: _deltaSeconds,
+      ...planningOptions
+    } = options;
+    plan = planTravel(
+      registry,
+      bridge,
+      state.entityId,
+      state.target,
+      planningOptions
+    );
   } catch (error) {
     if (error?.code === "PLACE_TRAVEL_TARGET_UNAVAILABLE") {
       state.replans += 1;
@@ -1625,15 +1643,10 @@ export function stepTravel(registry, a, b, c) {
   const state = registry.activeTravels.get(entityId);
   if (!state) return null;
 
-  const effectiveOptions = effectiveTravelOptions(state, options);
-  if (effectiveOptions.deltaSeconds !== undefined) {
-    effectiveOptions.deltaSeconds = normalizeDeltaSeconds(
-      effectiveOptions.deltaSeconds
-    );
-  }
-  const worldChangePolicy = normalizeWorldChangePolicy(
-    effectiveOptions.worldChangePolicy
+  const effectiveOptions = normalizeStepOptions(
+    effectiveTravelOptions(state, options)
   );
+  const worldChangePolicy = effectiveOptions.worldChangePolicy;
 
   if (worldChangePolicy === "eager" &&
       (state.travelRevision ?? state.graphRevision) !== registry.travelRevision) {
