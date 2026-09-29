@@ -23,7 +23,11 @@
     "bench": "node --expose-gc benchmark/instances.js",
     "bench:locate": "node --expose-gc benchmark/locate.js",
     "bench:travel": "node --expose-gc benchmark/travel.js",
-    "example:mini-city": "node examples/mini-city.js"
+    "example:mini-city": "node examples/mini-city.js",
+    "bench:snapshot": "node --expose-gc benchmark/snapshot.js",
+    "bench:mutations": "node --expose-gc benchmark/mutations.js",
+    "bench:retention": "node --expose-gc benchmark/retention.js",
+    "bench:guardrails": "node --expose-gc benchmark/guardrails.js"
   },
   "keywords": [
     "simulation",
