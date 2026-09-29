@@ -30,7 +30,8 @@
     "bench:guardrails": "node --expose-gc benchmark/guardrails.js",
     "bench:nearest-target": "node --expose-gc benchmark/nearest-target.js",
     "bench:explicit-travel": "node --expose-gc benchmark/explicit-travel.js",
-    "bench:portal-spatial": "node --expose-gc benchmark/portal-spatial.js"
+    "bench:portal-spatial": "node --expose-gc benchmark/portal-spatial.js",
+    "bench:luebeck": "node --expose-gc benchmark/luebeck.js"
   },
   "keywords": [
     "simulation",

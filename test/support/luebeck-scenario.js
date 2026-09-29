@@ -756,6 +756,31 @@ export function buildLuebeckScenario({ captureEvents = true } = {}) {
   };
 }
 
+export function addLuebeckTraveler(
+  scenario,
+  entityId,
+  houseIndex
+) {
+  if (!Number.isInteger(houseIndex) ||
+      houseIndex < 0 ||
+      houseIndex >= scenario.houses.length) {
+    throw new RangeError("houseIndex must reference an existing Lübeck house");
+  }
+  const house = scenario.houses[houseIndex];
+  scenario.world.addEntity({
+    id: entityId,
+    kind: "person",
+    domainId: house.layerDomains.get("upper"),
+    position: { x: 10, y: 0 },
+    body: { radius: 0.3 },
+    mobility: mobilityProfile("pedestrian")
+  });
+  scenario.places.updateEntityOccupancy(
+    scenario.world.getEntity(entityId)
+  );
+  return scenario.world.getEntity(entityId);
+}
+
 export function stepScenario(
   scenario,
   deltaSeconds = 0.5
