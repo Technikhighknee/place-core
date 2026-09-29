@@ -41,6 +41,6 @@
   ],
   "license": "ISC",
   "devDependencies": {
-    "world-core": "github:Technikhighknee/world-core#feat/multi-target-routing"
+    "world-core": "github:Technikhighknee/world-core#e0a0518572c3e5c6c1a13871998cd38bca728ff2"
   }
 }
