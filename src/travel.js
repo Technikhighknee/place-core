@@ -305,6 +305,46 @@ function localRoute(bridge, mobility, from, destination, options, cache, cachePr
   return result;
 }
 
+function localRouteCostsToMany(
+  bridge,
+  {
+    domainId,
+    position,
+    destinationNodeIds,
+    mobility,
+    options
+  }
+) {
+  const ids = [...new Set(destinationNodeIds ?? [])]
+    .filter((id) => id != null)
+    .sort();
+
+  if (!ids.length) return new Map();
+
+  if (typeof bridge.planLocalRouteCostsToMany === "function") {
+    return bridge.planLocalRouteCostsToMany({
+      domainId,
+      position,
+      destinationNodeIds: ids,
+      mobility,
+      options
+    });
+  }
+
+  const result = new Map();
+  for (const destinationNodeId of ids) {
+    const planned = bridge.planLocalRoute({
+      domainId,
+      position,
+      destinationNodeId,
+      mobility,
+      options
+    });
+    if (planned) result.set(destinationNodeId, planned.estimatedSeconds);
+  }
+  return result;
+}
+
 function appendJourney(steps, from, destination, route) {
   if (!route || route.estimatedSeconds <= 0) return steps;
   return [...steps, deepFreeze({
@@ -606,7 +646,7 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
       if (edge.from.nodeId != null) destinationNodeIds.add(edge.from.nodeId);
     }
 
-    const routeCosts = bridge.planLocalRouteCostsToMany({
+    const routeCosts = localRouteCostsToMany(bridge, {
       domainId: state.domainId,
       position: state.position,
       destinationNodeIds,
