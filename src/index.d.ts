@@ -509,7 +509,7 @@ export class PlaceRegistry {
   getEventQueueStats(): {
     size: number;
     limit: number;
-    overflowPolicy: string;
+    overflowPolicy: "drop-newest" | "drop-oldest";
     dropped: number;
   };
 
