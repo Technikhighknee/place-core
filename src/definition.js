@@ -135,6 +135,20 @@ function normalizeNavigationSpec(spec, label) {
   });
 }
 
+function normalizeDefinitionRevision(value) {
+  const revision = value ?? 1;
+  if (typeof revision === "string") {
+    assertStringId(revision, "place.revision");
+    return revision;
+  }
+  if (typeof revision === "number" && Number.isFinite(revision)) {
+    return revision;
+  }
+  throw new TypeError(
+    "place.revision must be a non-empty string or finite number"
+  );
+}
+
 function defaultTopologyId(definitionId, layerId) {
   return `${encodeURIComponent(definitionId)}:${encodeURIComponent(layerId)}`;
 }
@@ -694,36 +708,60 @@ export function compilePlace(input, options = {}) {
   }
   for (const [key, list] of portalsByLayer) portalsByLayer.set(key, Object.freeze(list));
 
-  if (blueprint.defaultAnchorId != null && !anchorsById.has(blueprint.defaultAnchorId)) {
-    throw new Error(`place ${blueprint.id} references unknown default anchor ${blueprint.defaultAnchorId}`);
+  const kind = blueprint.kind ?? "place";
+  assertStringId(kind, "place.kind");
+
+  const tags = normalizeStringList(
+    blueprint.tags,
+    "place.tags",
+    { defaultValue: [] }
+  );
+  const revision = normalizeDefinitionRevision(blueprint.revision);
+  const defaultAnchorId = blueprint.defaultAnchorId ?? null;
+  if (defaultAnchorId != null) {
+    assertStringId(defaultAnchorId, "place.defaultAnchorId");
+    if (!anchorsById.has(defaultAnchorId)) {
+      throw new Error(
+        `place ${blueprint.id} references unknown default anchor ${defaultAnchorId}`
+      );
+    }
   }
 
-  const footprint = blueprint.footprint ? normalizeGeometry(blueprint.footprint) : null;
-  const canonicalBlueprint = {
-    ...blueprint,
-    layers,
-    spaces,
-    boundaries,
-    portals,
-    anchors,
-    footprint
-  };
-  const contentHash = sha256(canonicalStringify(canonicalBlueprint));
+  const footprint = blueprint.footprint == null
+    ? null
+    : normalizeGeometry(blueprint.footprint);
+  const metadata = deepFreeze(cloneJson(blueprint.metadata ?? null));
 
-  return new CompiledPlaceDefinition({
+  const canonicalBlueprint = deepFreeze({
     id: blueprint.id,
-    kind: blueprint.kind ?? "place",
-    tags: normalizeStringList(blueprint.tags, "place.tags", { defaultValue: [] }),
-    revision: blueprint.revision ?? 1,
-    contentHash,
-    defaultAnchorId: blueprint.defaultAnchorId ?? null,
+    kind,
+    tags,
+    revision,
+    defaultAnchorId,
     layers,
     spaces,
     boundaries,
     portals,
     anchors,
     footprint,
-    metadata: deepFreeze(cloneJson(blueprint.metadata ?? null)),
+    metadata
+  });
+  const contentHash = sha256(canonicalStringify(canonicalBlueprint));
+
+  return new CompiledPlaceDefinition({
+    id: blueprint.id,
+    kind,
+    tags,
+    revision,
+    contentHash,
+    defaultAnchorId,
+    layers,
+    spaces,
+    boundaries,
+    portals,
+    anchors,
+    footprint,
+    metadata,
     layersById,
     spacesById,
     boundariesById,
@@ -734,7 +772,7 @@ export function compilePlace(input, options = {}) {
     anchorsBySpace,
     anchorsByTag,
     portalsByLayer,
-    blueprint
+    blueprint: canonicalBlueprint
   });
 }
 
