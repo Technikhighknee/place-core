@@ -334,3 +334,52 @@ test("semantic child index follows reparenting and removal guards", () => {
   assert.equal(places.removePlace("b"), true);
   assert.equal(places.removePlace("child"), true);
 });
+
+
+test("default layer domain IDs distinguish numeric and string place IDs", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "default-domain-place",
+    layers: [{ id: "ground" }]
+  });
+
+  const numeric = places.createPlace({
+    id: 1,
+    definitionId: "default-domain-place"
+  });
+  const string = places.createPlace({
+    id: "1",
+    definitionId: "default-domain-place"
+  });
+  const reservedLooking = places.createPlace({
+    id: "~n:1",
+    definitionId: "default-domain-place"
+  });
+
+  assert.equal(numeric.layerDomains.get("ground"), "~n:1:ground");
+  assert.equal(string.layerDomains.get("ground"), "1:ground");
+  assert.equal(reservedLooking.layerDomains.get("ground"), "~n%3A1:ground");
+
+  assert.equal(places.getDomainBinding("~n:1:ground").instanceId, 1);
+  assert.equal(places.getDomainBinding("1:ground").instanceId, "1");
+  assert.equal(places.getDomainBinding("~n%3A1:ground").instanceId, "~n:1");
+  places.assertInternalConsistency();
+});
+
+test("default layer domain IDs escape delimiter characters deterministically", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "escaped-domain-place",
+    layers: [{ id: "upper:deck" }]
+  });
+
+  const place = places.createPlace({
+    id: "ship:17",
+    definitionId: "escaped-domain-place"
+  });
+
+  assert.equal(
+    place.layerDomains.get("upper:deck"),
+    "ship%3A17:upper%3Adeck"
+  );
+});
