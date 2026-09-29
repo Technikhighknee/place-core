@@ -383,3 +383,130 @@ test("default layer domain IDs escape delimiter characters deterministically", (
     "ship%3A17:upper%3Adeck"
   );
 });
+
+
+test("one place instance cannot assign the same domain to multiple layers", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "two-layer-domain-place",
+    layers: [
+      { id: "ground" },
+      { id: "cellar" }
+    ]
+  });
+
+  const stateRevision = places.stateRevision;
+  const travelRevision = places.travelRevision;
+
+  assert.throws(
+    () => places.createPlace({
+      id: "house",
+      definitionId: "two-layer-domain-place",
+      layerDomains: {
+        ground: "shared-domain",
+        cellar: "shared-domain"
+      }
+    }),
+    /assigned to multiple layers/
+  );
+
+  assert.equal(places.getPlace("house"), null);
+  assert.equal(
+    places.getDomainBinding("shared-domain"),
+    null
+  );
+  assert.equal(places.stateRevision, stateRevision);
+  assert.equal(places.travelRevision, travelRevision);
+  places.assertInternalConsistency();
+});
+
+test("createPlace rejects unknown layer-domain keys before mutation", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "known-layer-place",
+    layers: [{ id: "ground" }]
+  });
+
+  assert.throws(
+    () => places.createPlace({
+      id: "house",
+      definitionId: "known-layer-place",
+      layerDomains: {
+        ground: "house-ground",
+        typo: "ghost-domain"
+      }
+    }),
+    /layerDomains contains unknown layer typo/
+  );
+
+  assert.equal(places.getPlace("house"), null);
+  assert.equal(places.getDomainBinding("house-ground"), null);
+  assert.equal(places.getDomainBinding("ghost-domain"), null);
+});
+
+test("createPlace collection inputs must be plain objects", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "plain-input-place",
+    layers: [{ id: "inside" }]
+  });
+
+  assert.throws(
+    () => places.createPlace({
+      id: "bad-layer-domains",
+      definitionId: "plain-input-place",
+      layerDomains: []
+    }),
+    /layerDomains must be a plain object/
+  );
+
+  assert.throws(
+    () => places.createPlace({
+      id: "bad-attachments",
+      definitionId: "plain-input-place",
+      attachments: []
+    }),
+    /attachments must be a plain object/
+  );
+
+  assert.equal(places.instances.size, 0);
+});
+
+test("createPlace rejects unknown top-level fields instead of silently ignoring them", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "strict-place-input",
+    layers: [{ id: "inside" }]
+  });
+
+  assert.throws(
+    () => places.createPlace({
+      id: "house",
+      definitionId: "strict-place-input",
+      ownerId: "person-17"
+    }),
+    /place input contains unknown field ownerId/
+  );
+
+  assert.equal(places.getPlace("house"), null);
+});
+
+test("createPlace validates parent IDs before structural mutation", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "parent-id-place",
+    layers: [{ id: "inside" }]
+  });
+
+  assert.throws(
+    () => places.createPlace({
+      id: "child",
+      definitionId: "parent-id-place",
+      parentId: {}
+    }),
+    /parentId/
+  );
+
+  assert.equal(places.getPlace("child"), null);
+  assert.equal(places.domainBindings.size, 0);
+});
