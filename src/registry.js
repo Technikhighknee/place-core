@@ -1,5 +1,6 @@
 import {
   DynamicAabbIndex,
+  DynamicPointIndex,
   geometryBounds,
   inverseTransformPoint,
   normalizeTransform,
@@ -662,39 +663,55 @@ export class PlaceRegistry {
     assertOptionalString(options.kind, "findPortalEndpointsNear.kind");
     assertOptionalString(options.tag, "findPortalEndpointsNear.tag");
     if (!Number.isFinite(radius) || radius < 0) {
-      throw new RangeError("portal query radius must be a finite number >= 0");
+      throw new RangeError(
+        "portal query radius must be a finite number >= 0"
+      );
     }
+
     const index = this.#portalEndpointIndexes.get(domainId);
     if (!index) return [];
 
-    const bounds = {
-      minX: position.x - radius,
-      minY: position.y - radius,
-      maxX: position.x + radius,
-      maxY: position.y + radius
-    };
-    const radiusSq = radius * radius;
+    const matches = index.queryRadius(
+      position,
+      radius,
+      (endpointKey) => {
+        const endpointRecord =
+          this.#portalEndpointRecords.get(endpointKey);
+        if (!endpointRecord) return false;
+
+        const portal =
+          this.#portalRecords.get(endpointRecord.portalKey);
+        if (!portal) return false;
+        if (traversableOnly && !portal.traversable) return false;
+        if (options.kind != null && portal.kind !== options.kind) {
+          return false;
+        }
+        if (options.tag != null &&
+            !portal.tags?.includes(options.tag)) {
+          return false;
+        }
+        return endpointRecord.domainId === domainId;
+      }
+    );
+
     const result = [];
-
-    for (const endpointKey of index.queryBounds(bounds)) {
-      const endpointRecord = this.#portalEndpointRecords.get(endpointKey);
+    for (const match of matches) {
+      const endpointRecord =
+        this.#portalEndpointRecords.get(match.id);
       if (!endpointRecord) continue;
-      const portal = this.#portalRecords.get(endpointRecord.portalKey);
+      const portal =
+        this.#portalRecords.get(endpointRecord.portalKey);
       if (!portal) continue;
-      if (traversableOnly && !portal.traversable) continue;
-      if (options.kind != null && portal.kind !== options.kind) continue;
-      if (options.tag != null && !portal.tags?.includes(options.tag)) continue;
 
-      const endpoint = endpointRecord.side === "a" ? portal.a : portal.b;
+      const endpoint =
+        endpointRecord.side === "a" ? portal.a : portal.b;
       if (!endpoint || endpoint.domainId !== domainId) continue;
-      const distanceSq = squaredDistance(position, endpoint.position);
-      if (distanceSq > radiusSq) continue;
 
       result.push({
         portal,
         endpoint,
         side: endpointRecord.side,
-        distance: Math.sqrt(distanceSq)
+        distance: match.distance
       });
     }
 
@@ -724,50 +741,59 @@ export class PlaceRegistry {
     const index = this.#portalEndpointIndexes.get(domainId);
     if (!index || index.size === 0) return null;
 
-    if (Number.isFinite(maxDistance)) {
-      return this.findPortalEndpointsNear(
-        domainId,
-        position,
-        maxDistance,
-        { ...options, traversableOnly }
-      )[0] ?? null;
-    }
+    const match = index.findNearest(position, {
+      maxDistance,
+      predicate: (endpointKey) => {
+        const endpointRecord =
+          this.#portalEndpointRecords.get(endpointKey);
+        if (!endpointRecord ||
+            endpointRecord.domainId !== domainId) {
+          return false;
+        }
 
-    let radius = Math.max(index.cellSize, 1);
-    for (let attempt = 0; attempt < 24; attempt += 1) {
-      const hits = this.findPortalEndpointsNear(domainId, position, radius, options);
-      if (hits.length > 0 && hits[0].distance <= radius) return hits[0];
-      radius *= 2;
-    }
-
-    // Coordinates can be arbitrarily large. Preserve correctness after bounded
-    // spatial expansion with a deterministic indexed-endpoint fallback.
-    let best = null;
-    let bestDistanceSq = Infinity;
-    for (const endpointRecord of this.#portalEndpointRecords.values()) {
-      if (endpointRecord.domainId !== domainId) continue;
-      const portal = this.#portalRecords.get(endpointRecord.portalKey);
-      if (!portal) continue;
-      if (traversableOnly && !portal.traversable) continue;
-      if (options.kind != null && portal.kind !== options.kind) continue;
-      if (options.tag != null && !portal.tags?.includes(options.tag)) continue;
-      const endpoint = endpointRecord.side === "a" ? portal.a : portal.b;
-      if (!endpoint) continue;
-      const distanceSq = squaredDistance(position, endpoint.position);
-      if (!best ||
-          distanceSq < bestDistanceSq ||
-          (distanceSq === bestDistanceSq &&
-           portal.key.localeCompare(best.portal.key) < 0)) {
-        best = {
-          portal,
-          endpoint,
-          side: endpointRecord.side,
-          distance: Math.sqrt(distanceSq)
-        };
-        bestDistanceSq = distanceSq;
+        const portal =
+          this.#portalRecords.get(endpointRecord.portalKey);
+        if (!portal) return false;
+        if (traversableOnly && !portal.traversable) return false;
+        if (options.kind != null && portal.kind !== options.kind) {
+          return false;
+        }
+        if (options.tag != null &&
+            !portal.tags?.includes(options.tag)) {
+          return false;
+        }
+        return true;
+      },
+      compareIds: (leftKey, rightKey) => {
+        const left = this.#portalEndpointRecords.get(leftKey);
+        const right = this.#portalEndpointRecords.get(rightKey);
+        if (!left || !right) {
+          return String(leftKey).localeCompare(String(rightKey));
+        }
+        return left.portalKey.localeCompare(right.portalKey) ||
+          left.side.localeCompare(right.side);
       }
-    }
-    return best;
+    });
+
+    if (!match) return null;
+
+    const endpointRecord =
+      this.#portalEndpointRecords.get(match.id);
+    if (!endpointRecord) return null;
+    const portal =
+      this.#portalRecords.get(endpointRecord.portalKey);
+    if (!portal) return null;
+
+    const endpoint =
+      endpointRecord.side === "a" ? portal.a : portal.b;
+    if (!endpoint || endpoint.domainId !== domainId) return null;
+
+    return {
+      portal,
+      endpoint,
+      side: endpointRecord.side,
+      distance: match.distance
+    };
   }
 
   getBoundariesForDomain(domainId, options = {}) {
@@ -1910,7 +1936,7 @@ export class PlaceRegistry {
             endpointRecord.side !== side) {
           throw new Error(`portal record ${key} missing endpoint spatial record`);
         }
-        if (!this.#portalEndpointIndexes.get(domainId)?.getBounds(endpointKey)) {
+        if (!this.#portalEndpointIndexes.get(domainId)?.getPoint(endpointKey)) {
           throw new Error(`portal record ${key} missing endpoint spatial index entry`);
         }
       }
@@ -2123,15 +2149,10 @@ export class PlaceRegistry {
         if (!endpointIndex) {
           this.#portalEndpointIndexes.set(
             endpoint.domainId,
-            endpointIndex = new DynamicAabbIndex()
+            endpointIndex = new DynamicPointIndex()
           );
         }
-        endpointIndex.set(endpointKey, {
-          minX: endpoint.position.x,
-          minY: endpoint.position.y,
-          maxX: endpoint.position.x,
-          maxY: endpoint.position.y
-        });
+        endpointIndex.set(endpointKey, endpoint.position);
       }
     }
     if (keys.size > 0) this.#instancePortalKeys.set(instance.id, keys);
