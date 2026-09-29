@@ -556,7 +556,15 @@ export class WorldCoreBridge {
 
   attachRegistry(registry: PlaceRegistry): this;
   dispose(): boolean;
-  materializePlace(instance: PlaceInstance, definition: CompiledPlaceDefinition): void;
+  materializePlace(
+    instance: PlaceInstance,
+    definition: CompiledPlaceDefinition
+  ): unknown;
+  rollbackMaterializePlace(
+    instance: PlaceInstance,
+    definition: CompiledPlaceDefinition,
+    receipt: unknown
+  ): boolean;
   unmaterializePlace(instance: PlaceInstance, definition: CompiledPlaceDefinition): void;
   ensureLayerTopology(definition: CompiledPlaceDefinition, layer: CompiledPlaceLayer): any;
   syncBoundaryState(instance: PlaceInstance, boundary: PlaceBoundaryInput & { enabled?: boolean }): void;
