@@ -664,7 +664,6 @@ export class PlaceRegistry {
   }
   get stateRevision() { return this.#stateRevision; }
   get travelRevision() { return this.#travelRevision; }
-  get graphRevision() { return this.#travelRevision; }
   get bridge() { return this.#bridge; }
 
   #touchState({ travel = false } = {}) {
@@ -2573,7 +2572,6 @@ export class PlaceRegistry {
       occupancySpatialDomainCount: this.#occupancySpatialIndexes.size,
       stateRevision: this.#stateRevision,
       travelRevision: this.#travelRevision,
-      graphRevision: this.#travelRevision,
       footprintIndexCells,
       eventQueueSize: this.#events.size,
       droppedEventCount: this.#events.dropped

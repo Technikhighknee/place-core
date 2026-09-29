@@ -434,8 +434,6 @@ export class PlaceRegistry {
   readonly pendingTravels: Array<Record<string, unknown>>;
   readonly stateRevision: number;
   readonly travelRevision: number;
-  /** @deprecated Alias for travelRevision. */
-  readonly graphRevision: number;
   readonly bridge: WorldCoreBridge | null;
 
   attachBridge(bridge: WorldCoreBridge): this;
@@ -623,7 +621,6 @@ export class PlaceRegistry {
     occupancySpatialDomainCount: number;
     stateRevision: number;
     travelRevision: number;
-    graphRevision: number;
     footprintIndexCells: number;
     eventQueueSize: number;
     droppedEventCount: number;
@@ -732,8 +729,6 @@ export interface TravelPlan {
   };
   /** Revision of the travel-relevant place graph used by this plan. */
   travelRevision: number;
-  /** @deprecated Alias for travelRevision. */
-  graphRevision: number;
   startDomainId: string;
   domainPath: readonly string[];
   steps: readonly TravelStep[];
@@ -769,8 +764,6 @@ export interface TravelState {
   portalEntered: boolean;
   portalTransitionRemaining: number;
   travelRevision: number;
-  /** @deprecated Alias for travelRevision. */
-  graphRevision: number;
   worldChangePolicy: "encounter" | "eager";
   status: "active" | "complete" | "failed" | "cancelled";
   failureReason: string | null;

@@ -82,7 +82,7 @@ test("semantic-only mutations do not invalidate travel revision", () => {
 
   assert.equal(places.stateRevision, startState + 1);
   assert.equal(places.travelRevision, startTravelRevision);
-  assert.equal(places.graphRevision, startTravelRevision);
+  assert.equal(places.travelRevision, startTravelRevision);
 
   places.setParent("house", "district");
 

@@ -960,7 +960,6 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
     target: cloneJson(target),
     resolvedTarget: bestGoal.resolvedTarget,
     travelRevision: registry.travelRevision,
-    graphRevision: registry.travelRevision,
     startDomainId,
     domainPath: Object.freeze([...bestGoal.domains]),
     steps,
@@ -1041,7 +1040,6 @@ export function planTravel(registry, a, b, c, d) {
       target: cloneJson(target),
       resolvedTarget,
       travelRevision: registry.travelRevision,
-      graphRevision: registry.travelRevision,
       startDomainId,
       domainPath: Object.freeze([...bestShortest.domains]),
       steps,
@@ -1085,7 +1083,6 @@ export function planTravel(registry, a, b, c, d) {
         target: cloneJson(target),
         resolvedTarget,
         travelRevision: registry.travelRevision,
-      graphRevision: registry.travelRevision,
         startDomainId,
         domainPath: Object.freeze([...domains]),
         steps,
@@ -1508,12 +1505,10 @@ function replan(registry, bridge, state, options) {
 
   state.plan = plan;
   state.travelRevision = registry.travelRevision;
-  state.graphRevision = registry.travelRevision;
   registry.emit("travel-replan", {
     entityId: state.entityId,
     target: state.target,
     travelRevision: state.travelRevision,
-    graphRevision: state.graphRevision,
     replans: state.replans,
     estimatedSeconds: plan.estimatedSeconds
   });
@@ -1737,7 +1732,6 @@ export function startTravel(registry, a, b, c, d) {
     portalEntered: false,
     portalTransitionRemaining: 0,
     travelRevision: registry.travelRevision,
-    graphRevision: registry.travelRevision,
     worldChangePolicy: capturedOptions.worldChangePolicy,
     status: "active",
     failureReason: null,

@@ -1224,12 +1224,10 @@ export function deserializePlaceCore(snapshot, options = {}) {
       state.worldChangePolicy = state.options.worldChangePolicy;
       if (state.plan) {
         state.plan.travelRevision = registry.travelRevision;
-        state.plan.graphRevision = registry.travelRevision;
         Object.freeze(state.plan.steps);
         Object.freeze(state.plan);
       }
       state.travelRevision = registry.travelRevision;
-      state.graphRevision = registry.travelRevision;
       registry.activeTravels.set(state.entityId, state);
     }
   } else if (bridge && restartTravels) {

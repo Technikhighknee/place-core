@@ -569,6 +569,6 @@ test("all travel plan shapes expose the current travel revision", () => {
   for (const plan of [explicit, nearest]) {
     assert.ok(plan);
     assert.equal(plan.travelRevision, places.travelRevision);
-    assert.equal(plan.graphRevision, places.travelRevision);
+    assert.equal(plan.travelRevision, places.travelRevision);
   }
 });

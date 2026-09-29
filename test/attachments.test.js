@@ -123,12 +123,12 @@ test("detaching a portal makes an existing graph edge disappear immediately", ()
   });
 
   const inside = building.layerDomains.get("inside");
-  const revisionBefore = places.graphRevision;
+  const revisionBefore = places.travelRevision;
   assert.equal(places.getPortalsForDomain(inside).length, 1);
 
   places.clearExternalBinding("house", "street");
 
-  assert.ok(places.graphRevision > revisionBefore);
+  assert.ok(places.travelRevision > revisionBefore);
   assert.equal(places.getPortalsForDomain(inside).length, 0);
   assert.equal(places.getPortalsForDomain("street").length, 0);
 });
