@@ -209,8 +209,10 @@ export class BoundedEventQueue {
 
   configure({ limit = this.#limit, overflowPolicy = this.#overflowPolicy } = {}) {
     if (!Number.isInteger(limit) || limit < 0) throw new RangeError("event queue limit must be a non-negative integer");
-    if (!["drop-newest", "drop-oldest", "throw"].includes(overflowPolicy)) {
-      throw new TypeError("invalid event overflow policy");
+    if (!["drop-newest", "drop-oldest"].includes(overflowPolicy)) {
+      throw new TypeError(
+        'event overflow policy must be "drop-newest" or "drop-oldest"'
+      );
     }
     this.#limit = limit;
     this.#overflowPolicy = overflowPolicy;
@@ -224,7 +226,6 @@ export class BoundedEventQueue {
 
   push(event) {
     if (this.#limit === 0 || this.#items.length >= this.#limit) {
-      if (this.#overflowPolicy === "throw") throw new Error("place-core event queue overflow");
       if (this.#overflowPolicy === "drop-oldest" && this.#limit > 0) {
         this.#items.shift();
         this.#items.push(event);
