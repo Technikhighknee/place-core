@@ -293,3 +293,49 @@ test("unidirectional same-domain portals require one-way a-to-b threshold roads"
     /requires a one-way threshold road/
   );
 });
+
+
+test("generated topology IDs escape definition and layer delimiters", () => {
+  const a = compilePlace({
+    id: "a:b",
+    layers: [{
+      id: "c",
+      navigation: {
+        nodes: [{ id: "n", x: 0, y: 0 }],
+        roads: []
+      }
+    }]
+  });
+
+  const b = compilePlace({
+    id: "a",
+    layers: [{
+      id: "b:c",
+      navigation: {
+        nodes: [{ id: "n", x: 0, y: 0 }],
+        roads: []
+      }
+    }]
+  });
+
+  assert.equal(a.layers[0].topologyId, "a%3Ab:c");
+  assert.equal(b.layers[0].topologyId, "a:b%3Ac");
+  assert.notEqual(a.layers[0].topologyId, b.layers[0].topologyId);
+});
+
+test("explicit topology IDs must be non-empty strings", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "bad-topology",
+      layers: [{
+        id: "ground",
+        topologyId: "",
+        navigation: {
+          nodes: [{ id: "n", x: 0, y: 0 }],
+          roads: []
+        }
+      }]
+    }),
+    /topologyId/
+  );
+});
