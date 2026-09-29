@@ -133,6 +133,7 @@ export class PlaceRegistry {
   #portalsByDomain = new Map();
   #instancePortalKeys = new Map();
   #occupancy = new Map();
+  #occupancySpatialIndexes = new Map();
   #entitiesByPlace = new Map();
   #entitiesBySpace = new Map();
   #events;
@@ -806,10 +807,22 @@ export class PlaceRegistry {
     assertId(entity?.id, "entity.id");
     const next = this.locateEntity(entity);
     const previous = this.#occupancy.get(entity.id) ?? null;
-    if (previous && this.#sameLocation(previous, next)) return next;
-    if (previous) this.#removeOccupancy(entity.id, previous);
+
+    if (previous && this.#sameLocation(previous, next)) {
+      this.#unindexOccupancyPoint(entity.id, previous);
+      this.#occupancy.set(entity.id, next);
+      this.#indexOccupancyPoint(entity.id, next);
+      return next;
+    }
+
+    if (previous) {
+      this.#removeOccupancy(entity.id, previous);
+      this.#unindexOccupancyPoint(entity.id, previous);
+    }
+
     this.#occupancy.set(entity.id, next);
     this.#addOccupancy(entity.id, next);
+    this.#indexOccupancyPoint(entity.id, next);
     this.#emitLocationTransitions(entity.id, previous, next);
     return next;
   }
@@ -818,6 +831,7 @@ export class PlaceRegistry {
     const previous = this.#occupancy.get(entityId);
     if (!previous) return false;
     this.#removeOccupancy(entityId, previous);
+    this.#unindexOccupancyPoint(entityId, previous);
     this.#occupancy.delete(entityId);
     this.#emitLocationTransitions(entityId, previous, null);
     return true;
@@ -1100,6 +1114,45 @@ export class PlaceRegistry {
       if (a.spaces[i].placeId !== b.spaces[i].placeId || a.spaces[i].spaceId !== b.spaces[i].spaceId) return false;
     }
     return true;
+  }
+
+  #indexOccupancyPoint(entityId, location) {
+    let index = this.#occupancySpatialIndexes.get(location.domainId);
+    if (!index) {
+      this.#occupancySpatialIndexes.set(
+        location.domainId,
+        index = new DynamicAabbIndex()
+      );
+    }
+    const { x, y } = location.position;
+    index.set(entityId, { minX: x, minY: y, maxX: x, maxY: y });
+  }
+
+  #unindexOccupancyPoint(entityId, location) {
+    const index = this.#occupancySpatialIndexes.get(location.domainId);
+    if (!index) return;
+    index.delete(entityId);
+    if (index.size === 0) this.#occupancySpatialIndexes.delete(location.domainId);
+  }
+
+  #refreshTrackedOccupancy(entityIds) {
+    for (const entityId of [...new Set(entityIds)]) {
+      const previous = this.#occupancy.get(entityId);
+      if (!previous) continue;
+      const next = this.locate(previous.domainId, previous.position);
+      if (this.#sameLocation(previous, next)) {
+        this.#occupancy.set(entityId, next);
+        continue;
+      }
+      this.#removeOccupancy(entityId, previous);
+      this.#occupancy.set(entityId, next);
+      this.#addOccupancy(entityId, next);
+      this.#emitLocationTransitions(entityId, previous, next);
+    }
+  }
+
+  #trackedEntitiesInBounds(domainId, bounds) {
+    return this.#occupancySpatialIndexes.get(domainId)?.queryBounds(bounds) ?? [];
   }
 
   #addOccupancy(entityId, location) {
