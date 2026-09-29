@@ -686,28 +686,47 @@ export interface TravelState {
   replans: number;
 }
 
-export interface TravelOptions {
-  bridge?: WorldCoreBridge;
-  journeyOptions?: any;
+export interface DomainPathOptions {
   excludedPortalKeys?: Iterable<string>;
   excludedDomainPairs?: Iterable<string>;
+}
+
+export interface TravelPlanningOptions extends DomainPathOptions {
+  bridge?: WorldCoreBridge;
+  journeyOptions?: any;
   maxDomainPathAttempts?: number;
   maxShortestDomainPaths?: number;
   allowPartialShortestPathSearch?: boolean;
   maxConcreteStatesPerLayer?: number;
   maxNearestTargetExpansions?: number;
   maxCost?: number;
-  anchorPredicate?: (anchor: CompiledPlaceAnchor & { placeId: PlaceId; domainId: string }) => boolean;
+  anchorPredicate?: (
+    anchor: CompiledPlaceAnchor & {
+      placeId: PlaceId;
+      domainId: string;
+    }
+  ) => boolean;
   worldChangePolicy?: "encounter" | "eager";
   portalEntryTolerance?: number;
+}
+
+export interface TravelStepOptions extends TravelPlanningOptions {
   deltaSeconds?: number;
+}
+
+/** @deprecated Use TravelPlanningOptions or TravelStepOptions explicitly. */
+export type TravelOptions = TravelStepOptions;
+
+export interface StopTravelOptions {
+  bridge?: WorldCoreBridge;
+  reason?: string;
 }
 
 export function findDomainPortalPath(
   registry: PlaceRegistry,
   startDomainId: string,
   targetDomainId: string,
-  options?: TravelOptions
+  options?: DomainPathOptions
 ): any[] | null;
 
 export function resolveTravelTarget(
@@ -719,63 +738,63 @@ export function planTravel(
   registry: PlaceRegistry,
   entityOrId: EntityId | any,
   target: TravelTarget,
-  options?: TravelOptions
+  options?: TravelPlanningOptions
 ): TravelPlan | null;
 export function planTravel(
   registry: PlaceRegistry,
   bridge: WorldCoreBridge,
   entityOrId: EntityId | any,
   target: TravelTarget,
-  options?: TravelOptions
+  options?: TravelPlanningOptions
 ): TravelPlan | null;
 
 export function startTravel(
   registry: PlaceRegistry,
   entityId: EntityId,
   target: TravelTarget,
-  options?: TravelOptions
+  options?: TravelPlanningOptions
 ): TravelState | null;
 export function startTravel(
   registry: PlaceRegistry,
   bridge: WorldCoreBridge,
   entityId: EntityId,
   target: TravelTarget,
-  options?: TravelOptions
+  options?: TravelPlanningOptions
 ): TravelState | null;
 
 export function stepTravel(
   registry: PlaceRegistry,
   entityId: EntityId,
-  options?: TravelOptions
+  options?: TravelStepOptions
 ): TravelState | null;
 export function stepTravel(
   registry: PlaceRegistry,
   bridge: WorldCoreBridge,
   entityId: EntityId,
-  options?: TravelOptions
+  options?: TravelStepOptions
 ): TravelState | null;
 
 export function stepPlaceSimulation(
   registry: PlaceRegistry,
-  options?: TravelOptions
+  options?: TravelStepOptions
 ): number;
 export function stepPlaceSimulation(
   registry: PlaceRegistry,
   bridge: WorldCoreBridge,
   deltaSeconds?: number,
-  options?: TravelOptions
+  options?: TravelStepOptions
 ): number;
 
 export function stopTravel(
   registry: PlaceRegistry,
   entityId: EntityId,
-  options?: TravelOptions & { reason?: string }
+  options?: StopTravelOptions
 ): boolean;
 export function stopTravel(
   registry: PlaceRegistry,
   bridge: WorldCoreBridge,
   entityId: EntityId,
-  options?: TravelOptions & { reason?: string }
+  options?: StopTravelOptions
 ): boolean;
 
 export interface PlaceCoreSnapshot {
