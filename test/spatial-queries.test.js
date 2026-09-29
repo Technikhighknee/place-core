@@ -494,3 +494,143 @@ test("spatial query options do not silently coerce strings", () => {
     /tag must be a non-empty string/
   );
 });
+
+
+test("nearest portal terminates when every indexed endpoint is filtered out", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "filtered-portals",
+    layers: [{ id: "inside" }],
+    portals: [{
+      id: "door",
+      a: { kind: "external", slot: "outside" },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 }
+      }
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "filtered-portals",
+    attachments: {
+      outside: {
+        domainId: "street",
+        position: { x: 100, y: 0 }
+      }
+    }
+  });
+
+  const inside = place.layerDomains.get("inside");
+  places.setPortalState("house", "door", { locked: true });
+
+  assert.equal(
+    places.findNearestPortal(inside, { x: 0, y: 0 }),
+    null
+  );
+  assert.equal(
+    places.findNearestPortal("street", { x: 0, y: 0 }),
+    null
+  );
+
+  assert.equal(
+    places.findNearestPortal(
+      "street",
+      { x: 0, y: 0 },
+      { traversableOnly: false }
+    )?.portal.id,
+    "door"
+  );
+});
+
+test("nearest portal runtime is independent of empty coordinate distance", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "far-portal",
+    layers: [{ id: "inside" }],
+    portals: [{
+      id: "door",
+      a: { kind: "external", slot: "outside" },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 }
+      }
+    }]
+  });
+
+  places.createPlace({
+    id: "house",
+    definitionId: "far-portal",
+    attachments: {
+      outside: {
+        domainId: "street",
+        position: {
+          x: 1_000_000_000_000,
+          y: -1_000_000_000_000
+        }
+      }
+    }
+  });
+
+  const nearest = places.findNearestPortal(
+    "street",
+    { x: 0, y: 0 }
+  );
+
+  assert.ok(nearest);
+  assert.equal(nearest.portal.id, "door");
+  assert.deepEqual(nearest.endpoint.position, {
+    x: 1_000_000_000_000,
+    y: -1_000_000_000_000
+  });
+});
+
+test("huge portal radius query visits sparse occupied cells rather than empty area", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "radius-portals",
+    layers: [{ id: "inside" }],
+    portals: [{
+      id: "door",
+      a: { kind: "external", slot: "outside" },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 }
+      }
+    }]
+  });
+
+  places.createPlace({
+    id: "near",
+    definitionId: "radius-portals",
+    attachments: {
+      outside: {
+        domainId: "street",
+        position: { x: 10, y: 0 }
+      }
+    }
+  });
+  places.createPlace({
+    id: "far",
+    definitionId: "radius-portals",
+    attachments: {
+      outside: {
+        domainId: "street",
+        position: { x: 1_000_000_000_000, y: 0 }
+      }
+    }
+  });
+
+  assert.deepEqual(
+    places.findPortalEndpointsNear(
+      "street",
+      { x: 0, y: 0 },
+      1_000_000_000_001
+    ).map((hit) => hit.portal.instanceId),
+    ["near", "far"]
+  );
+});
