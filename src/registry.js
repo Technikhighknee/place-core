@@ -2934,6 +2934,10 @@ export class PlaceRegistry {
   }
 
   #invalidateSemanticClosureDescendants(instanceId) {
+    if (this.#semanticClosureCache.size === 0) {
+      return;
+    }
+
     const queue = [instanceId];
     const visited = new Set();
 
