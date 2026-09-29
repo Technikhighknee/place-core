@@ -68,14 +68,27 @@ function normalizeNavigationSpec(spec, label) {
   });
 }
 
+function defaultTopologyId(definitionId, layerId) {
+  return `${encodeURIComponent(definitionId)}:${encodeURIComponent(layerId)}`;
+}
+
 function normalizeLayer(layer, definitionId) {
   assertStringId(layer.id, "layer.id");
-  const navigation = normalizeNavigationSpec(layer.navigation, `layer(${layer.id}).navigation`);
+  const navigation = normalizeNavigationSpec(
+    layer.navigation,
+    `layer(${layer.id}).navigation`
+  );
+  const topologyId = layer.topologyId ??
+    (navigation ? defaultTopologyId(definitionId, layer.id) : null);
+  if (topologyId != null) {
+    assertStringId(topologyId, `layer(${layer.id}).topologyId`);
+  }
+
   return deepFreeze({
     id: layer.id,
     kind: layer.kind ?? "spatial-layer",
     tags: [...new Set(layer.tags ?? [])],
-    topologyId: layer.topologyId ?? (navigation ? `${definitionId}:${layer.id}` : null),
+    topologyId,
     navigation,
     metadata: cloneJson(layer.metadata ?? null)
   });
