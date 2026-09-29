@@ -237,10 +237,24 @@ export interface PlaceAttachment extends ResolvedPortalEndpoint {
   metadata?: unknown;
 }
 
-export interface PlacePlacement {
+export type PlacePlacement =
+  | {
+      domainId: string;
+      parentPlaceId?: null;
+      transform?: Transform2D;
+      containment?: "none" | "footprint";
+    }
+  | {
+      domainId?: null;
+      parentPlaceId: PlaceId;
+      transform?: Transform2D;
+      containment?: "none" | "footprint";
+    };
+
+export interface ResolvedPlacePlacement {
   domainId: string;
-  transform?: Transform2D;
-  containment?: "none" | "footprint";
+  transform: Required<Pick<Transform2D, "x" | "y" | "rotation" | "scale">>;
+  containment: "none" | "footprint";
 }
 
 export interface ResolvedPortal {
@@ -351,6 +365,7 @@ export class PlaceRegistry {
   removePlace(id: PlaceId): boolean;
   setParent(instanceId: PlaceId, parentId: PlaceId | null): PlaceInstance;
   setPlacement(instanceId: PlaceId, placement: PlacePlacement | null): PlacePlacement | null;
+  getResolvedPlacement(instanceId: PlaceId): ResolvedPlacePlacement | null;
 
   getDomainBinding(domainId: string): { instanceId: PlaceId; layerId: string } | null;
   domainForLayer(instanceId: PlaceId, layerId: string): string | null;
@@ -663,6 +678,7 @@ export function geometryBounds(geometry: Geometry): Bounds;
 export function pointInGeometry(point: Vec2, geometry: Geometry): boolean;
 export function transformPoint(point: Vec2, transform?: Transform2D): Vec2;
 export function inverseTransformPoint(point: Vec2, transform?: Transform2D): Vec2;
+export function composeTransforms(parent?: Transform2D, child?: Transform2D): Required<Pick<Transform2D, "x" | "y" | "rotation" | "scale">>;
 export function transformBounds(bounds: Bounds, transform?: Transform2D): Bounds;
 
 export class StaticGeometryIndex<T = any> {
