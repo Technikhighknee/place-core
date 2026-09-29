@@ -686,6 +686,13 @@ export function compilePlace(input, options = {}) {
       );
     }
     for (const binding of portal.roadBindings) {
+      const layer = layersById.get(binding.layerId);
+      if (layer?.topologyId == null) {
+        throw new Error(
+          `portal ${portal.id} road binding requires navigation topology on layer ${binding.layerId}`
+        );
+      }
+
       const roads = navigationRoadMaps.get(binding.layerId);
       if (roads && !roads.has(binding.roadId)) {
         throw new Error(
@@ -774,8 +781,14 @@ export function compilePlace(input, options = {}) {
     }
   }
   for (const boundary of boundaries) {
+    const layer = layersById.get(boundary.layerId);
     const roads = navigationRoadMaps.get(boundary.layerId);
     for (const binding of boundary.roadBindings) {
+      if (layer?.topologyId == null) {
+        throw new Error(
+          `boundary ${boundary.id} road binding requires navigation topology on layer ${boundary.layerId}`
+        );
+      }
       if (roads && !roads.has(binding.roadId)) {
         throw new Error(
           `boundary ${boundary.id} references unknown navigation road ${binding.roadId}`
