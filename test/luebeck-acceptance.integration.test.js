@@ -67,12 +67,10 @@ test("P90 Lübeck acceptance covers shared interiors, semantic DAG, room portals
   assert.equal(startLocation.placeId, "house-17");
   assert.equal(startLocation.deepestSpace.id, "bedroom");
   assert.ok(
-    startLocation.semanticPlaces
-      .some((place) => place.id === "tax-ward-3")
+    startLocation.semanticPlaces.includes("tax-ward-3")
   );
   assert.ok(
-    startLocation.semanticPlaces
-      .some((place) => place.id === "luebeck")
+    startLocation.semanticPlaces.includes("luebeck")
   );
 
   const sailorBefore = {
