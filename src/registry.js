@@ -839,10 +839,38 @@ export class PlaceRegistry {
     const resolved = { ...boundary, enabled };
     if (enabled === currentEnabled) return resolved;
 
-    instance.setBoundaryOverride(boundaryId, enabled === boundary.enabled ? null : { enabled });
+    const previousOverride = instance.getBoundaryOverride(boundaryId);
+    const previousResolved = { ...boundary, enabled: currentEnabled };
+    instance.setBoundaryOverride(
+      boundaryId,
+      enabled === boundary.enabled ? null : { enabled }
+    );
+
+    try {
+      this.#bridge?.syncBoundaryState?.(instance, resolved);
+    } catch (error) {
+      instance.setBoundaryOverride(boundaryId, previousOverride);
+      let rollbackError = null;
+      try {
+        this.#bridge?.syncBoundaryState?.(instance, previousResolved);
+      } catch (restoreError) {
+        rollbackError = restoreError;
+      }
+      if (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `failed to update boundary ${boundaryId} and restore bridge state`
+        );
+      }
+      throw error;
+    }
+
     this.#touchState({ travel: boundary.roadBindings?.length > 0 });
-    this.#bridge?.syncBoundaryState?.(instance, resolved);
-    this.emit("boundary-state-changed", { placeId: instanceId, boundaryId, enabled });
+    this.emit("boundary-state-changed", {
+      placeId: instanceId,
+      boundaryId,
+      enabled
+    });
     return resolved;
   }
 
@@ -902,14 +930,54 @@ export class PlaceRegistry {
       throw error;
     }
 
+    const affectedPortals = definition.portals.filter((portal) =>
+      [portal.a, portal.b].some((endpoint) =>
+        endpoint.kind === "external" && endpoint.slot === slot
+      )
+    );
+
     this.#reindexInstancePortals(instance, definition);
-    this.#touchState({ travel: referencedByPortal });
-    for (const portal of definition.portals) {
-      if ([portal.a, portal.b].some((endpoint) => endpoint.kind === "external" && endpoint.slot === slot)) {
-        this.#bridge?.syncPortalState?.(instance, portal, this.resolvePortal(instanceId, portal.id));
+    try {
+      for (const portal of affectedPortals) {
+        this.#bridge?.syncPortalState?.(
+          instance,
+          portal,
+          this.resolvePortal(instanceId, portal.id)
+        );
       }
+    } catch (error) {
+      if (previousAttachment) instance.attachments.set(slot, previousAttachment);
+      else instance.attachments.delete(slot);
+      this.#reindexInstancePortals(instance, definition);
+
+      let rollbackError = null;
+      try {
+        for (const portal of affectedPortals) {
+          this.#bridge?.syncPortalState?.(
+            instance,
+            portal,
+            this.resolvePortal(instanceId, portal.id)
+          );
+        }
+      } catch (restoreError) {
+        rollbackError = restoreError;
+      }
+
+      if (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `failed to update attachment ${slot} and restore bridge state`
+        );
+      }
+      throw error;
     }
-    this.emit("place-attachment-changed", { placeId: instanceId, slot, attachment: cloneJson(instance.attachments.get(slot)) });
+
+    this.#touchState({ travel: referencedByPortal });
+    this.emit("place-attachment-changed", {
+      placeId: instanceId,
+      slot,
+      attachment: cloneJson(instance.attachments.get(slot))
+    });
     return instance.attachments.get(slot);
   }
 
@@ -925,22 +993,51 @@ export class PlaceRegistry {
         endpoint.kind === "external" && endpoint.slot === slot
       )
     );
+    const previousAttachment = instance.attachments.get(slot);
+    const affectedPortals = definition.portals.filter((portal) =>
+      [portal.a, portal.b].some((endpoint) =>
+        endpoint.kind === "external" && endpoint.slot === slot
+      )
+    );
+
     instance.attachments.delete(slot);
     this.#reindexInstancePortals(instance, definition);
-    this.#touchState({ travel: referencedByPortal });
 
-    for (const portal of definition.portals) {
-      if ([portal.a, portal.b].some((endpoint) =>
-        endpoint.kind === "external" && endpoint.slot === slot
-      )) {
+    try {
+      for (const portal of affectedPortals) {
         this.#bridge?.syncPortalState?.(
           instance,
           portal,
           this.resolvePortal(instanceId, portal.id)
         );
       }
+    } catch (error) {
+      instance.attachments.set(slot, previousAttachment);
+      this.#reindexInstancePortals(instance, definition);
+
+      let rollbackError = null;
+      try {
+        for (const portal of affectedPortals) {
+          this.#bridge?.syncPortalState?.(
+            instance,
+            portal,
+            this.resolvePortal(instanceId, portal.id)
+          );
+        }
+      } catch (restoreError) {
+        rollbackError = restoreError;
+      }
+
+      if (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `failed to clear attachment ${slot} and restore bridge state`
+        );
+      }
+      throw error;
     }
 
+    this.#touchState({ travel: referencedByPortal });
     this.emit("place-attachment-changed", {
       placeId: instanceId,
       slot,
