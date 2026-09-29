@@ -2957,32 +2957,74 @@ export class PlaceRegistry {
   #computeSemanticClosure(instanceId) {
     const output = [];
     const permanent = new Set();
-    const temporary = new Set();
+    const visiting = new Set();
+    const stack = [{
+      id: instanceId,
+      entered: false,
+      parents: null,
+      index: 0
+    }];
 
-    const visit = (currentId) => {
-      const key = typedIdKey(currentId);
-      if (permanent.has(key)) return;
-      if (temporary.has(key)) {
-        throw new Error(
-          "place semantic membership cycle"
-        );
+    while (stack.length) {
+      const frame = stack[stack.length - 1];
+      const key = typedIdKey(frame.id);
+
+      if (permanent.has(key)) {
+        stack.pop();
+        continue;
       }
 
-      const instance =
-        this.#instances.get(currentId);
-      if (!instance) return;
+      if (!frame.entered) {
+        const instance =
+          this.#instances.get(frame.id);
+        if (!instance) {
+          stack.pop();
+          continue;
+        }
 
-      temporary.add(key);
-      for (const parentId of
-        this.#semanticParentIds(currentId)) {
-        visit(parentId);
+        if (visiting.has(key)) {
+          throw new Error(
+            "place semantic membership cycle"
+          );
+        }
+
+        visiting.add(key);
+        frame.entered = true;
+        frame.parents =
+          this.#semanticParentIds(frame.id);
+        frame.index = 0;
       }
-      temporary.delete(key);
+
+      if (frame.index < frame.parents.length) {
+        const parentId =
+          frame.parents[frame.index++];
+        const parentKey =
+          typedIdKey(parentId);
+
+        if (permanent.has(parentKey)) {
+          continue;
+        }
+        if (visiting.has(parentKey)) {
+          throw new Error(
+            "place semantic membership cycle"
+          );
+        }
+
+        stack.push({
+          id: parentId,
+          entered: false,
+          parents: null,
+          index: 0
+        });
+        continue;
+      }
+
+      visiting.delete(key);
       permanent.add(key);
-      output.push(currentId);
-    };
+      output.push(frame.id);
+      stack.pop();
+    }
 
-    visit(instanceId);
     return output;
   }
 
@@ -3031,33 +3073,80 @@ export class PlaceRegistry {
 
   #assertSemanticGraphAcyclic() {
     const permanent = new Set();
-    const temporary = new Set();
-
-    const visit = (instanceId) => {
-      const key = typedIdKey(instanceId);
-      if (permanent.has(key)) return;
-      if (temporary.has(key)) {
-        throw new Error(
-          "place semantic membership cycle"
-        );
-      }
-
-      temporary.add(key);
-      for (const parentId of this.#semanticParentIds(instanceId)) {
-        visit(parentId);
-      }
-      temporary.delete(key);
-      permanent.add(key);
-    };
-
-    const ids = [...this.#instances.keys()]
+    const visiting = new Set();
+    const roots = [...this.#instances.keys()]
       .sort((a, b) =>
-        typedIdKey(a).localeCompare(typedIdKey(b))
+        typedIdKey(a).localeCompare(
+          typedIdKey(b)
+        )
       );
-    for (const instanceId of ids) {
-      visit(instanceId);
+
+    for (const rootId of roots) {
+      const rootKey = typedIdKey(rootId);
+      if (permanent.has(rootKey)) continue;
+
+      const stack = [{
+        id: rootId,
+        entered: false,
+        parents: null,
+        index: 0
+      }];
+
+      while (stack.length) {
+        const frame =
+          stack[stack.length - 1];
+        const key = typedIdKey(frame.id);
+
+        if (permanent.has(key)) {
+          stack.pop();
+          continue;
+        }
+
+        if (!frame.entered) {
+          if (visiting.has(key)) {
+            throw new Error(
+              "place semantic membership cycle"
+            );
+          }
+
+          visiting.add(key);
+          frame.entered = true;
+          frame.parents =
+            this.#semanticParentIds(frame.id);
+          frame.index = 0;
+        }
+
+        if (frame.index < frame.parents.length) {
+          const parentId =
+            frame.parents[frame.index++];
+          const parentKey =
+            typedIdKey(parentId);
+
+          if (permanent.has(parentKey)) {
+            continue;
+          }
+          if (visiting.has(parentKey)) {
+            throw new Error(
+              "place semantic membership cycle"
+            );
+          }
+
+          stack.push({
+            id: parentId,
+            entered: false,
+            parents: null,
+            index: 0
+          });
+          continue;
+        }
+
+        visiting.delete(key);
+        permanent.add(key);
+        stack.pop();
+      }
     }
   }
+
 
   #registerPlacementDependency(instance) {
     const parentId = instance?.placement?.parentPlaceId;
