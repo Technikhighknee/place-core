@@ -28,3 +28,8 @@ jobs:
         env:
           PORTAL_SPATIAL_PLACES: "5000"
           PORTAL_SPATIAL_QUERIES: "1000"
+      - run: npm run bench:luebeck
+        env:
+          LUEBECK_TRAVELERS: "250"
+          LUEBECK_QUERY_COUNT: "5000"
+          LUEBECK_MAX_TICKS: "1200"
