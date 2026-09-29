@@ -474,6 +474,7 @@ export class PlaceRegistry {
     spaceOverrideCount: number;
     dynamicPortalCount: number;
     occupiedEntityCount: number;
+    occupancySpatialDomainCount: number;
     graphRevision: number;
     footprintIndexCells: number;
     eventQueueSize: number;
