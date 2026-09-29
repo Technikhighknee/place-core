@@ -1242,7 +1242,52 @@ function advance(registry, bridge, state, options = {}) {
 
       bridge.transferEntity(state.entityId, direction.to);
       const moved = bridge.getEntity(state.entityId);
-      if (moved) registry.syncEntityOccupancy(moved);
+
+      if (!moved) {
+        return fail(
+          registry,
+          bridge,
+          state,
+          "entity-missing-after-portal-transfer"
+        );
+      }
+
+      registry.syncEntityOccupancy(moved);
+
+      const movedDomainId = moved.domainId ?? "default";
+      const transferPositionValid =
+        moved.position &&
+        Number.isFinite(moved.position.x) &&
+        Number.isFinite(moved.position.y);
+      const transferPositionDistanceSq = transferPositionValid
+        ? squaredDistance(moved.position, direction.to.position)
+        : Infinity;
+
+      if (
+        movedDomainId !== step.toDomainId ||
+        transferPositionDistanceSq >
+          portalEntryTolerance * portalEntryTolerance
+      ) {
+        registry.emit("portal-transfer-failed", {
+          entityId: state.entityId,
+          placeId: portal.instanceId,
+          portalId: portal.id,
+          expectedDomainId: step.toDomainId,
+          actualDomainId: movedDomainId,
+          expectedPosition: {
+            x: direction.to.position.x,
+            y: direction.to.position.y
+          },
+          actualPosition: transferPositionValid
+            ? {
+                x: moved.position.x,
+                y: moved.position.y
+              }
+            : null
+        });
+        return replan(registry, bridge, state, options);
+      }
+
       registry.emit("portal-traverse", {
         entityId: state.entityId,
         placeId: portal.instanceId,
