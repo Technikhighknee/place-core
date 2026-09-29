@@ -11,6 +11,7 @@ import {
 } from "./utils.js";
 import {
   startTravel,
+  validatePersistedTravelOptions,
   validateTravelTarget
 } from "./travel.js";
 
@@ -162,72 +163,7 @@ function assertTravelTarget(target, _label = "travel target") {
 }
 
 function assertTravelOptions(options, label) {
-  assertObject(options, label);
-
-  const allowedKeys = new Set([
-    "journeyOptions",
-    "excludedPortalKeys",
-    "excludedDomainPairs",
-    "maxDomainPathAttempts",
-    "maxShortestDomainPaths",
-    "allowPartialShortestPathSearch",
-    "maxConcreteStatesPerLayer",
-    "maxNearestTargetExpansions",
-    "maxCost",
-    "worldChangePolicy",
-    "portalEntryTolerance"
-  ]);
-  for (const key of Object.keys(options)) {
-    if (!allowedKeys.has(key)) {
-      throw new Error(`${label} contains unknown field ${key}`);
-    }
-  }
-
-  const policy = options.worldChangePolicy;
-  if (policy != null && policy !== "encounter" && policy !== "eager") {
-    throw new Error(`invalid ${label}.worldChangePolicy`);
-  }
-
-  if (options.portalEntryTolerance != null &&
-      (!Number.isFinite(options.portalEntryTolerance) ||
-       options.portalEntryTolerance < 0)) {
-    throw new Error(`invalid ${label}.portalEntryTolerance`);
-  }
-
-  for (const key of [
-    "maxDomainPathAttempts",
-    "maxShortestDomainPaths",
-    "maxConcreteStatesPerLayer",
-    "maxNearestTargetExpansions"
-  ]) {
-    assertPositiveIntegerOption(options[key], `${label}.${key}`);
-  }
-
-  if (options.allowPartialShortestPathSearch != null) {
-    normalizeBoolean(
-      options.allowPartialShortestPathSearch,
-      `${label}.allowPartialShortestPathSearch`
-    );
-  }
-
-  if (options.maxCost != null &&
-      (!Number.isFinite(options.maxCost) || options.maxCost < 0)) {
-    throw new Error(`invalid ${label}.maxCost`);
-  }
-
-  for (const key of ["excludedPortalKeys", "excludedDomainPairs"]) {
-    if (options[key] == null) continue;
-    assertArray(options[key], `${label}.${key}`);
-    normalizeStringList(options[key], `${label}.${key}`);
-  }
-
-  if (options.journeyOptions !== undefined) {
-    assertJsonSafe(options.journeyOptions, `${label}.journeyOptions`);
-  }
-
-  if (options.anchorPredicate !== undefined) {
-    throw new Error(`${label}.anchorPredicate cannot be persisted`);
-  }
+  return validatePersistedTravelOptions(options, label);
 }
 
 function assertTravelPlan(plan, entityId) {
