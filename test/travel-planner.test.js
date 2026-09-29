@@ -137,3 +137,97 @@ test("planner re-optimizes when the cheapest portal becomes unavailable", () => 
   assert.equal(portalSteps.at(-1).portalId, "door-1");
   assert.ok(plan.estimatedSeconds > 22);
 });
+
+
+test("planner chooses the cheapest among multiple equally short domain paths", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "dual-route-house",
+    defaultAnchorId: "target",
+    layers: [{ id: "inside" }],
+    spaces: [{
+      id: "room",
+      layerId: "inside",
+      geometry: { type: "aabb", minX: -1, minY: -1, maxX: 11, maxY: 1 },
+      defaultAnchorId: "target"
+    }],
+    portals: [
+      {
+        id: "route-a",
+        a: { kind: "external", slot: "route-a" },
+        b: { kind: "local", layerId: "inside", position: { x: 0, y: 0 }, nodeId: "door-a" }
+      },
+      {
+        id: "route-b",
+        a: { kind: "external", slot: "route-b" },
+        b: { kind: "local", layerId: "inside", position: { x: 10, y: 0 }, nodeId: "door-b" }
+      }
+    ],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      spaceId: "room",
+      position: { x: 9, y: 0 },
+      nodeId: "target"
+    }]
+  });
+
+  const home = places.createPlace({
+    id: "home",
+    definitionId: "dual-route-house",
+    attachments: {
+      "route-a": { domainId: "route-a", position: { x: 0, y: 0 }, nodeId: "home-a" },
+      "route-b": { domainId: "route-b", position: { x: 0, y: 0 }, nodeId: "home-b" }
+    }
+  });
+  places.createPlace({
+    id: "inn",
+    definitionId: "dual-route-house",
+    attachments: {
+      "route-a": { domainId: "route-a", position: { x: 100, y: 0 }, nodeId: "inn-a" },
+      "route-b": { domainId: "route-b", position: { x: 10, y: 0 }, nodeId: "inn-b" }
+    }
+  });
+
+  const entity = {
+    id: "hans",
+    domainId: home.layerDomains.get("inside"),
+    position: { x: 9, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const nodeX = new Map([
+    ["door-a", 0],
+    ["door-b", 10],
+    ["target", 9],
+    ["home-a", 0],
+    ["home-b", 0],
+    ["inn-a", 100],
+    ["inn-b", 10]
+  ]);
+
+  const bridge = {
+    getEntity(id) { return id === "hans" ? entity : null; },
+    planLocalRoute({ position, destinationNodeId }) {
+      const x = nodeX.get(destinationNodeId);
+      return x == null ? null : { estimatedSeconds: Math.abs(position.x - x) };
+    },
+    startLocalJourney() { return true; },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans",
+    { placeId: "inn", anchorId: "target" }
+  );
+
+  assert.ok(plan);
+  assert.deepEqual(plan.domainPath, ["home:inside", "route-b", "inn:inside"]);
+  assert.deepEqual(
+    plan.steps.filter((step) => step.type === "traverse-portal").map((step) => step.portalId),
+    ["route-b", "route-b"]
+  );
+});
