@@ -192,6 +192,39 @@ function typedIdKey(id) {
   return `${typeof id}:${String(id)}`;
 }
 
+function membershipKey(parentPlaceId, kind) {
+  return `${typedIdKey(parentPlaceId)}\u0000${kind}`;
+}
+
+function normalizeMembership(value, label = "membership") {
+  assertPlainObject(value, label);
+  const allowed = new Set([
+    "parentPlaceId",
+    "kind",
+    "metadata"
+  ]);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new Error(
+        `${label} contains unknown field ${key}`
+      );
+    }
+  }
+
+  assertId(
+    value.parentPlaceId,
+    `${label}.parentPlaceId`
+  );
+  const kind = value.kind ?? "member-of";
+  assertStringId(kind, `${label}.kind`);
+
+  return deepFreeze({
+    parentPlaceId: value.parentPlaceId,
+    kind,
+    metadata: cloneJson(value.metadata ?? null)
+  });
+}
+
 function makeSpaceKey(instanceId, spaceId) {
   return `${typedIdKey(instanceId)}\u0000${spaceId}`;
 }
@@ -337,6 +370,7 @@ export class PlaceInstance {
   #boundaryOverrides = new Map();
   #spaceOverrides = new Map();
   #dynamicPortals = new Map();
+  #memberships = new Map();
 
   constructor(data) {
     this.id = data.id;
@@ -346,6 +380,16 @@ export class PlaceInstance {
     this.attachments = new Map(data.attachments);
     this.placement = data.placement;
     this.metadata = cloneJson(data.metadata ?? null);
+
+    for (const membership of data.memberships ?? []) {
+      this.#memberships.set(
+        membershipKey(
+          membership.parentPlaceId,
+          membership.kind
+        ),
+        membership
+      );
+    }
   }
 
   getPortalOverride(portalId) { return this.#portalOverrides.get(portalId) ?? null; }
@@ -369,6 +413,32 @@ export class PlaceInstance {
   }
   addDynamicPortal(portal) { this.#dynamicPortals.set(portal.id, portal); }
   removeDynamicPortal(portalId) { return this.#dynamicPortals.delete(portalId); }
+
+  getMembership(parentPlaceId, kind = "member-of") {
+    return this.#memberships.get(
+      membershipKey(parentPlaceId, kind)
+    ) ?? null;
+  }
+
+  getMemberships() {
+    return [...this.#memberships.values()];
+  }
+
+  addMembership(membership) {
+    const key = membershipKey(
+      membership.parentPlaceId,
+      membership.kind
+    );
+    if (this.#memberships.has(key)) return false;
+    this.#memberships.set(key, membership);
+    return true;
+  }
+
+  removeMembership(parentPlaceId, kind = "member-of") {
+    return this.#memberships.delete(
+      membershipKey(parentPlaceId, kind)
+    );
+  }
 }
 
 export class PlaceRegistry {
@@ -379,6 +449,7 @@ export class PlaceRegistry {
   #indexedExteriorDomains = new Map();
   #placementChildren = new Map();
   #semanticChildren = new Map();
+  #membershipChildren = new Map();
   #portalRecords = new Map();
   #portalsByDomain = new Map();
   #portalEndpointIndexes = new Map();
@@ -901,6 +972,7 @@ export class PlaceRegistry {
       "layerDomains",
       "attachments",
       "placement",
+      "memberships",
       "metadata"
     ]);
     for (const key of Object.keys(input)) {
@@ -986,6 +1058,44 @@ export class PlaceRegistry {
         normalizeAttachment(value, `attachment.${slot}`)
       );
     }
+    const membershipInputs = input.memberships ?? [];
+    if (!Array.isArray(membershipInputs)) {
+      throw new TypeError(
+        "memberships must be an array"
+      );
+    }
+
+    const memberships = [];
+    const membershipKeys = new Set();
+    for (let i = 0; i < membershipInputs.length; i += 1) {
+      const membership = normalizeMembership(
+        membershipInputs[i],
+        `memberships[${i}]`
+      );
+      if (membership.parentPlaceId === input.id) {
+        throw new Error(
+          "place cannot have a semantic membership to itself"
+        );
+      }
+      if (!this.#instances.has(membership.parentPlaceId)) {
+        throw new Error(
+          `unknown membership parent place: ${String(membership.parentPlaceId)}`
+        );
+      }
+
+      const key = membershipKey(
+        membership.parentPlaceId,
+        membership.kind
+      );
+      if (membershipKeys.has(key)) {
+        throw new Error(
+          `duplicate semantic membership ${membership.kind} -> ${String(membership.parentPlaceId)}`
+        );
+      }
+      membershipKeys.add(key);
+      memberships.push(membership);
+    }
+
     const placement = normalizePlacement(input.placement);
     if (placement?.parentPlaceId != null) {
       if (placement.parentPlaceId === input.id) throw new Error("place cannot be placed relative to itself");
@@ -1001,11 +1111,13 @@ export class PlaceRegistry {
       layerDomains,
       attachments,
       placement,
+      memberships,
       metadata: input.metadata
     });
 
     this.#instances.set(instance.id, instance);
     this.#registerSemanticDependency(instance);
+    this.#registerMembershipDependencies(instance);
     this.#registerPlacementDependency(instance);
     for (const [layerId, domainId] of layerDomains) {
       this.#domainBindings.set(domainId, { instanceId: instance.id, layerId });
@@ -1108,6 +1220,7 @@ export class PlaceRegistry {
     for (const domainId of instance.layerDomains.values()) this.#domainBindings.delete(domainId);
     this.#unindexExterior(instance);
     this.#unregisterSemanticDependency(instance);
+    this.#unregisterMembershipDependencies(instance);
     this.#unregisterPlacementDependency(instance);
     this.#removeInstancePortals(instance.id);
     this.#instances.delete(instance.id);
