@@ -137,6 +137,17 @@ test("snapshot roundtrip retains canonical state", () => {
 });
 
 
+test("non-canonical registry options are rejected", () => {
+  assert.throws(
+    () => new PlaceRegistry({ worldCoreBridge: {} }),
+    /PlaceRegistry options contains unknown field worldCoreBridge/
+  );
+  assert.throws(
+    () => new PlaceRegistry({ mysteryOption: true }),
+    /PlaceRegistry options contains unknown field mysteryOption/
+  );
+});
+
 test("non-canonical createPlace fields are rejected", () => {
   const registry = new PlaceRegistry();
   registry.registerDefinition(tavernBlueprint());

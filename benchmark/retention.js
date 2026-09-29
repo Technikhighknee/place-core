@@ -34,7 +34,7 @@ for (let cycle = 0; cycle < cycles; cycle += 1) {
     const index = (cycle * churnPerCycle + i) % live.length;
     const oldId = live[index];
 
-    places.addInstancePortal(oldId, {
+    places.addPortal(oldId, {
       id: "temporary-breach",
       a: {
         domainId: `${oldId}:ground`,
@@ -45,7 +45,7 @@ for (let cycle = 0; cycle < cycles; cycle += 1) {
         position: { x: i % 100, y: cycle }
       }
     });
-    places.removeInstancePortal(oldId, "temporary-breach");
+    places.removePortal(oldId, "temporary-breach");
     places.removePlace(oldId);
 
     const newId = `p-${serial++}`;

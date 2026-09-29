@@ -632,6 +632,21 @@ export class PlaceRegistry {
   #travelRevision = 0;
 
   constructor(options = {}) {
+    assertPlainObject(options, "PlaceRegistry options");
+    const allowedOptionKeys = new Set([
+      "bridge",
+      "captureEvents",
+      "eventQueueLimit",
+      "eventOverflowPolicy"
+    ]);
+    for (const key of Object.keys(options)) {
+      if (!allowedOptionKeys.has(key)) {
+        throw new Error(
+          `PlaceRegistry options contains unknown field ${key}`
+        );
+      }
+    }
+
     this.#definitionsView =
       new ReadonlyMapView(this.#definitions);
     this.#instancesView =
