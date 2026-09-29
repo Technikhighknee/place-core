@@ -119,6 +119,30 @@ function portalTraversableState(portal) {
   return true;
 }
 
+function hasRoadBindingForDomain(instance, portal, domainId) {
+  return (portal.roadBindings ?? []).some((binding) =>
+    instance.layerDomains.get(binding.layerId) === domainId
+  );
+}
+
+function assertSameDomainPortalEnforceable(instance, portal, label = "portal") {
+  if (!portal?.connected || !portal.a || !portal.b) return;
+  if (portal.a.domainId !== portal.b.domainId) return;
+
+  const needsPhysicalEnforcement =
+    (portal.transitionCost ?? 0) > 0 ||
+    !portalTraversableState(portal);
+
+  if (
+    needsPhysicalEnforcement &&
+    !hasRoadBindingForDomain(instance, portal, portal.a.domainId)
+  ) {
+    throw new Error(
+      `${label} requires a road binding in domain ${portal.a.domainId} for same-domain physical enforcement`
+    );
+  }
+}
+
 export class PlaceInstance {
   #portalOverrides = new Map();
   #boundaryOverrides = new Map();
@@ -641,6 +665,14 @@ export class PlaceRegistry {
 
     let materialized = false;
     try {
+      for (const portal of definition.portals) {
+        assertSameDomainPortalEnforceable(
+          instance,
+          this.resolvePortal(instance.id, portal.id),
+          `portal ${portal.id}`
+        );
+      }
+
       if (this.#bridge?.materializePlace) {
         this.#bridge.materializePlace(instance, definition);
         materialized = true;
@@ -839,6 +871,23 @@ export class PlaceRegistry {
     );
 
     instance.attachments.set(slot, nextAttachment);
+    try {
+      for (const portal of definition.portals) {
+        if (![portal.a, portal.b].some((endpoint) =>
+          endpoint.kind === "external" && endpoint.slot === slot
+        )) continue;
+        assertSameDomainPortalEnforceable(
+          instance,
+          this.resolvePortal(instanceId, portal.id),
+          `portal ${portal.id}`
+        );
+      }
+    } catch (error) {
+      if (previousAttachment) instance.attachments.set(slot, previousAttachment);
+      else instance.attachments.delete(slot);
+      throw error;
+    }
+
     this.#reindexInstancePortals(instance, definition);
     this.#touchState({ travel: referencedByPortal });
     for (const portal of definition.portals) {
@@ -965,15 +1014,32 @@ export class PlaceRegistry {
       const dynamic = instance.dynamicPortals.get(portalId);
       if (!dynamic) throw new Error(`unknown portal ${portalId} on place ${String(instanceId)}`);
       const before = this.resolvePortal(instanceId, portalId);
+      const prospectiveState = {};
       let changed = false;
       for (const key of PORTAL_STATE_KEYS) {
-        if (patch[key] === undefined) continue;
-        const value = Boolean(patch[key]);
-        if (dynamic[key] === value) continue;
-        dynamic[key] = value;
-        changed = true;
+        const value = patch[key] === undefined
+          ? dynamic[key]
+          : Boolean(patch[key]);
+        prospectiveState[key] = value;
+        if (value !== dynamic[key]) changed = true;
       }
       if (!changed) return before;
+
+      const prospective = {
+        ...before,
+        ...prospectiveState
+      };
+      if (before.traversable !== portalTraversableState(prospective)) {
+        assertSameDomainPortalEnforceable(
+          instance,
+          prospective,
+          `dynamic portal ${portalId}`
+        );
+      }
+
+      for (const key of PORTAL_STATE_KEYS) {
+        dynamic[key] = prospectiveState[key];
+      }
 
       this.#reindexInstancePortals(instance, definition);
       const resolved = this.resolvePortal(instanceId, portalId);
@@ -994,6 +1060,25 @@ export class PlaceRegistry {
     if (!changed) return this.resolvePortal(instanceId, portalId);
 
     const before = this.resolvePortal(instanceId, portalId);
+    const prospective = {
+      ...before,
+      ...Object.fromEntries(
+        PORTAL_STATE_KEYS.map((key) => [
+          key,
+          patch[key] === undefined
+            ? current[key]
+            : Boolean(patch[key])
+        ])
+      )
+    };
+    if (before.traversable !== portalTraversableState(prospective)) {
+      assertSameDomainPortalEnforceable(
+        instance,
+        prospective,
+        `portal ${portalId}`
+      );
+    }
+
     instance.setPortalOverride(portalId, next);
     this.#reindexInstancePortals(instance, definition);
     const resolved = this.resolvePortal(instanceId, portalId);
@@ -1053,6 +1138,17 @@ export class PlaceRegistry {
       }),
       metadata: cloneJson(spec.metadata ?? null)
     };
+    const resolvedPortal = {
+      ...portal,
+      connected: true,
+      traversable: portalTraversableState(portal)
+    };
+    assertSameDomainPortalEnforceable(
+      instance,
+      resolvedPortal,
+      `dynamic portal ${portal.id}`
+    );
+
     instance.addDynamicPortal(portal);
     this.#reindexInstancePortals(instance, definition);
     this.#touchState({ travel: true });
