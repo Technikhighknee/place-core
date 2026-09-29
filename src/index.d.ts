@@ -248,7 +248,12 @@ export function compilePlace(
 ): CompiledPlaceDefinition;
 export function definitionBounds(definition: CompiledPlaceDefinition): Bounds | null;
 
-export interface PlaceAttachment extends ResolvedPortalEndpoint {
+export interface PlaceAttachment {
+  domainId: string;
+  position: Vec2;
+  nodeId?: string | null;
+  placeId?: PlaceId | null;
+  spaceId?: string | null;
   metadata?: JsonValue;
 }
 
@@ -597,7 +602,6 @@ export class WorldCoreBridge {
   readonly navigation: any;
   readonly existingDomainPolicy: "reject" | "adopt";
 
-  attachRegistry(registry: PlaceRegistry): this;
   dispose(): boolean;
   materializePlace(
     instance: PlaceInstance,

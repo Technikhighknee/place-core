@@ -27,6 +27,7 @@ import { SemanticGraphIndex } from "./registry/semantic-graph.js";
 import {
   PORTAL_STATE_KEYS,
   PLACE_INSTANCE_MUTATION_TOKEN,
+  PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN,
   ReadonlyMapView,
   assertPlainObject,
   assertPatchKeys,
@@ -156,7 +157,8 @@ export class PlaceRegistry {
             if (this.#bridge === bridge) {
               this.#bridge = null;
             }
-          }
+          },
+          PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN
         );
         registryAttached = true;
       }
@@ -297,6 +299,11 @@ export class PlaceRegistry {
   }
 
   findNearestAnchor(instanceId, position, options = {}) {
+    assertPatchKeys(
+      options,
+      ["tag", "layerId", "kind", "spaceId"],
+      "findNearestAnchor options"
+    );
     assertVec2(position, "findNearestAnchor.position");
     assertOptionalString(options.tag, "findNearestAnchor.tag");
     assertOptionalString(options.layerId, "findNearestAnchor.layerId");
@@ -309,9 +316,7 @@ export class PlaceRegistry {
       ? definition.getAnchorsByTag(options.tag)
       : definition.anchors;
 
-    let best = null;
-    let bestDistanceSq = Infinity;
-
+    const eligible = [];
     for (const anchor of candidates) {
       if (options.layerId != null && anchor.layerId !== options.layerId) continue;
       if (options.kind != null && anchor.kind !== options.kind) continue;
@@ -320,7 +325,24 @@ export class PlaceRegistry {
         const space = definition.getSpace(anchor.spaceId);
         if (space && !this.#spaceEnabled(instance, definition, space)) continue;
       }
+      eligible.push(anchor);
+    }
 
+    if (options.layerId == null) {
+      const layers = new Set(
+        eligible.map((anchor) => anchor.layerId)
+      );
+      if (layers.size > 1) {
+        throw new Error(
+          "findNearestAnchor requires layerId when candidates span multiple spatial layers"
+        );
+      }
+    }
+
+    let best = null;
+    let bestDistanceSq = Infinity;
+
+    for (const anchor of eligible) {
       const distanceSq = squaredDistance(position, anchor.position);
       if (distanceSq < bestDistanceSq ||
           (distanceSq === bestDistanceSq &&
@@ -339,6 +361,11 @@ export class PlaceRegistry {
   }
 
   getAnchorsForDomain(domainId, options = {}) {
+    assertPatchKeys(
+      options,
+      ["tag", "kind", "spaceId"],
+      "getAnchorsForDomain options"
+    );
     assertStringId(domainId, "getAnchorsForDomain.domainId");
     assertOptionalString(options.tag, "getAnchorsForDomain.tag");
     assertOptionalString(options.kind, "getAnchorsForDomain.kind");
@@ -392,6 +419,11 @@ export class PlaceRegistry {
   }
 
   findPortalEndpointsNear(domainId, position, radius, options = {}) {
+    assertPatchKeys(
+      options,
+      ["traversableOnly", "kind", "tag"],
+      "findPortalEndpointsNear options"
+    );
     assertStringId(domainId, "findPortalEndpointsNear.domainId");
     assertVec2(position, "findPortalEndpointsNear.position");
     const traversableOnly = normalizeBoolean(
@@ -466,6 +498,11 @@ export class PlaceRegistry {
   }
 
   findNearestPortal(domainId, position, options = {}) {
+    assertPatchKeys(
+      options,
+      ["traversableOnly", "kind", "tag", "maxDistance"],
+      "findNearestPortal options"
+    );
     assertStringId(domainId, "findNearestPortal.domainId");
     assertVec2(position, "findNearestPortal.position");
     const traversableOnly = normalizeBoolean(
@@ -542,6 +579,11 @@ export class PlaceRegistry {
   }
 
   getBoundariesForDomain(domainId, options = {}) {
+    assertPatchKeys(
+      options,
+      ["enabledOnly", "kind", "tag"],
+      "getBoundariesForDomain options"
+    );
     assertStringId(domainId, "getBoundariesForDomain.domainId");
     const enabledOnly = normalizeBoolean(
       options.enabledOnly,
@@ -1663,7 +1705,28 @@ export class PlaceRegistry {
   addPortal(instanceId, spec) {
     const instance = this.#instances.get(instanceId);
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
-    assertStringId(spec?.id, "dynamic portal id");
+    assertPatchKeys(
+      spec,
+      [
+        "id",
+        "kind",
+        "tags",
+        "a",
+        "b",
+        "bidirectional",
+        "transitionCost",
+        "enabled",
+        "open",
+        "locked",
+        "blocked",
+        "destroyed",
+        "blocksWhenClosed",
+        "roadBindings",
+        "metadata"
+      ],
+      "dynamic portal"
+    );
+    assertStringId(spec.id, "dynamic portal id");
     const definition = this.#definitions.get(instance.definitionId);
     if (definition.getPortal(spec.id) ||
         instance.dynamicPortals.has(spec.id)) {
@@ -1672,15 +1735,26 @@ export class PlaceRegistry {
       );
     }
     const normalizeResolved = (endpoint, label) => {
-      if (!endpoint || typeof endpoint !== "object" || Array.isArray(endpoint)) {
-        throw new TypeError(`${label} must be an endpoint object`);
-      }
+      assertPatchKeys(
+        endpoint,
+        [
+          "domainId",
+          "position",
+          "nodeId",
+          "placeId",
+          "layerId",
+          "spaceId",
+          "metadata"
+        ],
+        label
+      );
       assertStringId(endpoint.domainId, `${label}.domainId`);
-      if (!endpoint.position ||
-          !Number.isFinite(endpoint.position.x) ||
-          !Number.isFinite(endpoint.position.y)) {
-        throw new TypeError(`${label}.position must be a Vec2`);
-      }
+      assertVec2(endpoint.position, `${label}.position`);
+      assertPatchKeys(
+        endpoint.position,
+        ["x", "y"],
+        `${label}.position`
+      );
       if (endpoint.nodeId != null) {
         assertStringId(endpoint.nodeId, `${label}.nodeId`);
       }
@@ -1714,6 +1788,39 @@ export class PlaceRegistry {
 
     const kind = spec.kind ?? "portal";
     assertStringId(kind, `dynamic portal ${spec.id}.kind`);
+
+    const roadBindingsInput =
+      spec.roadBindings ?? [];
+    if (!Array.isArray(roadBindingsInput)) {
+      throw new TypeError(
+        "dynamic portal roadBindings must be an array"
+      );
+    }
+    const roadBindings =
+      roadBindingsInput.map((binding, index) => {
+        assertPatchKeys(
+          binding,
+          ["layerId", "roadId"],
+          `dynamic portal roadBindings[${index}]`
+        );
+        assertStringId(
+          binding.layerId,
+          `dynamic portal roadBindings[${index}].layerId`
+        );
+        assertStringId(
+          binding.roadId,
+          `dynamic portal roadBindings[${index}].roadId`
+        );
+        if (!instance.layerDomains.has(binding.layerId)) {
+          throw new Error(
+            `dynamic portal road binding references unknown layer ${binding.layerId}`
+          );
+        }
+        return {
+          layerId: binding.layerId,
+          roadId: binding.roadId
+        };
+      });
 
     const portal = {
       id: spec.id,
@@ -1761,16 +1868,7 @@ export class PlaceRegistry {
         `dynamic portal ${spec.id}.blocksWhenClosed`,
         { defaultValue: false }
       ),
-      roadBindings: (spec.roadBindings ?? []).map((binding, index) => {
-        assertStringId(binding.layerId, `dynamic portal roadBindings[${index}].layerId`);
-        assertStringId(binding.roadId, `dynamic portal roadBindings[${index}].roadId`);
-        if (!instance.layerDomains.has(binding.layerId)) {
-        throw new Error(
-          `dynamic portal road binding references unknown layer ${binding.layerId}`
-        );
-      }
-        return { layerId: binding.layerId, roadId: binding.roadId };
-      }),
+      roadBindings,
       metadata: cloneJson(spec.metadata ?? null)
     };
     const resolvedPortal = {

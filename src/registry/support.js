@@ -11,6 +11,8 @@ import {
 export const PORTAL_STATE_KEYS = ["enabled", "open", "locked", "blocked", "destroyed"];
 export const PLACE_INSTANCE_MUTATION_TOKEN =
   Symbol("place-core-instance-mutation");
+export const PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN =
+  Symbol("place-core-bridge-attach");
 
 export class ReadonlyMapView {
   #map;
@@ -116,12 +118,25 @@ export function normalizeAttachment(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${label} is required`);
   }
+  assertPatchKeys(
+    value,
+    [
+      "domainId",
+      "position",
+      "nodeId",
+      "placeId",
+      "spaceId",
+      "metadata"
+    ],
+    label
+  );
   assertStringId(value.domainId, `${label}.domainId`);
-  if (!value.position ||
-      !Number.isFinite(value.position.x) ||
-      !Number.isFinite(value.position.y)) {
-    throw new TypeError(`${label}.position must be a Vec2`);
-  }
+  assertVec2(value.position, `${label}.position`);
+  assertPatchKeys(
+    value.position,
+    ["x", "y"],
+    `${label}.position`
+  );
   if (value.nodeId != null) {
     assertStringId(value.nodeId, `${label}.nodeId`);
   }
@@ -143,7 +158,35 @@ export function normalizeAttachment(value, label) {
 }
 
 export function normalizePlacement(value) {
-  if (!value) return null;
+  if (value == null) return null;
+  assertPatchKeys(
+    value,
+    [
+      "domainId",
+      "parentPlaceId",
+      "transform",
+      "containment"
+    ],
+    "placement"
+  );
+  if (value.transform != null) {
+    assertPatchKeys(
+      value.transform,
+      ["x", "y", "position", "rotation", "scale"],
+      "placement.transform"
+    );
+    if (value.transform.position != null) {
+      assertVec2(
+        value.transform.position,
+        "placement.transform.position"
+      );
+      assertPatchKeys(
+        value.transform.position,
+        ["x", "y"],
+        "placement.transform.position"
+      );
+    }
+  }
   const hasDomain = value.domainId != null;
   const hasParent = value.parentPlaceId != null;
   if (hasDomain === hasParent) {

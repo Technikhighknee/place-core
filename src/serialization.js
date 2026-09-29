@@ -6,7 +6,10 @@ import {
   normalizeBoolean,
   sha256
 } from "./utils.js";
-import { startTravel } from "./travel.js";
+import {
+  startTravel,
+  stopTravel
+} from "./travel.js";
 import {
   PLACE_CORE_SNAPSHOT_VERSION,
   idKey
@@ -260,12 +263,28 @@ export function deserializePlaceCore(snapshot, options = {}) {
   // any later materialization/sync fails.
   if (bridge) registry.attachWorldCoreBridge(bridge);
 
-  const retainPending = (saved) => {
-    registry.pendingTravels.push({
+  const retainPending = (
+    saved,
+    restartError = null
+  ) => {
+    const pending = {
       entityId: saved.entityId,
       target: cloneJson(saved.target),
       savedState: cloneJson(saved)
-    });
+    };
+    if (restartError != null) {
+      pending.restartError = {
+        name:
+          restartError instanceof Error
+            ? restartError.name
+            : "Error",
+        message:
+          restartError instanceof Error
+            ? restartError.message
+            : String(restartError)
+      };
+    }
+    registry.pendingTravels.push(pending);
   };
 
   if (bridge && resumeWorldCoreState) {
@@ -297,17 +316,56 @@ export function deserializePlaceCore(snapshot, options = {}) {
         continue;
       }
 
-      const restarted = startTravel(
-        registry,
-        bridge,
-        saved.entityId,
-        saved.target,
-        saved.options ?? {
-          worldChangePolicy: saved.worldChangePolicy ?? "encounter",
-          portalEntryTolerance: 0.25
+      try {
+        const restarted = startTravel(
+          registry,
+          bridge,
+          saved.entityId,
+          saved.target,
+          saved.options ?? {
+            worldChangePolicy: saved.worldChangePolicy ?? "encounter",
+            portalEntryTolerance: 0.25
+          }
+        );
+        if (!restarted) {
+          retainPending(saved);
+        } else if (restarted.status === "failed") {
+          retainPending(
+            saved,
+            new Error(
+              restarted.failureReason ??
+              "travel restart failed"
+            )
+          );
         }
-      );
-      if (!restarted) retainPending(saved);
+      } catch (error) {
+        let cleanupError = null;
+        if (registry.activeTravels.has(saved.entityId)) {
+          try {
+            stopTravel(
+              registry,
+              bridge,
+              saved.entityId,
+              { reason: "restart-error" }
+            );
+          } catch (failure) {
+            cleanupError = failure;
+            registry.activeTravels.delete(
+              saved.entityId
+            );
+          }
+        }
+
+        retainPending(
+          saved,
+          cleanupError
+            ? new AggregateError(
+                [error, cleanupError],
+                "travel restart and cleanup failed"
+              )
+            : error
+        );
+      }
     }
   } else {
     for (const saved of active) retainPending(saved);

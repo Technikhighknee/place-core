@@ -4,7 +4,12 @@ import {
   isPortalTraversable
 } from "./registry.js";
 import { compilePlace, CompiledPlaceDefinition } from "./definition.js";
-import { deepFreeze, normalizeBoolean } from "./utils.js";
+import {
+  assertId,
+  assertStringId,
+  deepFreeze,
+  normalizeBoolean
+} from "./utils.js";
 
 export class PlaceRegistry extends CorePlaceRegistry {
   registerDefinition(input, options) {
@@ -43,15 +48,59 @@ export class PlaceRegistry extends CorePlaceRegistry {
       .filter(Boolean);
   }
 
-  findAnchors({
-    placeId = null,
-    tag = null,
-    kind = null,
-    spaceId = null,
-    enabledOnly = false
-  } = {}) {
-    enabledOnly = normalizeBoolean(
-      enabledOnly,
+  findAnchors(options = {}) {
+    if (!options ||
+        typeof options !== "object" ||
+        Array.isArray(options)) {
+      throw new TypeError(
+        "findAnchors options must be a plain object"
+      );
+    }
+    const prototype = Object.getPrototypeOf(options);
+    if (prototype !== Object.prototype &&
+        prototype !== null) {
+      throw new TypeError(
+        "findAnchors options must be a plain object"
+      );
+    }
+    const allowed = new Set([
+      "placeId",
+      "tag",
+      "kind",
+      "spaceId",
+      "enabledOnly"
+    ]);
+    for (const key of Object.keys(options)) {
+      if (!allowed.has(key)) {
+        throw new Error(
+          `findAnchors options contains unknown field ${key}`
+        );
+      }
+    }
+
+    const {
+      placeId = null,
+      tag = null,
+      kind = null,
+      spaceId = null,
+      enabledOnly: rawEnabledOnly = false
+    } = options;
+
+    if (placeId != null) {
+      assertId(placeId, "findAnchors.placeId");
+    }
+    for (const [value, label] of [
+      [tag, "findAnchors.tag"],
+      [kind, "findAnchors.kind"],
+      [spaceId, "findAnchors.spaceId"]
+    ]) {
+      if (value != null) {
+        assertStringId(value, label);
+      }
+    }
+
+    const enabledOnly = normalizeBoolean(
+      rawEnabledOnly,
       "findAnchors.enabledOnly",
       { defaultValue: false }
     );

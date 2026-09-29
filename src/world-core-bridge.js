@@ -1,4 +1,7 @@
 import { isPortalTraversable } from "./registry.js";
+import {
+  PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN
+} from "./registry/support.js";
 
 function sortedStrings(values) {
   if (values == null) return null;
@@ -63,7 +66,16 @@ export class WorldCoreBridge {
     this.existingDomainPolicy = existingDomainPolicy;
   }
 
-  attachRegistry(registry, onDispose = null) {
+  attachRegistry(
+    registry,
+    onDispose = null,
+    token = null
+  ) {
+    if (token !== PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN) {
+      throw new Error(
+        "WorldCoreBridge.attachRegistry must be called through PlaceRegistry.attachWorldCoreBridge"
+      );
+    }
     if (!registry || typeof registry !== "object") {
       throw new TypeError("WorldCoreBridge registry is required");
     }
@@ -107,6 +119,15 @@ export class WorldCoreBridge {
   }
 
   dispose() {
+    if (
+      this.#registry?.bridge === this &&
+      (this.#registry.instances?.size ?? 0) > 0
+    ) {
+      throw new Error(
+        "cannot dispose WorldCoreBridge while its PlaceRegistry has materialized places"
+      );
+    }
+
     let removed = false;
     let unsubscribeError = null;
     try {
