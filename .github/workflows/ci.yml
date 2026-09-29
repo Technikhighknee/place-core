@@ -21,3 +21,7 @@ jobs:
       - run: npm run bench:nearest-target
         env:
           NEAREST_TARGET_PLACES: "5000"
+      - run: npm run bench:explicit-travel
+        env:
+          EXPLICIT_TRAVEL_PLACES: "5000"
+          EXPLICIT_TRAVEL_QUERIES: "100"
