@@ -34,6 +34,39 @@ First-class concepts:
 
 A room is deliberately **not** a domain. Several rooms usually occupy one continuous layer/domain.
 
+### Structural containment, semantic membership and placement
+
+Place-Core deliberately keeps three relationships separate:
+
+- `parentId` is the **primary semantic containment chain**. It gives a stable, single-parent hierarchy for answers such as city → quarter → parcel → tavern.
+- `memberships` form an **acyclic semantic DAG**. A tavern can simultaneously belong to a market district, tax jurisdiction, legal ward, guild precinct or any other overlapping place relation without inventing another physical position.
+- `placement.parentPlaceId` is the **transform parent** used only for nested moving coordinate frames. It remains single-parent because a transform must have one unambiguous frame.
+
+```js
+places.createPlace({
+  id: "golden-goose",
+  definitionId: "small-tavern",
+  parentId: "parcel-17",
+  memberships: [
+    {
+      parentPlaceId: "market-quarter",
+      kind: "district"
+    },
+    {
+      parentPlaceId: "tax-ward-3",
+      kind: "tax-jurisdiction"
+    }
+  ]
+});
+```
+
+`locate()` returns both views:
+
+- `places` — the stable primary containment chain.
+- `semanticPlaces` — the deterministic, deduplicated transitive closure of the full semantic DAG.
+
+Occupancy and `place-enter` / `place-leave` events use `semanticPlaces`, so membership changes propagate immediately even when an entity does not physically move. Mixed cycles across `parentId` and `memberships` are rejected.
+
 ## Shared definitions and navigation
 
 ```js
