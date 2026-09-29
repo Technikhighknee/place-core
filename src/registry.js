@@ -25,11 +25,25 @@ import {
 const PORTAL_STATE_KEYS = ["enabled", "open", "locked", "blocked", "destroyed"];
 
 function normalizeAttachment(value, label) {
-  if (!value || typeof value !== "object") throw new TypeError(`${label} is required`);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError(`${label} is required`);
+  }
   assertStringId(value.domainId, `${label}.domainId`);
-  if (!value.position || !Number.isFinite(value.position.x) || !Number.isFinite(value.position.y)) {
+  if (!value.position ||
+      !Number.isFinite(value.position.x) ||
+      !Number.isFinite(value.position.y)) {
     throw new TypeError(`${label}.position must be a Vec2`);
   }
+  if (value.nodeId != null) {
+    assertStringId(value.nodeId, `${label}.nodeId`);
+  }
+  if (value.placeId != null) {
+    assertId(value.placeId, `${label}.placeId`);
+  }
+  if (value.spaceId != null) {
+    assertStringId(value.spaceId, `${label}.spaceId`);
+  }
+
   return deepFreeze({
     domainId: value.domainId,
     position: { x: value.position.x, y: value.position.y },
@@ -1276,19 +1290,38 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     if (definition.getPortal(spec.id) || instance.dynamicPortals.has(spec.id)) throw new Error(`portal already exists: ${spec.id}`);
     const normalizeResolved = (endpoint, label) => {
-      assertStringId(endpoint?.domainId, `${label}.domainId`);
-      if (!endpoint.position || !Number.isFinite(endpoint.position.x) || !Number.isFinite(endpoint.position.y)) {
+      if (!endpoint || typeof endpoint !== "object" || Array.isArray(endpoint)) {
+        throw new TypeError(`${label} must be an endpoint object`);
+      }
+      assertStringId(endpoint.domainId, `${label}.domainId`);
+      if (!endpoint.position ||
+          !Number.isFinite(endpoint.position.x) ||
+          !Number.isFinite(endpoint.position.y)) {
         throw new TypeError(`${label}.position must be a Vec2`);
       }
-      return {
+      if (endpoint.nodeId != null) {
+        assertStringId(endpoint.nodeId, `${label}.nodeId`);
+      }
+      if (endpoint.placeId != null) {
+        assertId(endpoint.placeId, `${label}.placeId`);
+      }
+      if (endpoint.spaceId != null) {
+        assertStringId(endpoint.spaceId, `${label}.spaceId`);
+      }
+      if (endpoint.layerId != null) {
+        assertStringId(endpoint.layerId, `${label}.layerId`);
+      }
+
+      return deepFreeze({
         kind: "resolved",
         domainId: endpoint.domainId,
         position: { x: endpoint.position.x, y: endpoint.position.y },
         nodeId: endpoint.nodeId ?? null,
         placeId: endpoint.placeId ?? null,
         spaceId: endpoint.spaceId ?? null,
-        layerId: endpoint.layerId ?? null
-      };
+        layerId: endpoint.layerId ?? null,
+        metadata: cloneJson(endpoint.metadata ?? null)
+      });
     };
     const transitionCost = spec.transitionCost ?? 0;
     if (!Number.isFinite(transitionCost) || transitionCost < 0) {
@@ -1297,9 +1330,12 @@ export class PlaceRegistry {
       );
     }
 
+    const kind = spec.kind ?? "portal";
+    assertStringId(kind, `dynamic portal ${spec.id}.kind`);
+
     const portal = {
       id: spec.id,
-      kind: spec.kind ?? "portal",
+      kind,
       tags: normalizeStringList(
         spec.tags,
         `dynamic portal ${spec.id}.tags`,
