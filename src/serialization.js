@@ -82,6 +82,13 @@ export function serializePlaceCore(registry) {
         id: instance.id,
         definitionId: instance.definitionId,
         parentId: instance.parentId,
+        memberships: instance.getMemberships()
+          .map(canonicalClone)
+          .sort((a, b) =>
+            idKey(a.parentPlaceId)
+              .localeCompare(idKey(b.parentPlaceId)) ||
+            a.kind.localeCompare(b.kind)
+          ),
         layerDomains: mapToObject(instance.layerDomains),
         attachments: mapToObject(instance.attachments),
         placement: canonicalClone(instance.placement),
@@ -593,6 +600,64 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     if (item.parentId != null) {
       assertId(item.parentId, `snapshot.instances[${i}].parentId`);
     }
+
+    assertArray(
+      item.memberships ?? [],
+      `snapshot.instances[${i}].memberships`
+    );
+
+    const membershipKeys = new Set();
+    for (let j = 0; j < (item.memberships ?? []).length; j += 1) {
+      const membership = item.memberships[j];
+      const label =
+        `snapshot.instances[${i}].memberships[${j}]`;
+
+      assertObject(membership, label);
+
+      const allowedMembershipKeys = new Set([
+        "parentPlaceId",
+        "kind",
+        "metadata"
+      ]);
+      for (const field of Object.keys(membership)) {
+        if (!allowedMembershipKeys.has(field)) {
+          throw new Error(
+            `${label} contains unknown field ${field}`
+          );
+        }
+      }
+
+      assertId(
+        membership.parentPlaceId,
+        `${label}.parentPlaceId`
+      );
+      assertStringId(
+        membership.kind,
+        `${label}.kind`
+      );
+      if (membership.metadata !== undefined) {
+        assertJsonSafe(
+          membership.metadata,
+          `${label}.metadata`
+        );
+      }
+
+      if (membership.parentPlaceId === item.id) {
+        throw new Error(
+          `instance ${String(item.id)} has a semantic membership to itself`
+        );
+      }
+
+      const membershipKey =
+        `${idKey(membership.parentPlaceId)}\u0000${membership.kind}`;
+      if (membershipKeys.has(membershipKey)) {
+        throw new Error(
+          `instance ${String(item.id)} has duplicate semantic membership ${membership.kind} -> ${String(membership.parentPlaceId)}`
+        );
+      }
+      membershipKeys.add(membershipKey);
+    }
+
     if (item.metadata !== undefined) {
       assertJsonSafe(
         item.metadata,
@@ -725,8 +790,19 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   }
 
   for (const item of snapshot.instances) {
-    if (item.parentId != null && !instances.has(idKey(item.parentId))) {
-      throw new Error(`instance ${String(item.id)} references missing parent ${String(item.parentId)}`);
+    if (item.parentId != null &&
+        !instances.has(idKey(item.parentId))) {
+      throw new Error(
+        `instance ${String(item.id)} references missing parent ${String(item.parentId)}`
+      );
+    }
+
+    for (const membership of item.memberships ?? []) {
+      if (!instances.has(idKey(membership.parentPlaceId))) {
+        throw new Error(
+          `instance ${String(item.id)} references missing membership parent ${String(membership.parentPlaceId)}`
+        );
+      }
     }
 
     if (item.placement != null) {
@@ -784,23 +860,67 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     }
   }
 
-  for (const item of snapshot.instances) {
-    const semanticVisited = new Set();
-    let cursor = item;
-    while (cursor?.parentId != null) {
-      const key = idKey(cursor.id);
-      if (semanticVisited.has(key)) throw new Error(`place parent cycle involving ${String(cursor.id)}`);
-      semanticVisited.add(key);
-      cursor = instances.get(idKey(cursor.parentId));
+  const semanticPermanent = new Set();
+  const semanticTemporary = new Set();
+
+  const semanticParentIds = (item) => {
+    const parents = new Map();
+
+    if (item.parentId != null) {
+      parents.set(
+        idKey(item.parentId),
+        item.parentId
+      );
     }
 
+    for (const membership of item.memberships ?? []) {
+      parents.set(
+        idKey(membership.parentPlaceId),
+        membership.parentPlaceId
+      );
+    }
+
+    return [...parents.values()]
+      .sort((a, b) =>
+        idKey(a).localeCompare(idKey(b))
+      );
+  };
+
+  const visitSemantic = (item) => {
+    const key = idKey(item.id);
+    if (semanticPermanent.has(key)) return;
+    if (semanticTemporary.has(key)) {
+      throw new Error(
+        `place semantic membership cycle involving ${String(item.id)}`
+      );
+    }
+
+    semanticTemporary.add(key);
+    for (const parentId of semanticParentIds(item)) {
+      visitSemantic(
+        instances.get(idKey(parentId))
+      );
+    }
+    semanticTemporary.delete(key);
+    semanticPermanent.add(key);
+  };
+
+  for (const item of snapshot.instances) {
+    visitSemantic(item);
+
     const placementVisited = new Set();
-    cursor = item;
+    let cursor = item;
     while (cursor?.placement?.parentPlaceId != null) {
       const key = idKey(cursor.id);
-      if (placementVisited.has(key)) throw new Error(`place placement cycle involving ${String(cursor.id)}`);
+      if (placementVisited.has(key)) {
+        throw new Error(
+          `place placement cycle involving ${String(cursor.id)}`
+        );
+      }
       placementVisited.add(key);
-      cursor = instances.get(idKey(cursor.placement.parentPlaceId));
+      cursor = instances.get(
+        idKey(cursor.placement.parentPlaceId)
+      );
     }
   }
 
@@ -934,13 +1054,28 @@ export function deserializePlaceCore(snapshot, options = {}) {
   while (remaining.size) {
     let progressed = false;
     for (const [key, item] of [...remaining.entries()]) {
-      if (item.parentId != null && !registry.getPlace(item.parentId)) continue;
-      if (item.placement?.parentPlaceId != null && !registry.getPlace(item.placement.parentPlaceId)) continue;
+      if (item.parentId != null &&
+          !registry.getPlace(item.parentId)) {
+        continue;
+      }
+
+      if ((item.memberships ?? []).some(
+        (membership) =>
+          !registry.getPlace(membership.parentPlaceId)
+      )) {
+        continue;
+      }
+
+      if (item.placement?.parentPlaceId != null &&
+          !registry.getPlace(item.placement.parentPlaceId)) {
+        continue;
+      }
 
       registry.createPlace({
         id: item.id,
         definitionId: item.definitionId,
         parentId: item.parentId,
+        memberships: item.memberships ?? [],
         layerDomains: item.layerDomains,
         attachments: item.attachments,
         placement: item.placement,
