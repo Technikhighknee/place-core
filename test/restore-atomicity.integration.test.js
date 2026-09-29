@@ -226,3 +226,112 @@ test("restart mode preserves missing-entity travel intent instead of dropping it
     { placeId: "first", anchorId: "target" }
   );
 });
+
+
+test("failed adopt restore preserves pre-existing domains bindings and road overrides", () => {
+  const compiled = compilePlace({
+    id: "adopt-rollback-place",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 5, y: 0 }
+        ],
+        roads: [{
+          id: "road",
+          from: "a",
+          to: "b"
+        }]
+      }
+    }],
+    boundaries: [{
+      id: "wall",
+      layerId: "inside",
+      enabled: true,
+      a: { x: 0, y: -1 },
+      b: { x: 0, y: 1 },
+      roadBindings: [{ roadId: "road" }]
+    }]
+  });
+
+  const source = new PlaceRegistry();
+  source.registerDefinition(compiled);
+  source.createPlace({
+    id: "first",
+    definitionId: compiled.id
+  });
+  source.createPlace({
+    id: "second",
+    definitionId: compiled.id
+  });
+  const snapshot = serializePlaceCore(source);
+
+  const world = new World();
+  const navigation = new NavigationRegistry();
+  const bridge = makeBridge(world, navigation, "adopt");
+  bridge.ensureLayerTopology(
+    compiled,
+    compiled.getLayer("inside")
+  );
+
+  for (const id of ["first", "second"]) {
+    const domainId = `${id}:inside`;
+    world.addDomain({ id: domainId });
+    navigation.bindDomain(
+      domainId,
+      compiled.getLayer("inside").topologyId
+    );
+  }
+
+  navigation.setDomainRoadEffect(
+    "first:inside",
+    "foreign-effect",
+    "road",
+    { costMultiplier: 2 }
+  );
+
+  const originalSync = bridge.syncBoundaryState.bind(bridge);
+  let calls = 0;
+  bridge.syncBoundaryState = (...args) => {
+    const result = originalSync(...args);
+    calls += 1;
+    if (calls === 2) {
+      throw new Error("synthetic adopted sync failure");
+    }
+    return result;
+  };
+
+  assert.throws(
+    () => deserializePlaceCore(snapshot, { bridge }),
+    /synthetic adopted sync failure/
+  );
+
+  for (const id of ["first", "second"]) {
+    const domainId = `${id}:inside`;
+    assert.ok(
+      world.getDomain(domainId),
+      `${domainId} must survive failed adoption`
+    );
+    assert.equal(
+      navigation.domainBindings.get(domainId),
+      compiled.getLayer("inside").topologyId
+    );
+  }
+
+  const firstNav = navigation.navigationForDomain("first:inside");
+  assert.equal(firstNav.roadCostMultiplier("road"), 2);
+  assert.equal(firstNav.roadTraversalDelaySeconds("road"), 0);
+  assert.equal(firstNav.overrideEffectCount, 1);
+  assert.ok(
+    firstNav.roadEffects.get("road")?.has("foreign-effect")
+  );
+  assert.equal(
+    [...(firstNav.roadEffects.get("road")?.keys() ?? [])]
+      .some((id) => String(id).startsWith("place-core")),
+    false
+  );
+
+  const secondNav = navigation.navigationForDomain("second:inside");
+  assert.equal(secondNav.overrideEffectCount, 0);
+});
