@@ -184,6 +184,25 @@ function assertTravelTarget(target, label = "travel target") {
 function assertTravelOptions(options, label) {
   assertObject(options, label);
 
+  const allowedKeys = new Set([
+    "journeyOptions",
+    "excludedPortalKeys",
+    "excludedDomainPairs",
+    "maxDomainPathAttempts",
+    "maxShortestDomainPaths",
+    "allowPartialShortestPathSearch",
+    "maxConcreteStatesPerLayer",
+    "maxNearestTargetExpansions",
+    "maxCost",
+    "worldChangePolicy",
+    "portalEntryTolerance"
+  ]);
+  for (const key of Object.keys(options)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`${label} contains unknown field ${key}`);
+    }
+  }
+
   const policy = options.worldChangePolicy;
   if (policy != null && policy !== "encounter" && policy !== "eager") {
     throw new Error(`invalid ${label}.worldChangePolicy`);
@@ -249,6 +268,24 @@ function assertTravelPlan(plan, entityId) {
   assertNullableString(
     plan.resolvedTarget.nodeId,
     "active travel plan.resolvedTarget.nodeId"
+  );
+  if (plan.resolvedTarget.placeId != null) {
+    assertId(
+      plan.resolvedTarget.placeId,
+      "active travel plan.resolvedTarget.placeId"
+    );
+  }
+  assertNullableString(
+    plan.resolvedTarget.anchorId,
+    "active travel plan.resolvedTarget.anchorId"
+  );
+  assertNullableString(
+    plan.resolvedTarget.spaceId,
+    "active travel plan.resolvedTarget.spaceId"
+  );
+  assertNullableString(
+    plan.resolvedTarget.layerId,
+    "active travel plan.resolvedTarget.layerId"
   );
 
   assertStringId(plan.startDomainId, "active travel plan.startDomainId");
@@ -728,37 +765,81 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   const travelEntities = new Set();
   for (const travel of snapshot.activeTravels ?? []) {
     assertObject(travel, "active travel");
+    assertId(travel.entityId, "active travel.entityId");
+
     const key = idKey(travel.entityId);
-    if (travelEntities.has(key)) throw new Error(`duplicate active travel for ${String(travel.entityId)}`);
+    if (travelEntities.has(key)) {
+      throw new Error(
+        `duplicate active travel for ${String(travel.entityId)}`
+      );
+    }
     travelEntities.add(key);
-    if (travel.status !== "active") throw new Error("only active travel states may be persisted in activeTravels");
-    if (!Number.isInteger(travel.stepIndex) || travel.stepIndex < 0) throw new Error("invalid active travel stepIndex");
-    if (!Number.isInteger(travel.replans) || travel.replans < 0) throw new Error("invalid active travel replans");
-    if (travel.worldChangePolicy !== "encounter" && travel.worldChangePolicy !== "eager") {
+
+    if (travel.status !== "active") {
+      throw new Error(
+        "only active travel states may be persisted in activeTravels"
+      );
+    }
+    assertTravelTarget(travel.target, "active travel.target");
+
+    normalizeBoolean(travel.localStarted, "active travel.localStarted");
+    normalizeBoolean(travel.portalEntered, "active travel.portalEntered");
+
+    if (!Number.isFinite(travel.portalTransitionRemaining) ||
+        travel.portalTransitionRemaining < 0) {
+      throw new Error("invalid active travel portalTransitionRemaining");
+    }
+    if (!Number.isInteger(travel.stepIndex) || travel.stepIndex < 0) {
+      throw new Error("invalid active travel stepIndex");
+    }
+    if (!Number.isInteger(travel.replans) || travel.replans < 0) {
+      throw new Error("invalid active travel replans");
+    }
+    if (travel.failureReason != null &&
+        typeof travel.failureReason !== "string") {
+      throw new Error("invalid active travel failureReason");
+    }
+
+    if (travel.worldChangePolicy !== "encounter" &&
+        travel.worldChangePolicy !== "eager") {
       throw new Error("invalid active travel worldChangePolicy");
     }
-    if (travel.options != null) {
-      assertObject(travel.options, "active travel options");
-      const policy = travel.options.worldChangePolicy ?? travel.worldChangePolicy;
-      if (policy !== "encounter" && policy !== "eager") {
-        throw new Error("invalid active travel options.worldChangePolicy");
-      }
-      if (travel.options.portalEntryTolerance != null &&
-          (!Number.isFinite(travel.options.portalEntryTolerance) ||
-           travel.options.portalEntryTolerance < 0)) {
-        throw new Error("invalid active travel options.portalEntryTolerance");
-      }
-      if (travel.options.excludedPortalKeys != null) {
-        assertArray(travel.options.excludedPortalKeys, "active travel options.excludedPortalKeys");
-      }
-      if (travel.options.excludedDomainPairs != null) {
-        assertArray(travel.options.excludedDomainPairs, "active travel options.excludedDomainPairs");
-      }
+
+    assertTravelOptions(travel.options, "active travel options");
+    const optionPolicy =
+      travel.options.worldChangePolicy ??
+      travel.worldChangePolicy;
+    if (optionPolicy !== travel.worldChangePolicy) {
+      throw new Error(
+        "active travel options.worldChangePolicy disagrees with travel state"
+      );
     }
-    if (travel.plan != null) {
-      assertObject(travel.plan, "active travel plan");
-      assertArray(travel.plan.steps, "active travel plan.steps");
-      if (travel.stepIndex > travel.plan.steps.length) throw new Error("active travel stepIndex exceeds plan");
+
+    assertTravelPlan(travel.plan, travel.entityId);
+    if (canonicalStringify(travel.plan.target) !==
+        canonicalStringify(travel.target)) {
+      throw new Error("active travel plan target mismatch");
+    }
+    if (travel.stepIndex > travel.plan.steps.length) {
+      throw new Error("active travel stepIndex exceeds plan");
+    }
+  }
+
+  for (let i = 0; i < (snapshot.pendingTravels ?? []).length; i += 1) {
+    const pending = snapshot.pendingTravels[i];
+    assertObject(pending, `snapshot.pendingTravels[${i}]`);
+    assertJsonSafe(pending, `snapshot.pendingTravels[${i}]`);
+    if (pending.entityId != null) {
+      assertId(
+        pending.entityId,
+        `snapshot.pendingTravels[${i}].entityId`
+      );
+    }
+    if (pending.target != null) {
+      assertTravelTarget(
+        pending.target,
+        `snapshot.pendingTravels[${i}].target`
+      );
     }
   }
 
@@ -770,7 +851,11 @@ export function deserializePlaceCore(snapshot, options = {}) {
 
   const registry = new PlaceRegistry({
     bridge: options.bridge,
-    captureEvents: options.captureEvents === true,
+    captureEvents: normalizeBoolean(
+      options.captureEvents,
+      "deserialize captureEvents",
+      { defaultValue: false }
+    ),
     eventQueueLimit: options.eventQueueLimit,
     eventOverflowPolicy: options.eventOverflowPolicy
   });
