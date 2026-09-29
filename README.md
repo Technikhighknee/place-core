@@ -141,6 +141,10 @@ places.createPlace({
 
 Creating an instance can create its `world-core` domains, register its shared topologies once, bind those domains and apply instance-local road effects.
 
+`WorldCoreBridge` requires the live `World.subscribeEvents()` observer API. This lets same-domain structural crossings such as room-to-room doors emit semantic portal events even when the bounded world-core event capture queue is disabled.
+
+By default, Place-Core refuses to materialize into a world-core domain that already exists. `existingDomainPolicy: "adopt"` is an explicit ownership transfer: the compatible existing domain becomes Place-Core-owned for that place and normal `removePlace()` cleanup may unbind and remove it. It is not a temporary borrow mode.
+
 ## Sparse structural state
 
 ```js
