@@ -12,6 +12,7 @@ function mapToObject(map) {
 function serializePlan(plan) {
   if (!plan) return null;
   const copy = cloneJson(plan);
+  delete copy.travelRevision;
   delete copy.graphRevision;
   return copy;
 }
@@ -293,11 +294,13 @@ export function deserializePlaceCore(snapshot, options = {}) {
       const state = cloneJson(saved);
       state.worldChangePolicy ??= "encounter";
       if (state.plan) {
-        state.plan.graphRevision = registry.graphRevision;
+        state.plan.travelRevision = registry.travelRevision;
+        state.plan.graphRevision = registry.travelRevision;
         Object.freeze(state.plan.steps);
         Object.freeze(state.plan);
       }
-      state.graphRevision = registry.graphRevision;
+      state.travelRevision = registry.travelRevision;
+      state.graphRevision = registry.travelRevision;
       registry.activeTravels.set(state.entityId, state);
     }
   } else if (options.bridge && options.restartTravels !== false) {
