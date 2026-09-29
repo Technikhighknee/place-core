@@ -626,7 +626,14 @@ export class WorldCoreBridge {
     if (!domainId) return;
     const effectId = `place-core-boundary:${String(instance.id)}:${boundary.id}`;
     for (const binding of boundary.roadBindings) {
-      if (boundary.enabled) this.navigation.setDomainRoadEffect?.(domainId, effectId, binding.roadId, { blocked: true });
+      if (boundary.enabled) {
+        this.navigation.setDomainRoadEffect?.(
+          domainId,
+          effectId,
+          binding.roadId,
+          { blocked: true }
+        );
+      }
       else this.navigation.removeDomainRoadEffect?.(domainId, effectId, binding.roadId);
     }
   }
@@ -636,7 +643,13 @@ export class WorldCoreBridge {
     const domainId = instance.layerDomains.get(boundary.layerId);
     if (!domainId) return;
     const effectId = `place-core-boundary:${String(instance.id)}:${boundary.id}`;
-    for (const binding of boundary.roadBindings) this.navigation.removeDomainRoadEffect?.(domainId, effectId, binding.roadId);
+    for (const binding of boundary.roadBindings) {
+      this.navigation.removeDomainRoadEffect?.(
+        domainId,
+        effectId,
+        binding.roadId
+      );
+    }
   }
 
   syncPortalState(instance, portalDefinition, resolvedPortal) {

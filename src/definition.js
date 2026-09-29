@@ -104,8 +104,18 @@ function normalizeNavigationSpec(spec, label) {
     `${label}.nodes`
   ).map((node, index) => {
     assertStringId(node.id, `${label}.nodes[${index}].id`);
-    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) throw new TypeError(`${label}.node ${node.id} requires finite x/y`);
-    if (node.regionId != null && !regionIds.has(node.regionId)) throw new Error(`${label}.node ${node.id} references unknown region ${node.regionId}`);
+    if (!Number.isFinite(node.x) ||
+        !Number.isFinite(node.y)) {
+      throw new TypeError(
+        `${label}.node ${node.id} requires finite x/y`
+      );
+    }
+    if (node.regionId != null &&
+        !regionIds.has(node.regionId)) {
+      throw new Error(
+        `${label}.node ${node.id} references unknown region ${node.regionId}`
+      );
+    }
     const junctionRadius = node.junctionRadius ?? 0;
     if (!Number.isFinite(junctionRadius) || junctionRadius < 0) {
       throw new RangeError(
@@ -287,7 +297,11 @@ function normalizeSpace(space, layersById) {
 function normalizeBoundary(boundary, layersById) {
   assertStringId(boundary.id, "boundary.id");
   assertStringId(boundary.layerId, `boundary(${boundary.id}).layerId`);
-  if (!layersById.has(boundary.layerId)) throw new Error(`boundary ${boundary.id} references unknown layer ${boundary.layerId}`);
+  if (!layersById.has(boundary.layerId)) {
+    throw new Error(
+      `boundary ${boundary.id} references unknown layer ${boundary.layerId}`
+    );
+  }
   if (!boundary.a || !boundary.b) throw new TypeError(`boundary ${boundary.id} requires endpoints a and b`);
   const roadBindings = requireArray(
     boundary.roadBindings,
@@ -322,7 +336,11 @@ function normalizeEndpoint(endpoint, portalId, layersById, spacesById) {
   const kind = endpoint.kind ?? "local";
   if (kind === "local") {
     assertStringId(endpoint.layerId, `portal(${portalId}).endpoint.layerId`);
-    if (!layersById.has(endpoint.layerId)) throw new Error(`portal ${portalId} references unknown layer ${endpoint.layerId}`);
+    if (!layersById.has(endpoint.layerId)) {
+    throw new Error(
+      `portal ${portalId} references unknown layer ${endpoint.layerId}`
+    );
+  }
     let space = null;
     if (endpoint.spaceId != null) {
       space = spacesById.get(endpoint.spaceId);
@@ -381,7 +399,11 @@ function normalizePortal(portal, layersById, spacesById) {
   ).map((binding, index) => {
     assertStringId(binding.layerId, `portal(${portal.id}).roadBindings[${index}].layerId`);
     assertStringId(binding.roadId, `portal(${portal.id}).roadBindings[${index}].roadId`);
-    if (!layersById.has(binding.layerId)) throw new Error(`portal ${portal.id} road binding references unknown layer ${binding.layerId}`);
+    if (!layersById.has(binding.layerId)) {
+      throw new Error(
+        `portal ${portal.id} road binding references unknown layer ${binding.layerId}`
+      );
+    }
     return deepFreeze({ layerId: binding.layerId, roadId: binding.roadId });
   });
   return deepFreeze({
@@ -438,7 +460,11 @@ function normalizePortal(portal, layersById, spacesById) {
 function normalizeAnchor(anchor, layersById, spacesById) {
   assertStringId(anchor.id, "anchor.id");
   assertStringId(anchor.layerId, `anchor(${anchor.id}).layerId`);
-  if (!layersById.has(anchor.layerId)) throw new Error(`anchor ${anchor.id} references unknown layer ${anchor.layerId}`);
+  if (!layersById.has(anchor.layerId)) {
+    throw new Error(
+      `anchor ${anchor.id} references unknown layer ${anchor.layerId}`
+    );
+  }
   let space = null;
   if (anchor.spaceId != null) {
     space = spacesById.get(anchor.spaceId);

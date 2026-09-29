@@ -64,7 +64,11 @@ function serializeTravelState(state) {
 }
 
 export function serializePlaceCore(registry) {
-  if (!(registry instanceof PlaceRegistry)) throw new TypeError("serializePlaceCore requires PlaceRegistry");
+  if (!(registry instanceof PlaceRegistry)) {
+    throw new TypeError(
+      "serializePlaceCore requires PlaceRegistry"
+    );
+  }
 
   return {
     format: "place-core",

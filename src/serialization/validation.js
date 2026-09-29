@@ -458,7 +458,11 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
 
 export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   assertObject(snapshot, "place-core snapshot");
-  if (snapshot.format !== "place-core") throw new Error(`invalid place-core snapshot format: ${snapshot.format}`);
+  if (snapshot.format !== "place-core") {
+    throw new Error(
+      `invalid place-core snapshot format: ${snapshot.format}`
+    );
+  }
   if (snapshot.version !== (options.expectedVersion ?? PLACE_CORE_SNAPSHOT_VERSION)) {
     throw new Error(`unsupported place-core snapshot version: ${snapshot.version}`);
   }
@@ -472,9 +476,22 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   for (let i = 0; i < snapshot.definitions.length; i += 1) {
     const ref = snapshot.definitions[i];
     assertObject(ref, `snapshot.definitions[${i}]`);
-    if (typeof ref.id !== "string" || !ref.id) throw new TypeError("definition id must be a non-empty string");
-    if (definitions.has(ref.id)) throw new Error(`duplicate definition reference: ${ref.id}`);
-    if (typeof ref.contentHash !== "string" || !ref.contentHash) throw new TypeError(`definition ${ref.id} missing contentHash`);
+    if (typeof ref.id !== "string" || !ref.id) {
+      throw new TypeError(
+        "definition id must be a non-empty string"
+      );
+    }
+    if (definitions.has(ref.id)) {
+      throw new Error(
+        `duplicate definition reference: ${ref.id}`
+      );
+    }
+    if (typeof ref.contentHash !== "string" ||
+        !ref.contentHash) {
+      throw new TypeError(
+        `definition ${ref.id} missing contentHash`
+      );
+    }
     assertObject(ref.blueprint, `definition ${ref.id}.blueprint`);
 
     const compiled = compilePlace(ref.blueprint);
@@ -610,7 +627,11 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       if (typeof domainId !== "string" || !domainId) {
         throw new Error(`instance ${String(item.id)} missing domain for layer ${layer.id}`);
       }
-      if (domains.has(domainId)) throw new Error(`duplicate bound domain: ${domainId}`);
+      if (domains.has(domainId)) {
+        throw new Error(
+          `duplicate bound domain: ${domainId}`
+        );
+      }
       domains.add(domainId);
     }
 

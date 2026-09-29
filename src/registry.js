@@ -67,6 +67,8 @@ export class PlaceRegistry {
   #portalsByRoad = new Map();
   #instancePortalKeys = new Map();
   #occupancyIndex;
+  #activeTravels = new Map();
+  #pendingTravels = [];
   #events;
   #captureEvents;
   #bridge = null;
@@ -118,12 +120,11 @@ export class PlaceRegistry {
   get instances() { return this.#instancesView; }
   get domainBindings() { return this.#domainBindingsView; }
   get activeTravels() {
-    if (!this._activeTravels) this._activeTravels = new Map();
-    return this._activeTravels;
+    return this.#activeTravels;
   }
+
   get pendingTravels() {
-    if (!this._pendingTravels) this._pendingTravels = [];
-    return this._pendingTravels;
+    return this.#pendingTravels;
   }
   get stateRevision() { return this.#stateRevision; }
   get travelRevision() { return this.#travelRevision; }
@@ -228,7 +229,11 @@ export class PlaceRegistry {
   }
 
   registerDefinition(definition) {
-    if (!(definition instanceof CompiledPlaceDefinition)) throw new TypeError("registerDefinition requires a compiled place definition");
+    if (!(definition instanceof CompiledPlaceDefinition)) {
+      throw new TypeError(
+        "registerDefinition requires a compiled place definition"
+      );
+    }
     const existing = this.#definitions.get(definition.id);
     if (existing && existing.contentHash !== definition.contentHash) {
       throw new Error(`definition ${definition.id} is already registered with another content hash`);
@@ -728,7 +733,11 @@ export class PlaceRegistry {
 
     const placement = normalizePlacement(input.placement);
     if (placement?.parentPlaceId != null) {
-      if (placement.parentPlaceId === input.id) throw new Error("place cannot be placed relative to itself");
+      if (placement.parentPlaceId === input.id) {
+        throw new Error(
+          "place cannot be placed relative to itself"
+        );
+      }
       if (!this.#instances.has(placement.parentPlaceId)) {
         throw new Error(`unknown placement parent: ${String(placement.parentPlaceId)}`);
       }
@@ -1644,7 +1653,12 @@ export class PlaceRegistry {
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
     assertStringId(spec?.id, "dynamic portal id");
     const definition = this.#definitions.get(instance.definitionId);
-    if (definition.getPortal(spec.id) || instance.dynamicPortals.has(spec.id)) throw new Error(`portal already exists: ${spec.id}`);
+    if (definition.getPortal(spec.id) ||
+        instance.dynamicPortals.has(spec.id)) {
+      throw new Error(
+        `portal already exists: ${spec.id}`
+      );
+    }
     const normalizeResolved = (endpoint, label) => {
       if (!endpoint || typeof endpoint !== "object" || Array.isArray(endpoint)) {
         throw new TypeError(`${label} must be an endpoint object`);
@@ -1738,7 +1752,11 @@ export class PlaceRegistry {
       roadBindings: (spec.roadBindings ?? []).map((binding, index) => {
         assertStringId(binding.layerId, `dynamic portal roadBindings[${index}].layerId`);
         assertStringId(binding.roadId, `dynamic portal roadBindings[${index}].roadId`);
-        if (!instance.layerDomains.has(binding.layerId)) throw new Error(`dynamic portal road binding references unknown layer ${binding.layerId}`);
+        if (!instance.layerDomains.has(binding.layerId)) {
+        throw new Error(
+          `dynamic portal road binding references unknown layer ${binding.layerId}`
+        );
+      }
         return { layerId: binding.layerId, roadId: binding.roadId };
       }),
       metadata: cloneJson(spec.metadata ?? null)
@@ -1957,7 +1975,12 @@ export class PlaceRegistry {
   drainEvents(target = []) { return this.#events.drain(target); }
   peekEvents() { return this.#events.peek(); }
   getEventQueueStats() {
-    return { size: this.#events.size, limit: this.#events.limit, overflowPolicy: this.#events.overflowPolicy, dropped: this.#events.dropped };
+    return {
+      size: this.#events.size,
+      limit: this.#events.limit,
+      overflowPolicy: this.#events.overflowPolicy,
+      dropped: this.#events.dropped
+    };
   }
 
   getDiagnostics() {
@@ -2030,7 +2053,11 @@ export class PlaceRegistry {
     for (const [domainId, binding] of this.#domainBindings) {
       const instance = this.#instances.get(binding.instanceId);
       if (!instance) throw new Error(`domain ${domainId} references missing instance`);
-      if (instance.layerDomains.get(binding.layerId) !== domainId) throw new Error(`domain ${domainId} binding mismatch`);
+      if (instance.layerDomains.get(binding.layerId) !== domainId) {
+        throw new Error(
+          `domain ${domainId} binding mismatch`
+        );
+      }
     }
     for (const instance of this.#instances.values()) {
       const definition = this.#definitions.get(instance.definitionId);
