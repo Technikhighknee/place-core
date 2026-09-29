@@ -223,16 +223,62 @@ export class WorldCoreBridge {
     );
   }
 
+  #captureDomainMaterializationState(domainId) {
+    const domainInstance =
+      this.navigation.domainInstances?.get?.(domainId) ??
+      null;
+    const roadEffects = [];
+
+    if (domainInstance?.roadEffects) {
+      for (const [roadId, effects] of domainInstance.roadEffects) {
+        for (const [effectId, effect] of effects) {
+          roadEffects.push({
+            roadId,
+            effectId,
+            effect: {
+              blocked: effect.blocked === true,
+              costMultiplier: effect.costMultiplier ?? 1,
+              traversalDelaySeconds:
+                effect.traversalDelaySeconds ?? 0
+            }
+          });
+        }
+      }
+    }
+
+    roadEffects.sort((a, b) =>
+      String(a.roadId).localeCompare(String(b.roadId)) ||
+      String(a.effectId).localeCompare(String(b.effectId))
+    );
+
+    return {
+      domainId,
+      existed: Boolean(this.world.getDomain?.(domainId)),
+      previousBinding:
+        this.navigation.domainBindings?.get?.(domainId) ??
+        null,
+      roadEffects
+    };
+  }
+
   materializePlace(instance, definition) {
-    const addedDomains = [];
-    const newlyBoundDomains = [];
+    const receipt = {
+      domains: definition.layers.map((layer) =>
+        this.#captureDomainMaterializationState(
+          instance.layerDomains.get(layer.id)
+        )
+      )
+    };
 
     // Preflight ownership and existing bindings before mutating either core.
     for (const layer of definition.layers) {
       const domainId = instance.layerDomains.get(layer.id);
-      const existingDomain = this.world.getDomain?.(domainId);
+      const domainState = receipt.domains.find(
+        (state) => state.domainId === domainId
+      );
 
-      if (existingDomain && this.existingDomainPolicy !== "adopt") {
+      if (domainState.existed &&
+          this.existingDomainPolicy !== "adopt") {
         throw new Error(
           `world-core domain already exists and cannot be adopted: ${domainId}`
         );
@@ -245,13 +291,10 @@ export class WorldCoreBridge {
           );
         }
 
-        const existingBinding =
-          this.navigation.domainBindings?.get?.(domainId) ??
-          null;
-        if (existingBinding != null &&
-            existingBinding !== layer.topologyId) {
+        if (domainState.previousBinding != null &&
+            domainState.previousBinding !== layer.topologyId) {
           throw new Error(
-            `world-core domain ${domainId} is already bound to incompatible topology ${existingBinding}; expected ${layer.topologyId}`
+            `world-core domain ${domainId} is already bound to incompatible topology ${domainState.previousBinding}; expected ${layer.topologyId}`
           );
         }
       }
@@ -264,7 +307,6 @@ export class WorldCoreBridge {
 
         if (!this.world.getDomain?.(domainId)) {
           this.world.addDomain({ id: domainId });
-          addedDomains.push(domainId);
         }
 
         if (layer.topologyId != null) {
@@ -273,19 +315,82 @@ export class WorldCoreBridge {
             null;
           if (existingBinding == null) {
             this.navigation.bindDomain(domainId, layer.topologyId);
-            newlyBoundDomains.push(domainId);
           }
         }
       }
     } catch (error) {
-      for (const domainId of newlyBoundDomains.reverse()) {
-        this.navigation.unbindDomain?.(domainId);
+      let rollbackError = null;
+      try {
+        this.rollbackMaterializePlace(instance, definition, receipt);
+      } catch (restoreError) {
+        rollbackError = restoreError;
       }
-      for (const domainId of addedDomains.reverse()) {
-        this.world.removeDomain?.(domainId);
+
+      if (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `failed to materialize place ${String(instance.id)} and restore prior world-core state`
+        );
       }
       throw error;
     }
+
+    return receipt;
+  }
+
+  rollbackMaterializePlace(instance, definition, receipt) {
+    if (!receipt?.domains) {
+      throw new TypeError("materialization receipt is required");
+    }
+
+    const errors = [];
+
+    for (const state of [...receipt.domains].reverse()) {
+      try {
+        this.navigation.clearDomainOverrides?.(state.domainId);
+
+        const currentBinding =
+          this.navigation.domainBindings?.get?.(state.domainId) ??
+          null;
+
+        if (state.previousBinding == null) {
+          if (currentBinding != null) {
+            this.navigation.unbindDomain?.(state.domainId);
+          }
+        } else if (currentBinding !== state.previousBinding) {
+          this.navigation.bindDomain?.(
+            state.domainId,
+            state.previousBinding
+          );
+        }
+
+        if (state.previousBinding != null) {
+          for (const saved of state.roadEffects) {
+            this.navigation.setDomainRoadEffect?.(
+              state.domainId,
+              saved.effectId,
+              saved.roadId,
+              saved.effect
+            );
+          }
+        }
+
+        if (!state.existed && this.world.getDomain?.(state.domainId)) {
+          this.world.removeDomain?.(state.domainId);
+        }
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        `failed to roll back materialization for place ${String(instance.id)}`
+      );
+    }
+    return true;
   }
 
   ensureLayerTopology(definition, layer) {
