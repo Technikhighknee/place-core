@@ -197,6 +197,46 @@ export function findDomainPortalPath(registry, startDomainId, targetDomainId, op
   return edges;
 }
 
+function travelTargetUnavailable(message) {
+  const error = new Error(message);
+  error.code = "PLACE_TRAVEL_TARGET_UNAVAILABLE";
+  return error;
+}
+
+function anchorAvailable(registry, placeId, anchor) {
+  if (!anchor) return false;
+  if (anchor.spaceId == null) return true;
+  return registry.getSpace(placeId, anchor.spaceId)?.enabled === true;
+}
+
+function resolvedTargetAvailable(registry, target) {
+  if (target?.placeId == null) return true;
+  const instance = registry.getPlace(target.placeId);
+  if (!instance) return false;
+
+  if (target.layerId != null &&
+      instance.layerDomains.get(target.layerId) !== target.domainId) {
+    return false;
+  }
+
+  if (target.spaceId != null) {
+    const space = registry.getSpace(target.placeId, target.spaceId);
+    if (!space?.enabled) return false;
+  }
+
+  if (target.anchorId != null) {
+    const anchor = registry.findAnchor(target.placeId, target.anchorId);
+    if (!anchor || anchor.domainId !== target.domainId) return false;
+    if (!anchorAvailable(registry, target.placeId, anchor)) return false;
+  }
+
+  return true;
+}
+
+function availableAnchors(registry, placeId, anchors) {
+  return [...anchors].filter((anchor) => anchorAvailable(registry, placeId, anchor));
+}
+
 export function resolveTravelTarget(registry, target) {
   if (!target || typeof target !== "object") throw new TypeError("travel target is required");
 
@@ -232,31 +272,73 @@ export function resolveTravelTarget(registry, target) {
   }
 
   const instance = registry.getPlace(target.placeId);
-  if (!instance) throw new Error(`unknown target place ${String(target.placeId)}`);
+  if (!instance) {
+    throw travelTargetUnavailable(`unknown target place ${String(target.placeId)}`);
+  }
   const definition = registry.getDefinition(instance.definitionId);
   let anchor = null;
 
   if (target.anchorId != null) {
     anchor = definition.getAnchor(target.anchorId);
-    if (!anchor) throw new Error(`unknown anchor ${target.anchorId} on place ${String(target.placeId)}`);
-  } else if (target.spaceId != null) {
-    const space = definition.getSpace(target.spaceId);
-    if (!space) throw new Error(`unknown space ${target.spaceId} on place ${String(target.placeId)}`);
-    if (space.defaultAnchorId) anchor = definition.getAnchor(space.defaultAnchorId);
     if (!anchor) {
-      anchor = [...definition.getAnchorsForSpace(space.id)]
-        .sort((a, b) => a.id.localeCompare(b.id))[0] ?? null;
+      throw travelTargetUnavailable(
+        `unknown anchor ${target.anchorId} on place ${String(target.placeId)}`
+      );
     }
-  } else if (definition.defaultAnchorId) {
-    anchor = definition.getAnchor(definition.defaultAnchorId);
+    if (!anchorAvailable(registry, target.placeId, anchor)) {
+      throw travelTargetUnavailable(
+        `anchor ${target.anchorId} on place ${String(target.placeId)} is in a disabled space`
+      );
+    }
+  } else if (target.spaceId != null) {
+    const space = registry.getSpace(target.placeId, target.spaceId);
+    if (!space) {
+      throw travelTargetUnavailable(
+        `unknown space ${target.spaceId} on place ${String(target.placeId)}`
+      );
+    }
+    if (!space.enabled) {
+      throw travelTargetUnavailable(
+        `space ${target.spaceId} on place ${String(target.placeId)} is disabled`
+      );
+    }
+
+    if (space.defaultAnchorId) {
+      const candidate = definition.getAnchor(space.defaultAnchorId);
+      if (anchorAvailable(registry, target.placeId, candidate)) anchor = candidate;
+    }
+    if (!anchor) {
+      anchor = availableAnchors(
+        registry,
+        target.placeId,
+        definition.getAnchorsForSpace(space.id)
+      ).sort((a, b) => a.id.localeCompare(b.id))[0] ?? null;
+    }
   } else {
-    anchor = [...definition.getAnchorsByTag("entry")]
-      .sort((a, b) => a.id.localeCompare(b.id))[0] ??
-      [...definition.anchors].sort((a, b) => a.id.localeCompare(b.id))[0] ??
-      null;
+    if (definition.defaultAnchorId) {
+      const candidate = definition.getAnchor(definition.defaultAnchorId);
+      if (anchorAvailable(registry, target.placeId, candidate)) anchor = candidate;
+    }
+    if (!anchor) {
+      anchor = availableAnchors(
+        registry,
+        target.placeId,
+        definition.getAnchorsByTag("entry")
+      ).sort((a, b) => a.id.localeCompare(b.id))[0] ??
+        availableAnchors(
+          registry,
+          target.placeId,
+          definition.anchors
+        ).sort((a, b) => a.id.localeCompare(b.id))[0] ??
+        null;
+    }
   }
 
-  if (!anchor) throw new Error(`place ${String(target.placeId)} has no routable anchor`);
+  if (!anchor) {
+    throw travelTargetUnavailable(
+      `place ${String(target.placeId)} has no enabled routable anchor`
+    );
+  }
   return deepFreeze({
     placeId: target.placeId,
     anchorId: anchor.id,
@@ -874,7 +956,16 @@ function complete(registry, state) {
 
 function replan(registry, bridge, state, options) {
   bridge.stopLocalJourney(state.entityId);
-  const plan = planTravel(registry, bridge, state.entityId, state.target, options);
+  let plan;
+  try {
+    plan = planTravel(registry, bridge, state.entityId, state.target, options);
+  } catch (error) {
+    if (error?.code === "PLACE_TRAVEL_TARGET_UNAVAILABLE") {
+      state.replans += 1;
+      return fail(registry, bridge, state, "target-unavailable-after-world-change");
+    }
+    throw error;
+  }
   state.replans += 1;
   state.stepIndex = 0;
   state.localStarted = false;
@@ -911,7 +1002,17 @@ function currentPortalDestination(portal, step) {
 
 function advance(registry, bridge, state, options = {}) {
   while (state.status === "active") {
-    if (state.stepIndex >= state.plan.steps.length) return complete(registry, state);
+    if (state.stepIndex >= state.plan.steps.length) {
+      if (!resolvedTargetAvailable(registry, state.plan.resolvedTarget)) {
+        registry.emit("travel-target-unavailable", {
+          entityId: state.entityId,
+          target: state.target,
+          resolvedTarget: state.plan.resolvedTarget
+        });
+        return replan(registry, bridge, state, options);
+      }
+      return complete(registry, state);
+    }
     const step = state.plan.steps[state.stepIndex];
 
     if (step.type === "local-journey") {
