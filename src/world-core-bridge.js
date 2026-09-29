@@ -1,5 +1,30 @@
 import { isPortalTraversable } from "./registry.js";
 
+function sortedStrings(values) {
+  if (values == null) return null;
+  return [...values].sort();
+}
+
+function stringListsEqual(a, b) {
+  const left = sortedStrings(a);
+  const right = sortedStrings(b);
+  if (left == null || right == null) return left === right;
+  return left.length === right.length &&
+    left.every((value, index) => value === right[index]);
+}
+
+function nearlyEqual(a, b) {
+  return Math.abs(a - b) <= 1e-9;
+}
+
+function pointsEqual(a, b) {
+  return a?.length === b?.length &&
+    a.every((point, index) =>
+      nearlyEqual(point.x, b[index].x) &&
+      nearlyEqual(point.y, b[index].y)
+    );
+}
+
 export class WorldCoreBridge {
   #registry = null;
   #unsubscribeWorldEvents = null;
@@ -265,26 +290,120 @@ export class WorldCoreBridge {
 
   ensureLayerTopology(definition, layer) {
     if (layer.topologyId == null || layer.navigation == null) return null;
+
     const existing = this.navigation.topologies?.get?.(layer.topologyId);
-    if (existing) return existing;
-    if (!this.NavigationClass) {
-      throw new Error(`layer ${definition.id}:${layer.id} contains navigation data but WorldCoreBridge was not given the world-core Navigation class`);
+    if (existing) {
+      this.#assertLayerTopologyCompatible(existing, definition, layer);
+      return existing;
     }
+
+    if (!this.NavigationClass) {
+      throw new Error(
+        `layer ${definition.id}:${layer.id} contains navigation data but WorldCoreBridge was not given the world-core Navigation class`
+      );
+    }
+
     const nav = new this.NavigationClass(layer.navigation.options ?? {});
     for (const region of layer.navigation.regions) nav.addRegion(region);
-    for (const node of layer.navigation.nodes) nav.addNode({
-      id: node.id, x: node.x, y: node.y,
-      junctionRadius: node.junctionRadius, regionId: node.regionId
-    });
-    for (const road of layer.navigation.roads) {
-      const input = { id: road.id, from: road.from, to: road.to };
-      for (const key of ["shape", "width", "surface", "bidirectional", "enabled", "allowedProfiles", "blockedProfiles", "tags"]) {
-        if (road[key] !== undefined) input[key] = road[key];
-      }
-      nav.addRoad(input);
+    for (const node of layer.navigation.nodes) {
+      nav.addNode({
+        id: node.id,
+        x: node.x,
+        y: node.y,
+        junctionRadius: node.junctionRadius,
+        regionId: node.regionId
+      });
     }
+    for (const road of layer.navigation.roads) {
+      nav.addRoad({
+        id: road.id,
+        from: road.from,
+        to: road.to,
+        shape: road.shape,
+        width: road.width,
+        surface: road.surface,
+        bidirectional: road.bidirectional,
+        enabled: road.enabled,
+        allowedProfiles: road.allowedProfiles,
+        blockedProfiles: road.blockedProfiles,
+        tags: road.tags
+      });
+    }
+
     this.navigation.registerTopology(layer.topologyId, nav);
     return nav;
+  }
+
+  #assertLayerTopologyCompatible(existing, definition, layer) {
+    const expected = layer.navigation;
+    const label = `${definition.id}:${layer.id}`;
+    const mismatch = (detail) => {
+      throw new Error(
+        `navigation topology ${layer.topologyId} is incompatible with place layer ${label}: ${detail}`
+      );
+    };
+
+    const existingRegionIds = [...(existing.regions?.keys?.() ?? [])].sort();
+    const expectedRegionIds = expected.regions.map((region) => region.id).sort();
+    if (!stringListsEqual(existingRegionIds, expectedRegionIds)) {
+      mismatch("region set differs");
+    }
+
+    if (existing.nodes?.size !== expected.nodes.length) {
+      mismatch("node count differs");
+    }
+    for (const node of expected.nodes) {
+      const actual = existing.nodes?.get?.(node.id);
+      if (!actual) mismatch(`missing node ${node.id}`);
+      if (!nearlyEqual(actual.position?.x, node.x) ||
+          !nearlyEqual(actual.position?.y, node.y)) {
+        mismatch(`node ${node.id} position differs`);
+      }
+      if (!nearlyEqual(actual.junctionRadius ?? 0, node.junctionRadius ?? 0)) {
+        mismatch(`node ${node.id} junctionRadius differs`);
+      }
+      if ((actual.regionId ?? null) !== (node.regionId ?? null)) {
+        mismatch(`node ${node.id} region differs`);
+      }
+    }
+
+    if (existing.roads?.size !== expected.roads.length) {
+      mismatch("road count differs");
+    }
+    for (const road of expected.roads) {
+      const actual = existing.roads?.get?.(road.id);
+      if (!actual) mismatch(`missing road ${road.id}`);
+
+      if (actual.from !== road.from || actual.to !== road.to) {
+        mismatch(`road ${road.id} endpoints differ`);
+      }
+      if (!nearlyEqual(actual.width, road.width)) {
+        mismatch(`road ${road.id} width differs`);
+      }
+      if (actual.surface !== road.surface) {
+        mismatch(`road ${road.id} surface differs`);
+      }
+      if (actual.bidirectional !== road.bidirectional) {
+        mismatch(`road ${road.id} directionality differs`);
+      }
+      if (actual.enabled !== road.enabled) {
+        mismatch(`road ${road.id} enabled state differs`);
+      }
+      if (!stringListsEqual(actual.allowedProfiles, road.allowedProfiles)) {
+        mismatch(`road ${road.id} allowedProfiles differ`);
+      }
+      if (!stringListsEqual(actual.blockedProfiles, road.blockedProfiles)) {
+        mismatch(`road ${road.id} blockedProfiles differ`);
+      }
+      if (!stringListsEqual(actual.tags, road.tags)) {
+        mismatch(`road ${road.id} tags differ`);
+      }
+
+      const actualShape = (actual.points ?? []).slice(1, -1);
+      if (!pointsEqual(actualShape, road.shape ?? [])) {
+        mismatch(`road ${road.id} shape differs`);
+      }
+    }
   }
 
   unmaterializePlace(instance, definition) {
