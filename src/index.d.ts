@@ -538,10 +538,12 @@ export class WorldCoreBridge {
     startJourney: Function;
     stopJourney: Function;
     Navigation?: new (options?: any) => any;
+    existingDomainPolicy?: "reject" | "adopt";
   });
 
   readonly world: any;
   readonly navigation: any;
+  readonly existingDomainPolicy: "reject" | "adopt";
 
   attachRegistry(registry: PlaceRegistry): this;
   dispose(): boolean;
