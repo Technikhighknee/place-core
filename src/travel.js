@@ -848,10 +848,16 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
     const destinationNodeIds = new Set();
 
     for (const anchor of anchors) {
-      if (anchor.nodeId != null) destinationNodeIds.add(anchor.nodeId);
+      if (anchor.nodeId != null &&
+          squaredDistance(state.position, anchor.position) > POSITION_EPSILON_SQ) {
+        destinationNodeIds.add(anchor.nodeId);
+      }
     }
     for (const edge of edges) {
-      if (edge.from.nodeId != null) destinationNodeIds.add(edge.from.nodeId);
+      if (edge.from.nodeId != null &&
+          squaredDistance(state.position, edge.from.position) > POSITION_EPSILON_SQ) {
+        destinationNodeIds.add(edge.from.nodeId);
+      }
     }
 
     const routeCosts = localRouteCostsToMany(bridge, {

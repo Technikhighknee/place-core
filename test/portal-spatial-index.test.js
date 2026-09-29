@@ -208,7 +208,21 @@ test("nearest portal filters traversal state and supports same-domain endpoints"
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "same-domain",
-    layers: [{ id: "inside" }],
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 100, y: 0 }
+        ],
+        roads: [{
+          id: "passage-threshold",
+          from: "a",
+          to: "b",
+          width: 1
+        }]
+      }
+    }],
     portals: [{
       id: "passage",
       kind: "door",
@@ -216,13 +230,19 @@ test("nearest portal filters traversal state and supports same-domain endpoints"
       a: {
         kind: "local",
         layerId: "inside",
-        position: { x: 0, y: 0 }
+        position: { x: 0, y: 0 },
+        nodeId: "a"
       },
       b: {
         kind: "local",
         layerId: "inside",
-        position: { x: 100, y: 0 }
-      }
+        position: { x: 100, y: 0 },
+        nodeId: "b"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "passage-threshold"
+      }]
     }]
   });
   const place = places.createPlace({

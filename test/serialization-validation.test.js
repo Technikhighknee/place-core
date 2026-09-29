@@ -7,6 +7,7 @@ import {
   deserializePlaceCore,
   validatePlaceCoreSnapshot,
   computePlaceCoreStateHash,
+  compilePlace,
   startTravel
 } from "../src/index.js";
 import { tavernBlueprint } from "./fixtures.js";

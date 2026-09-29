@@ -281,7 +281,7 @@ test("unidirectional same-domain portals require one-way a-to-b threshold roads"
       to: "b",
       bidirectional: true
     })),
-    /requires a one-way threshold road/
+    /unidirectional but its threshold roads allow reverse traversal/
   );
 
   assert.throws(
@@ -290,7 +290,7 @@ test("unidirectional same-domain portals require one-way a-to-b threshold roads"
       to: "a",
       bidirectional: false
     })),
-    /requires a one-way threshold road/
+    /threshold roads do not allow traversal from endpoint a to b/
   );
 });
 

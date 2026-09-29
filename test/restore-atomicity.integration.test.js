@@ -333,5 +333,8 @@ test("failed adopt restore preserves pre-existing domains bindings and road over
   );
 
   const secondNav = navigation.navigationForDomain("second:inside");
-  assert.equal(secondNav.overrideEffectCount, 0);
+  assert.equal(secondNav.roadCostMultiplier("road"), 1);
+  assert.equal(secondNav.roadTraversalDelaySeconds("road"), 0);
+  assert.equal(navigation.domainInstances.has("second:inside"), false);
+  assert.equal(navigation.getDiagnostics().overrideEffectCount, 1);
 });

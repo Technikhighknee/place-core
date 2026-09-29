@@ -446,8 +446,10 @@ test("snapshot validation rejects missing, duplicate, self and mixed-cycle membe
 test("failed place creation rolls semantic membership indexes back transactionally", () => {
   const bridge = {
     attachRegistry() {},
-    materializePlace() {
-      throw new Error("synthetic materialization failure");
+    materializePlace(instance) {
+      if (instance.id === "child") {
+        throw new Error("synthetic materialization failure");
+      }
     }
   };
 

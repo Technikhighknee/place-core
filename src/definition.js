@@ -594,7 +594,10 @@ export class CompiledPlaceDefinition {
 const EMPTY = Object.freeze([]);
 
 export function compilePlace(input, options = {}) {
-  const blueprint = definePlace(input);
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new TypeError("place blueprint is required");
+  }
+  const blueprint = input;
   assertStringId(blueprint.id, "place.id");
   const layersInput = requireArray(blueprint.layers, "place.layers");
   const spacesInput = requireArray(blueprint.spaces, "place.spaces");
