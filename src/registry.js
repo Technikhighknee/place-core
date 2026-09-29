@@ -3,7 +3,6 @@ import {
   DynamicPointIndex,
   geometryBounds,
   inverseTransformPoint,
-  composeTransforms,
   pointInGeometry,
   squaredDistance,
   squaredDistancePointToSegment,
@@ -21,6 +20,7 @@ import {
   normalizeStringList
 } from "./utils.js";
 import { PlaceInstance } from "./registry/place-instance.js";
+import { PlacementGraphIndex } from "./registry/placement-graph.js";
 import { SemanticGraphIndex } from "./registry/semantic-graph.js";
 import {
   PORTAL_STATE_KEYS,
@@ -57,7 +57,7 @@ export class PlaceRegistry {
   #domainBindingsView;
   #exteriorIndexes = new Map();
   #indexedExteriorDomains = new Map();
-  #placementChildren = new Map();
+  #placementGraph = new PlacementGraphIndex(this.#instances);
   #semanticGraph = new SemanticGraphIndex(this.#instances);
   #portalRecords = new Map();
   #portalsByDomain = new Map();
@@ -746,7 +746,7 @@ export class PlaceRegistry {
     this.#instances.set(instance.id, instance);
     this.#semanticGraph.registerPrimary(instance);
     this.#semanticGraph.registerMemberships(instance);
-    this.#registerPlacementDependency(instance);
+    this.#placementGraph.register(instance);
     for (const [layerId, domainId] of layerDomains) {
       this.#domainBindings.set(
         domainId,
@@ -852,8 +852,7 @@ export class PlaceRegistry {
       );
     }
 
-    const placementChildren = this.#placementChildren.get(instanceId);
-    if (placementChildren?.size) {
+    if (this.#placementGraph.hasChildren(instanceId)) {
       throw new Error(`cannot remove place ${String(instanceId)} while relative placements depend on it`);
     }
     const definition = this.#definitions.get(instance.definitionId);
@@ -866,7 +865,7 @@ export class PlaceRegistry {
     this.#unindexExterior(instance);
     this.#semanticGraph.unregisterPrimary(instance);
     this.#semanticGraph.unregisterMemberships(instance);
-    this.#unregisterPlacementDependency(instance);
+    this.#placementGraph.unregister(instance);
     this.#removeInstancePortals(instance.id);
     this.#semanticGraph.deleteCached(instance.id);
     this.#instances.delete(instance.id);
@@ -1216,21 +1215,21 @@ export class PlaceRegistry {
       if (!this.#instances.has(next.parentPlaceId)) {
         throw new Error(`unknown placement parent: ${String(next.parentPlaceId)}`);
       }
-      this.#assertPlacementParentDoesNotCycle(instanceId, next.parentPlaceId);
+      this.#placementGraph.assertParentDoesNotCycle(instanceId, next.parentPlaceId);
     }
 
-    const affected = this.#collectPlacementDescendants(instanceId);
+    const affected = this.#placementGraph.collectDescendants(instanceId);
     const affectedEntities = new Set(
       this.#collectTrackedEntitiesForIndexedPlaces(affected)
     );
     for (const id of affected) this.#unindexExterior(this.#instances.get(id));
 
-    this.#unregisterPlacementDependency(instance);
+    this.#placementGraph.unregister(instance);
     instance.setPlacement(
       next,
       PLACE_INSTANCE_MUTATION_TOKEN
     );
-    this.#registerPlacementDependency(instance);
+    this.#placementGraph.register(instance);
 
     for (const id of affected) {
       const child = this.#instances.get(id);
@@ -1256,7 +1255,7 @@ export class PlaceRegistry {
   getResolvedPlacement(instanceId) {
     const instance = this.#instances.get(instanceId);
     if (!instance) return null;
-    return this.#resolvePlacement(instanceId);
+    return this.#placementGraph.resolve(instanceId);
   }
 
   setParent(instanceId, parentId) {
@@ -1882,7 +1881,7 @@ export class PlaceRegistry {
         if (!instance?.placement || instance.placement.containment !== "footprint") continue;
         const definition = this.#definitions.get(instance.definitionId);
         if (!definition.footprint) continue;
-        const resolvedPlacement = this.#resolvePlacement(instance.id);
+        const resolvedPlacement = this.#placementGraph.resolve(instance.id);
         if (!resolvedPlacement || resolvedPlacement.domainId !== domainId) continue;
         const local = inverseTransformPoint(position, resolvedPlacement.transform);
         if (!pointInGeometry(local, definition.footprint)) continue;
@@ -2047,15 +2046,7 @@ export class PlaceRegistry {
       if (!definition) throw new Error(`instance ${String(instance.id)} references missing definition`);
       this.#semanticGraph.assertInstanceIndexed(instance);
 
-      if (instance.placement?.parentPlaceId != null) {
-        if (!this.#instances.has(instance.placement.parentPlaceId)) {
-          throw new Error(`instance ${String(instance.id)} references missing placement parent`);
-        }
-        this.#assertPlacementParentDoesNotCycle(instance.id, instance.placement.parentPlaceId);
-        if (!this.#placementChildren.get(instance.placement.parentPlaceId)?.has(instance.id)) {
-          throw new Error(`instance ${String(instance.id)} missing placement dependency index`);
-        }
-      }
+      this.#placementGraph.assertInstanceIndexed(instance);
     }
 
     this.#semanticGraph.assertConsistency();
@@ -2138,7 +2129,7 @@ export class PlaceRegistry {
 
   #indexExterior(instance, definition) {
     if (!instance?.placement || instance.placement.containment !== "footprint" || !definition?.footprint) return;
-    const resolved = this.#resolvePlacement(instance.id);
+    const resolved = this.#placementGraph.resolve(instance.id);
     if (!resolved) return;
     const localBounds = geometryBounds(definition.footprint);
     const bounds = transformBounds(localBounds, resolved.transform);
@@ -2158,79 +2149,6 @@ export class PlaceRegistry {
       if (index.size === 0) this.#exteriorIndexes.delete(domainId);
     }
     this.#indexedExteriorDomains.delete(instance.id);
-  }
-
-  #registerPlacementDependency(instance) {
-    const parentId = instance?.placement?.parentPlaceId;
-    if (parentId == null) return;
-    let children = this.#placementChildren.get(parentId);
-    if (!children) this.#placementChildren.set(parentId, children = new Set());
-    children.add(instance.id);
-  }
-
-  #unregisterPlacementDependency(instance) {
-    const parentId = instance?.placement?.parentPlaceId;
-    if (parentId == null) return;
-    const children = this.#placementChildren.get(parentId);
-    children?.delete(instance.id);
-    if (children?.size === 0) this.#placementChildren.delete(parentId);
-  }
-
-  #collectPlacementDescendants(instanceId) {
-    const result = [];
-    const queue = [instanceId];
-    const visited = new Set();
-    for (let i = 0; i < queue.length; i += 1) {
-      const id = queue[i];
-      if (visited.has(id)) throw new Error("placement dependency cycle");
-      visited.add(id);
-      result.push(id);
-      const children = this.#placementChildren.get(id);
-      if (children) queue.push(...[...children].sort((a, b) => typedIdKey(a).localeCompare(typedIdKey(b))));
-    }
-    return result;
-  }
-
-  #assertPlacementParentDoesNotCycle(instanceId, parentId) {
-    let cursorId = parentId;
-    const visited = new Set([typedIdKey(instanceId)]);
-    while (cursorId != null) {
-      const key = typedIdKey(cursorId);
-      if (visited.has(key)) throw new Error("place placement cycle");
-      visited.add(key);
-      const cursor = this.#instances.get(cursorId);
-      cursorId = cursor?.placement?.parentPlaceId ?? null;
-    }
-  }
-
-  #resolvePlacement(instanceId) {
-    const chain = [];
-    const visited = new Set();
-    let current = this.#instances.get(instanceId);
-    while (current?.placement) {
-      const key = typedIdKey(current.id);
-      if (visited.has(key)) throw new Error("place placement cycle");
-      visited.add(key);
-      chain.push(current.placement);
-      if (current.placement.domainId != null) break;
-      current = this.#instances.get(current.placement.parentPlaceId);
-    }
-
-    if (!chain.length || chain[chain.length - 1].domainId == null) return null;
-
-    const root = chain.pop();
-    let transform = root.transform;
-    const domainId = root.domainId;
-    while (chain.length) {
-      const child = chain.pop();
-      transform = composeTransforms(transform, child.transform);
-    }
-
-    return deepFreeze({
-      domainId,
-      transform,
-      containment: this.#instances.get(instanceId)?.placement?.containment ?? "none"
-    });
   }
 
   #portalKey(instanceId, portalId) { return `${typedIdKey(instanceId)}\u0000${portalId}`; }
