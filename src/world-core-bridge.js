@@ -147,6 +147,43 @@ export class WorldCoreBridge {
     return navigation.findRouteFromPosition(position, destinationNodeId, mobility, options);
   }
 
+  planLocalRouteCostsToMany({
+    domainId,
+    position,
+    destinationNodeIds,
+    mobility,
+    options
+  }) {
+    const navigation = this.navigationForDomain(domainId);
+    if (!navigation) return new Map();
+
+    const ids = [...new Set(destinationNodeIds ?? [])]
+      .filter((id) => id != null)
+      .sort();
+    if (!ids.length) return new Map();
+
+    if (typeof navigation.findRouteCostsFromPositionToMany === "function") {
+      return navigation.findRouteCostsFromPositionToMany(
+        position,
+        ids,
+        mobility,
+        options
+      );
+    }
+
+    const result = new Map();
+    for (const destinationNodeId of ids) {
+      const planned = navigation.findRouteFromPosition(
+        position,
+        destinationNodeId,
+        mobility,
+        options
+      );
+      if (planned) result.set(destinationNodeId, planned.estimatedSeconds);
+    }
+    return result;
+  }
+
   startLocalJourney(entityId, destinationNodeId, options) {
     return this.startJourneyFn(this.world, this.navigation, entityId, destinationNodeId, options);
   }
