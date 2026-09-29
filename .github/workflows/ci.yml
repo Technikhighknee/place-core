@@ -25,3 +25,7 @@ jobs:
         env:
           EXPLICIT_TRAVEL_PLACES: "5000"
           EXPLICIT_TRAVEL_QUERIES: "100"
+      - run: npm run bench:portal-spatial
+        env:
+          PORTAL_SPATIAL_PLACES: "5000"
+          PORTAL_SPATIAL_QUERIES: "1000"
