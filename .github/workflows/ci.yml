@@ -18,3 +18,6 @@ jobs:
       - run: npm run bench:guardrails
         env:
           GUARDRAIL_FAST: "1"
+      - run: npm run bench:nearest-target
+        env:
+          NEAREST_TARGET_PLACES: "5000"
