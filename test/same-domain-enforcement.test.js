@@ -311,3 +311,249 @@ test("dynamic road bindings require a topology-backed owner layer", () => {
     /road binding requires navigation topology/
   );
 });
+
+
+test("same-domain attachment binding must connect the actual resolved endpoint nodes", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "attachment-threshold-integrity",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 },
+          { id: "c", x: 0, y: 1 }
+        ],
+        roads: [
+          { id: "ab", from: "a", to: "b" },
+          { id: "ac", from: "a", to: "c" }
+        ]
+      }
+    }],
+    portals: [{
+      id: "door",
+      a: { kind: "external", slot: "outside" },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 1, y: 0 },
+        nodeId: "b"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "ac"
+      }]
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "hall",
+    definitionId: "attachment-threshold-integrity"
+  });
+  const domainId = place.layerDomains.get("inside");
+  const beforeState = places.stateRevision;
+  const beforeTravel = places.travelRevision;
+
+  assert.throws(
+    () => places.setAttachment("hall", "outside", {
+      domainId,
+      position: { x: 0, y: 0 },
+      nodeId: "a"
+    }),
+    /does not connect its endpoint nodes/
+  );
+
+  assert.equal(place.attachments.has("outside"), false);
+  assert.equal(places.stateRevision, beforeState);
+  assert.equal(places.travelRevision, beforeTravel);
+  places.assertInternalConsistency();
+});
+
+test("same-domain attachment with a threshold binding requires both endpoint node IDs", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "attachment-threshold-node-ids",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 }
+        ],
+        roads: [{
+          id: "ab",
+          from: "a",
+          to: "b"
+        }]
+      }
+    }],
+    portals: [{
+      id: "door",
+      a: { kind: "external", slot: "outside" },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 1, y: 0 },
+        nodeId: "b"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "ab"
+      }]
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "hall",
+    definitionId: "attachment-threshold-node-ids"
+  });
+  const domainId = place.layerDomains.get("inside");
+
+  assert.throws(
+    () => places.setAttachment("hall", "outside", {
+      domainId,
+      position: { x: 0, y: 0 }
+    }),
+    /requires nodeId on both endpoints/
+  );
+
+  assert.equal(place.attachments.has("outside"), false);
+});
+
+test("bidirectional portal rejects a one-way threshold road", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "bad-bidirectional-threshold",
+      layers: [{
+        id: "inside",
+        navigation: {
+          nodes: [
+            { id: "a", x: 0, y: 0 },
+            { id: "b", x: 1, y: 0 }
+          ],
+          roads: [{
+            id: "ab",
+            from: "a",
+            to: "b",
+            bidirectional: false
+          }]
+        }
+      }],
+      portals: [{
+        id: "door",
+        a: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 0, y: 0 },
+          nodeId: "a"
+        },
+        b: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 1, y: 0 },
+          nodeId: "b"
+        },
+        roadBindings: [{
+          layerId: "inside",
+          roadId: "ab"
+        }]
+      }]
+    }),
+    /bidirectional but its threshold roads do not allow traversal from endpoint b to a/
+  );
+});
+
+test("unidirectional portal rejects a threshold road that permits reverse traversal", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "bad-one-way-threshold",
+      layers: [{
+        id: "inside",
+        navigation: {
+          nodes: [
+            { id: "a", x: 0, y: 0 },
+            { id: "b", x: 1, y: 0 }
+          ],
+          roads: [{
+            id: "ab",
+            from: "a",
+            to: "b",
+            bidirectional: true
+          }]
+        }
+      }],
+      portals: [{
+        id: "gate",
+        bidirectional: false,
+        a: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 0, y: 0 },
+          nodeId: "a"
+        },
+        b: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 1, y: 0 },
+          nodeId: "b"
+        },
+        roadBindings: [{
+          layerId: "inside",
+          roadId: "ab"
+        }]
+      }]
+    }),
+    /unidirectional but its threshold roads allow reverse traversal/
+  );
+});
+
+test("bidirectional portal can use opposite one-way threshold roads", () => {
+  const definition = compilePlace({
+    id: "paired-one-way-thresholds",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 }
+        ],
+        roads: [
+          {
+            id: "ab",
+            from: "a",
+            to: "b",
+            bidirectional: false
+          },
+          {
+            id: "ba",
+            from: "b",
+            to: "a",
+            bidirectional: false
+          }
+        ]
+      }
+    }],
+    portals: [{
+      id: "door",
+      a: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        nodeId: "a"
+      },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 1, y: 0 },
+        nodeId: "b"
+      },
+      roadBindings: [
+        { layerId: "inside", roadId: "ab" },
+        { layerId: "inside", roadId: "ba" }
+      ]
+    }]
+  });
+
+  assert.equal(definition.getPortal("door").bidirectional, true);
+});
