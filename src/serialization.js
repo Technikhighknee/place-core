@@ -5,13 +5,18 @@ import { startTravel } from "./travel.js";
 
 export const PLACE_CORE_SNAPSHOT_VERSION = 1;
 
+function canonicalClone(value) {
+  if (value === undefined) return undefined;
+  return JSON.parse(canonicalStringify(value));
+}
+
 function mapToObject(map) {
-  return Object.fromEntries(map.entries());
+  return canonicalClone(Object.fromEntries(map.entries()));
 }
 
 function serializePlan(plan) {
   if (!plan) return null;
-  const copy = cloneJson(plan);
+  const copy = canonicalClone(plan);
   delete copy.travelRevision;
   delete copy.graphRevision;
   return copy;
@@ -20,7 +25,7 @@ function serializePlan(plan) {
 function serializeTravelState(state) {
   return {
     entityId: state.entityId,
-    target: cloneJson(state.target),
+    target: canonicalClone(state.target),
     plan: serializePlan(state.plan),
     stepIndex: state.stepIndex,
     localStarted: state.localStarted === true,
@@ -44,7 +49,7 @@ export function serializePlaceCore(registry) {
         id: definition.id,
         revision: definition.revision,
         contentHash: definition.contentHash,
-        blueprint: definition.getBlueprint()
+        blueprint: canonicalClone(definition.getBlueprint())
       }))
       .sort((a, b) => a.id.localeCompare(b.id)),
     instances: [...registry.instances.values()]
@@ -54,13 +59,13 @@ export function serializePlaceCore(registry) {
         parentId: instance.parentId,
         layerDomains: mapToObject(instance.layerDomains),
         attachments: mapToObject(instance.attachments),
-        placement: cloneJson(instance.placement),
-        metadata: cloneJson(instance.metadata),
+        placement: canonicalClone(instance.placement),
+        metadata: canonicalClone(instance.metadata),
         portalOverrides: mapToObject(instance.portalOverrides),
         boundaryOverrides: mapToObject(instance.boundaryOverrides),
         spaceOverrides: mapToObject(instance.spaceOverrides),
         dynamicPortals: [...instance.dynamicPortals.values()]
-          .map(cloneJson)
+          .map(canonicalClone)
           .sort((a, b) => a.id.localeCompare(b.id))
       }))
       .sort((a, b) => idKey(a.id).localeCompare(idKey(b.id))),
@@ -68,7 +73,7 @@ export function serializePlaceCore(registry) {
       .filter((state) => state.status === "active")
       .map(serializeTravelState)
       .sort((a, b) => idKey(a.entityId).localeCompare(idKey(b.entityId))),
-    pendingTravels: registry.pendingTravels.map(cloneJson)
+    pendingTravels: registry.pendingTravels.map(canonicalClone)
   };
 }
 
