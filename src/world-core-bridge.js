@@ -325,15 +325,46 @@ export class WorldCoreBridge {
 
   syncPortalState(instance, portalDefinition, resolvedPortal) {
     if (!portalDefinition?.roadBindings?.length) return;
+
     const blocked = !isPortalTraversable(resolvedPortal);
-    const effectId = `place-core:${String(instance.id)}:${portalDefinition.id}`;
+    const sameDomain = Boolean(
+      resolvedPortal?.connected &&
+      resolvedPortal.a?.domainId != null &&
+      resolvedPortal.a.domainId === resolvedPortal.b?.domainId
+    );
+    const traversalDelaySeconds = sameDomain
+      ? Math.max(0, Number(resolvedPortal.transitionCost ?? 0))
+      : 0;
+
+    if (!Number.isFinite(traversalDelaySeconds)) {
+      throw new RangeError(
+        `portal ${portalDefinition.id} transitionCost must be finite`
+      );
+    }
+
+    const effectId =
+      `place-core:${String(instance.id)}:${portalDefinition.id}`;
+
     for (const binding of portalDefinition.roadBindings) {
       const domainId = instance.layerDomains.get(binding.layerId);
       if (!domainId) continue;
-      if (blocked) {
-        this.navigation.setDomainRoadEffect?.(domainId, effectId, binding.roadId, { blocked: true });
+
+      if (blocked || traversalDelaySeconds > 0) {
+        this.navigation.setDomainRoadEffect?.(
+          domainId,
+          effectId,
+          binding.roadId,
+          {
+            blocked,
+            traversalDelaySeconds
+          }
+        );
       } else {
-        this.navigation.removeDomainRoadEffect?.(domainId, effectId, binding.roadId);
+        this.navigation.removeDomainRoadEffect?.(
+          domainId,
+          effectId,
+          binding.roadId
+        );
       }
     }
   }
