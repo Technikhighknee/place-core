@@ -612,3 +612,44 @@ test("PlaceInstance cannot bypass registry-managed semantic membership invariant
   );
   places.assertInternalConsistency();
 });
+
+
+test("semantic closure cache invalidates transitively for descendant places", () => {
+  const places = registry();
+
+  add(places, "ward");
+  add(places, "tavern");
+  add(places, "cellar", {
+    parentId: "tavern"
+  });
+
+  assert.deepEqual(
+    places.getSemanticAncestors("cellar"),
+    ["tavern"]
+  );
+  assert.ok(
+    places.getDiagnostics().semanticClosureCacheSize > 0
+  );
+
+  places.addMembership("tavern", {
+    parentPlaceId: "ward",
+    kind: "district"
+  });
+
+  assert.deepEqual(
+    places.getSemanticAncestors("cellar"),
+    ["ward", "tavern"]
+  );
+
+  places.removeMembership(
+    "tavern",
+    "ward",
+    "district"
+  );
+
+  assert.deepEqual(
+    places.getSemanticAncestors("cellar"),
+    ["tavern"]
+  );
+  places.assertInternalConsistency();
+});
