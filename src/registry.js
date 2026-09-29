@@ -20,6 +20,7 @@ import {
   normalizeStringList
 } from "./utils.js";
 import { PlaceInstance } from "./registry/place-instance.js";
+import { OccupancyIndex } from "./registry/occupancy-index.js";
 import { PlacementGraphIndex } from "./registry/placement-graph.js";
 import { SemanticGraphIndex } from "./registry/semantic-graph.js";
 import {
@@ -40,7 +41,6 @@ import {
   typedIdKey,
   membershipKey,
   normalizeMembership,
-  makeSpaceKey,
   cloneState,
   portalTraversableState,
   validateResolvedPortalRoadBindings
@@ -66,10 +66,7 @@ export class PlaceRegistry {
   #portalEndpointRecords = new Map();
   #portalsByRoad = new Map();
   #instancePortalKeys = new Map();
-  #occupancy = new Map();
-  #occupancySpatialIndexes = new Map();
-  #entitiesByPlace = new Map();
-  #entitiesBySpace = new Map();
+  #occupancyIndex;
   #events;
   #captureEvents;
   #bridge = null;
@@ -108,6 +105,11 @@ export class PlaceRegistry {
     this.#events = new BoundedEventQueue({
       limit: options.eventQueueLimit ?? 10_000,
       overflowPolicy: options.eventOverflowPolicy ?? "drop-newest"
+    });
+    this.#occupancyIndex = new OccupancyIndex({
+      locate: (domainId, position) =>
+        this.locate(domainId, position),
+      emit: (type, data) => this.emit(type, data)
     });
     if (options.bridge) this.attachWorldCoreBridge(options.bridge);
   }
@@ -818,7 +820,7 @@ export class PlaceRegistry {
     }
 
     this.#touchState({ travel: true });
-    this.#refreshTrackedOccupancy(
+    this.#occupancyIndex.refresh(
       this.#collectTrackedEntitiesForIndexedPlaces([instance.id])
     );
     this.emit("place-created", { placeId: instance.id, definitionId: definition.id });
@@ -856,7 +858,7 @@ export class PlaceRegistry {
       throw new Error(`cannot remove place ${String(instanceId)} while relative placements depend on it`);
     }
     const definition = this.#definitions.get(instance.definitionId);
-    if (callBridge && this.#entitiesByPlace.get(instanceId)?.size) {
+    if (callBridge && this.#occupancyIndex.hasInPlace(instanceId)) {
       throw new Error(`cannot remove occupied place ${String(instanceId)}`);
     }
     if (callBridge) this.#bridge?.unmaterializePlace?.(instance, definition);
@@ -1010,7 +1012,7 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     const space = definition.getSpace(spaceId);
     if (!space) throw new Error(`unknown space ${spaceId} on place ${String(instanceId)}`);
-    const affectedEntities = [...(this.#entitiesByPlace.get(instanceId) ?? [])];
+    const affectedEntities = [...this.#occupancyIndex.entitiesInPlace(instanceId)];
     const baseEnabled = true;
     const currentEnabled = instance.getSpaceOverride(spaceId)?.enabled ?? baseEnabled;
     const enabled = normalizeBoolean(
@@ -1026,7 +1028,7 @@ export class PlaceRegistry {
       PLACE_INSTANCE_MUTATION_TOKEN
     );
     this.#touchState({ travel: true });
-    this.#refreshTrackedOccupancy(affectedEntities);
+    this.#occupancyIndex.refresh(affectedEntities);
     this.emit("space-state-changed", { placeId: instanceId, spaceId, enabled });
     return { ...space, enabled };
   }
@@ -1242,7 +1244,7 @@ export class PlaceRegistry {
     }
 
     this.#touchState();
-    this.#refreshTrackedOccupancy(affectedEntities);
+    this.#occupancyIndex.refresh(affectedEntities);
     this.emit("place-placement-changed", {
       placeId: instanceId,
       placement: cloneJson(instance.placement),
@@ -1286,7 +1288,7 @@ export class PlaceRegistry {
     if (instance.parentId === (parentId ?? null)) {
       return instance;
     }
-    const affectedEntities = [...(this.#entitiesByPlace.get(instanceId) ?? [])];
+    const affectedEntities = [...this.#occupancyIndex.entitiesInPlace(instanceId)];
     this.#semanticGraph.unregisterPrimary(instance);
     instance.setParentId(
       parentId ?? null,
@@ -1297,7 +1299,7 @@ export class PlaceRegistry {
       instanceId
     );
     this.#touchState();
-    this.#refreshTrackedOccupancy(affectedEntities);
+    this.#occupancyIndex.refresh(affectedEntities);
     this.emit("place-parent-changed", {
       placeId: instanceId,
       parentId: instance.parentId
@@ -1356,7 +1358,7 @@ export class PlaceRegistry {
     );
 
     const affectedEntities = [
-      ...(this.#entitiesByPlace.get(instanceId) ?? [])
+      ...this.#occupancyIndex.entitiesInPlace(instanceId)
     ];
 
     instance.addMembership(
@@ -1372,7 +1374,7 @@ export class PlaceRegistry {
     );
 
     this.#touchState();
-    this.#refreshTrackedOccupancy(affectedEntities);
+    this.#occupancyIndex.refresh(affectedEntities);
     this.emit("place-membership-added", {
       placeId: instanceId,
       membership
@@ -1398,7 +1400,7 @@ export class PlaceRegistry {
     if (!membership) return false;
 
     const affectedEntities = [
-      ...(this.#entitiesByPlace.get(instanceId) ?? [])
+      ...this.#occupancyIndex.entitiesInPlace(instanceId)
     ];
 
     instance.removeMembership(
@@ -1415,7 +1417,7 @@ export class PlaceRegistry {
     );
 
     this.#touchState();
-    this.#refreshTrackedOccupancy(affectedEntities);
+    this.#occupancyIndex.refresh(affectedEntities);
     this.emit("place-membership-removed", {
       placeId: instanceId,
       membership
@@ -1913,45 +1915,33 @@ export class PlaceRegistry {
 
   updateEntityOccupancy(entity) {
     assertId(entity?.id, "entity.id");
-    const next = this.locateEntity(entity);
-    const previous = this.#occupancy.get(entity.id) ?? null;
-
-    if (previous && this.#sameLocation(previous, next)) {
-      this.#unindexOccupancyPoint(entity.id, previous);
-      this.#occupancy.set(entity.id, next);
-      this.#indexOccupancyPoint(entity.id, next);
-      return next;
-    }
-
-    if (previous) {
-      this.#removeOccupancy(entity.id, previous);
-      this.#unindexOccupancyPoint(entity.id, previous);
-    }
-
-    this.#occupancy.set(entity.id, next);
-    this.#addOccupancy(entity.id, next);
-    this.#indexOccupancyPoint(entity.id, next);
-    this.#emitLocationTransitions(entity.id, previous, next);
-    return next;
+    return this.#occupancyIndex.update(
+      entity.id,
+      this.locateEntity(entity)
+    );
   }
 
   removeEntityOccupancy(entityId) {
-    const previous = this.#occupancy.get(entityId);
-    if (!previous) return false;
-    this.#removeOccupancy(entityId, previous);
-    this.#unindexOccupancyPoint(entityId, previous);
-    this.#occupancy.delete(entityId);
-    this.#emitLocationTransitions(entityId, previous, null);
-    return true;
+    return this.#occupancyIndex.remove(entityId);
   }
 
-  getEntityLocation(entityId) { return this.#occupancy.get(entityId) ?? null; }
-  entitiesInPlace(instanceId) { return new Set(this.#entitiesByPlace.get(instanceId) ?? []); }
-  entitiesInSpace(instanceId, spaceId) { return new Set(this.#entitiesBySpace.get(makeSpaceKey(instanceId, spaceId)) ?? []); }
+  getEntityLocation(entityId) {
+    return this.#occupancyIndex.get(entityId);
+  }
+
+  entitiesInPlace(instanceId) {
+    return this.#occupancyIndex.entitiesInPlace(instanceId);
+  }
+
+  entitiesInSpace(instanceId, spaceId) {
+    return this.#occupancyIndex.entitiesInSpace(
+      instanceId,
+      spaceId
+    );
+  }
 
   clearEntityOccupancyForPlace(instanceId) {
-    const entities = [...(this.#entitiesByPlace.get(instanceId) ?? [])];
-    for (const entityId of entities) this.removeEntityOccupancy(entityId);
+    this.#occupancyIndex.clearPlace(instanceId);
   }
 
   emit(type, data = {}) {
@@ -2025,8 +2015,9 @@ export class PlaceRegistry {
       boundaryOverrideCount,
       spaceOverrideCount,
       dynamicPortalCount,
-      occupiedEntityCount: this.#occupancy.size,
-      occupancySpatialDomainCount: this.#occupancySpatialIndexes.size,
+      occupiedEntityCount: this.#occupancyIndex.size,
+      occupancySpatialDomainCount:
+        this.#occupancyIndex.spatialDomainCount,
       stateRevision: this.#stateRevision,
       travelRevision: this.#travelRevision,
       footprintIndexCells,
@@ -2278,130 +2269,28 @@ export class PlaceRegistry {
     return chain.reverse();
   }
 
-  #sameLocation(a, b) {
-    if (!a || !b || a.domainId !== b.domainId) {
-      return false;
-    }
-
-    if (a.places.length !== b.places.length ||
-        a.semanticPlaces.length !== b.semanticPlaces.length ||
-        a.spaces.length !== b.spaces.length) {
-      return false;
-    }
-
-    for (let i = 0; i < a.places.length; i += 1) {
-      if (a.places[i] !== b.places[i]) return false;
-    }
-    for (let i = 0; i < a.semanticPlaces.length; i += 1) {
-      if (a.semanticPlaces[i] !== b.semanticPlaces[i]) {
-        return false;
-      }
-    }
-    for (let i = 0; i < a.spaces.length; i += 1) {
-      if (a.spaces[i].placeId !== b.spaces[i].placeId ||
-          a.spaces[i].spaceId !== b.spaces[i].spaceId) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   #collectTrackedEntitiesForIndexedPlaces(instanceIds) {
     const result = new Set();
+
     for (const instanceId of instanceIds) {
-      const domainId = this.#indexedExteriorDomains.get(instanceId);
+      const domainId =
+        this.#indexedExteriorDomains.get(instanceId);
       if (domainId == null) continue;
-      const bounds = this.#exteriorIndexes.get(domainId)?.getBounds(instanceId);
+
+      const bounds = this.#exteriorIndexes
+        .get(domainId)
+        ?.getBounds(instanceId);
       if (!bounds) continue;
-      for (const entityId of this.#trackedEntitiesInBounds(domainId, bounds)) {
+
+      for (const entityId of
+        this.#occupancyIndex.queryBounds(domainId, bounds)) {
         result.add(entityId);
       }
     }
+
     return [...result];
   }
 
-  #indexOccupancyPoint(entityId, location) {
-    let index = this.#occupancySpatialIndexes.get(location.domainId);
-    if (!index) {
-      this.#occupancySpatialIndexes.set(
-        location.domainId,
-        index = new DynamicAabbIndex()
-      );
-    }
-    const { x, y } = location.position;
-    index.set(entityId, { minX: x, minY: y, maxX: x, maxY: y });
-  }
-
-  #unindexOccupancyPoint(entityId, location) {
-    const index = this.#occupancySpatialIndexes.get(location.domainId);
-    if (!index) return;
-    index.delete(entityId);
-    if (index.size === 0) this.#occupancySpatialIndexes.delete(location.domainId);
-  }
-
-  #refreshTrackedOccupancy(entityIds) {
-    for (const entityId of [...new Set(entityIds)]) {
-      const previous = this.#occupancy.get(entityId);
-      if (!previous) continue;
-      const next = this.locate(previous.domainId, previous.position);
-      if (this.#sameLocation(previous, next)) {
-        this.#occupancy.set(entityId, next);
-        continue;
-      }
-      this.#removeOccupancy(entityId, previous);
-      this.#occupancy.set(entityId, next);
-      this.#addOccupancy(entityId, next);
-      this.#emitLocationTransitions(entityId, previous, next);
-    }
-  }
-
-  #trackedEntitiesInBounds(domainId, bounds) {
-    return this.#occupancySpatialIndexes.get(domainId)?.queryBounds(bounds) ?? [];
-  }
-
-  #addOccupancy(entityId, location) {
-    for (const placeId of location.semanticPlaces) {
-      let set = this.#entitiesByPlace.get(placeId);
-      if (!set) this.#entitiesByPlace.set(placeId, set = new Set());
-      set.add(entityId);
-    }
-    for (const space of location.spaces) {
-      const key = makeSpaceKey(space.placeId, space.spaceId);
-      let set = this.#entitiesBySpace.get(key);
-      if (!set) this.#entitiesBySpace.set(key, set = new Set());
-      set.add(entityId);
-    }
-  }
-
-  #removeOccupancy(entityId, location) {
-    for (const placeId of location.semanticPlaces) {
-      const set = this.#entitiesByPlace.get(placeId);
-      set?.delete(entityId);
-      if (set?.size === 0) this.#entitiesByPlace.delete(placeId);
-    }
-    for (const space of location.spaces) {
-      const key = makeSpaceKey(space.placeId, space.spaceId);
-      const set = this.#entitiesBySpace.get(key);
-      set?.delete(entityId);
-      if (set?.size === 0) this.#entitiesBySpace.delete(key);
-    }
-  }
-
-  #emitLocationTransitions(entityId, previous, next) {
-    const beforePlaces = new Set(
-      previous?.semanticPlaces ?? []
-    );
-    const afterPlaces = new Set(
-      next?.semanticPlaces ?? []
-    );
-    for (const placeId of beforePlaces) if (!afterPlaces.has(placeId)) this.emit("place-leave", { entityId, placeId });
-    for (const placeId of afterPlaces) if (!beforePlaces.has(placeId)) this.emit("place-enter", { entityId, placeId });
-
-    const beforeSpaces = new Map((previous?.spaces ?? []).map((x) => [makeSpaceKey(x.placeId, x.spaceId), x]));
-    const afterSpaces = new Map((next?.spaces ?? []).map((x) => [makeSpaceKey(x.placeId, x.spaceId), x]));
-    for (const [key, value] of beforeSpaces) if (!afterSpaces.has(key)) this.emit("space-leave", { entityId, ...value });
-    for (const [key, value] of afterSpaces) if (!beforeSpaces.has(key)) this.emit("space-enter", { entityId, ...value });
-  }
 }
 
 export function isPortalTraversable(portal) {
