@@ -132,35 +132,35 @@ test("numeric and string place IDs do not collide in portal or occupancy indexes
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "id-place",
-    layers: [{ id: "ground" }],
+    layers: [{ id: "a" }, { id: "b" }],
     spaces: [{
       id: "room",
-      layerId: "ground",
+      layerId: "a",
       geometry: { type: "aabb", minX: 0, minY: 0, maxX: 2, maxY: 2 }
     }],
     portals: [{
       id: "door",
-      a: { kind: "local", layerId: "ground", position: { x: 0, y: 0 } },
-      b: { kind: "resolved", domainId: "outside", position: { x: 0, y: 0 } }
+      a: { kind: "local", layerId: "a", position: { x: 0, y: 0 } },
+      b: { kind: "local", layerId: "b", position: { x: 0, y: 0 } }
     }]
   });
 
   places.createPlace({
     id: 1,
     definitionId: "id-place",
-    layerDomains: { ground: "number-one" }
+    layerDomains: { a: "number-a", b: "number-b" }
   });
   places.createPlace({
     id: "1",
     definitionId: "id-place",
-    layerDomains: { ground: "string-one" }
+    layerDomains: { a: "string-a", b: "string-b" }
   });
 
-  assert.equal(places.getPortalsForDomain("number-one").length, 1);
-  assert.equal(places.getPortalsForDomain("string-one").length, 1);
+  assert.equal(places.getPortalsForDomain("number-a").length, 1);
+  assert.equal(places.getPortalsForDomain("string-a").length, 1);
 
-  places.updateEntityOccupancy({ id: "n", domainId: "number-one", position: { x: 1, y: 1 } });
-  places.updateEntityOccupancy({ id: "s", domainId: "string-one", position: { x: 1, y: 1 } });
+  places.updateEntityOccupancy({ id: "n", domainId: "number-a", position: { x: 1, y: 1 } });
+  places.updateEntityOccupancy({ id: "s", domainId: "string-a", position: { x: 1, y: 1 } });
   assert.deepEqual([...places.entitiesInSpace(1, "room")], ["n"]);
   assert.deepEqual([...places.entitiesInSpace("1", "room")], ["s"]);
 });
