@@ -637,3 +637,130 @@ test("unknown top-level authoring fields do not affect runtime definition identi
     false
   );
 });
+
+
+test("definition authoring collections must be arrays", () => {
+  const cases = [
+    ["layers", "not-an-array"],
+    ["spaces", {}],
+    ["boundaries", "walls"],
+    ["portals", {}],
+    ["anchors", "targets"]
+  ];
+
+  for (const [field, value] of cases) {
+    assert.throws(
+      () => compilePlace({
+        id: `bad-${field}`,
+        [field]: value
+      }),
+      new RegExp(`place\\.${field} must be an array`)
+    );
+  }
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-nav-arrays",
+      layers: [{
+        id: "inside",
+        navigation: {
+          nodes: {},
+          roads: []
+        }
+      }]
+    }),
+    /navigation\.nodes must be an array/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-bindings",
+      layers: [{ id: "inside" }],
+      boundaries: [{
+        id: "wall",
+        layerId: "inside",
+        a: { x: 0, y: 0 },
+        b: { x: 1, y: 0 },
+        roadBindings: {}
+      }]
+    }),
+    /roadBindings must be an array/
+  );
+});
+
+test("all semantic kind fields require non-empty strings", () => {
+  const mutations = [
+    (blueprint) => { blueprint.layers[0].kind = 1; },
+    (blueprint) => { blueprint.spaces[0].kind = ""; },
+    (blueprint) => { blueprint.boundaries[0].kind = {}; },
+    (blueprint) => { blueprint.portals[0].kind = 42; },
+    (blueprint) => { blueprint.anchors[0].kind = []; }
+  ];
+
+  for (const mutate of mutations) {
+    const blueprint = tavernBlueprint();
+    mutate(blueprint);
+    assert.throws(
+      () => compilePlace(blueprint),
+      /kind must be a non-empty string/
+    );
+  }
+});
+
+test("optional semantic reference IDs are type-checked even without navigation", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "bad-parent-id",
+      layers: [{ id: "inside" }],
+      spaces: [{
+        id: "room",
+        layerId: "inside",
+        parentSpaceId: 123,
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: 0,
+          maxX: 1,
+          maxY: 1
+        }
+      }]
+    }),
+    /parentSpaceId must be a non-empty string/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-anchor-node",
+      layers: [{ id: "inside" }],
+      anchors: [{
+        id: "target",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        nodeId: 123
+      }]
+    }),
+    /nodeId must be a non-empty string/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-portal-node",
+      layers: [{ id: "inside" }, { id: "other" }],
+      portals: [{
+        id: "stairs",
+        a: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 0, y: 0 },
+          nodeId: {}
+        },
+        b: {
+          kind: "local",
+          layerId: "other",
+          position: { x: 0, y: 0 }
+        }
+      }]
+    }),
+    /nodeId must be a non-empty string/
+  );
+});
