@@ -511,6 +511,13 @@ export class WorldCoreBridge {
     mobility: any;
     options?: any;
   }): any;
+  planLocalRouteCostsToMany(input: {
+    domainId: string;
+    position: Vec2;
+    destinationNodeIds: Iterable<string>;
+    mobility: any;
+    options?: any;
+  }): Map<string, number>;
   startLocalJourney(entityId: EntityId, destinationNodeId: string, options?: any): boolean;
   stopLocalJourney(entityId: EntityId): void;
   transferEntity(entityId: EntityId, endpoint: ResolvedPortalEndpoint): any;
