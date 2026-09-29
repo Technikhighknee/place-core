@@ -222,6 +222,7 @@ export class CompiledPlaceDefinition {
   getPortalsForLayer(id: string): readonly PlacePortalInput[];
   getBlueprint(): PlaceDefinitionInput;
   locateSpaces(layerId: string, position: Vec2): CompiledPlaceSpace[];
+  primarySpaceAt(layerId: string, position: Vec2): CompiledPlaceSpace | null;
   getDiagnostics(): {
     layerCount: number;
     spaceCount: number;
