@@ -441,3 +441,45 @@ test("snapshot validation rejects missing, duplicate, self and mixed-cycle membe
     /semantic membership cycle/
   );
 });
+
+
+test("failed place creation rolls semantic membership indexes back transactionally", () => {
+  const bridge = {
+    attachRegistry() {},
+    materializePlace() {
+      throw new Error("synthetic materialization failure");
+    }
+  };
+
+  const places = registry({ bridge });
+  add(places, "parent");
+
+  const stateRevision = places.stateRevision;
+  const travelRevision = places.travelRevision;
+
+  assert.throws(
+    () => add(places, "child", {
+      memberships: [{
+        parentPlaceId: "parent",
+        kind: "district"
+      }]
+    }),
+    /synthetic materialization failure/
+  );
+
+  assert.equal(places.getPlace("child"), null);
+  assert.equal(places.getDiagnostics().semanticMembershipCount, 0);
+  assert.equal(
+    places.getDiagnostics().semanticMembershipParentCount,
+    0
+  );
+  assert.equal(places.stateRevision, stateRevision);
+  assert.equal(places.travelRevision, travelRevision);
+
+  assert.equal(
+    places.removePlace("parent"),
+    true,
+    "rolled-back membership must not leave a ghost removal guard"
+  );
+  places.assertInternalConsistency();
+});
