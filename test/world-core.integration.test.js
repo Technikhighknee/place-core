@@ -139,7 +139,8 @@ test("locked portal invalidates an active plan and deterministic replan fails cl
     places,
     bridge,
     "hans",
-    { placeId: "golden-goose", anchorId: "barrel" }
+    { placeId: "golden-goose", anchorId: "barrel" },
+    { worldChangePolicy: "eager" }
   );
   assert.ok(state);
 
@@ -150,6 +151,54 @@ test("locked portal invalidates an active plan and deterministic replan fails cl
 
   assert.equal(places.activeTravels.has("hans"), false);
   const events = places.drainEvents();
+  assert.ok(events.some((event) =>
+    event.type === "travel-failed" &&
+    event.reason === "no-route-after-world-change"
+  ));
+});
+
+
+test("encounter policy discovers a locked portal only when the traveler reaches it", () => {
+  const { world, navigation, bridge, places } = buildIntegratedWorld();
+
+  const state = startTravel(
+    places,
+    bridge,
+    "hans",
+    { placeId: "golden-goose", anchorId: "barrel" },
+    { worldChangePolicy: "encounter" }
+  );
+  assert.ok(state);
+  assert.equal(state.worldChangePolicy, "encounter");
+
+  places.setPortalState("golden-goose", "cellar-stairs", { locked: true });
+
+  stepSimulation(world, navigation, 1);
+  stepPlaceSimulation(places, bridge, 1);
+
+  assert.equal(
+    places.activeTravels.has("hans"),
+    true,
+    "encounter policy must not telepathically invalidate the trip"
+  );
+
+  let ticks = 1;
+  while (places.activeTravels.has("hans") && ticks < 300) {
+    stepSimulation(world, navigation, 1);
+    stepPlaceSimulation(places, bridge, 1);
+    ticks += 1;
+  }
+
+  assert.ok(ticks < 300);
+  assert.equal(places.activeTravels.has("hans"), false);
+
+  const events = places.drainEvents();
+  const obstacle = events.find((event) =>
+    event.type === "travel-obstacle-encountered" &&
+    event.portalId === "cellar-stairs"
+  );
+  assert.ok(obstacle, "traveler should encounter the locked cellar stairs");
+  assert.equal(obstacle.state.locked, true);
   assert.ok(events.some((event) =>
     event.type === "travel-failed" &&
     event.reason === "no-route-after-world-change"
