@@ -415,3 +415,98 @@ test("nearest semantic target supports external availability predicates", () => 
   assert.ok(plan);
   assert.equal(plan.resolvedTarget.placeId, "open-shop");
 });
+
+
+test("nearest semantic target batches thousands of portal costs per domain", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "batch-house",
+    layers: [{ id: "inside" }],
+    portals: [{
+      id: "door",
+      a: { kind: "external", slot: "street" },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        nodeId: "door"
+      }
+    }],
+    anchors: [{
+      id: "bed",
+      layerId: "inside",
+      tags: ["bed"],
+      position: { x: 5, y: 0 },
+      nodeId: "bed"
+    }]
+  });
+
+  const count = 2_000;
+  for (let i = 0; i < count; i += 1) {
+    places.createPlace({
+      id: `house-${i}`,
+      definitionId: "batch-house",
+      attachments: {
+        street: {
+          domainId: "street",
+          position: { x: i + 1, y: 0 },
+          nodeId: `street-door-${i}`
+        }
+      }
+    });
+  }
+
+  const entity = {
+    id: "hans",
+    domainId: "street",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  let batchCalls = 0;
+  let singleCalls = 0;
+  let largestBatch = 0;
+
+  const bridge = {
+    getEntity(id) { return id === "hans" ? entity : null; },
+    planLocalRouteCostsToMany({ domainId, destinationNodeIds }) {
+      batchCalls += 1;
+      const ids = [...destinationNodeIds];
+      largestBatch = Math.max(largestBatch, ids.length);
+      const result = new Map();
+      if (domainId === "street") {
+        for (const id of ids) {
+          const match = /^street-door-(\d+)$/.exec(id);
+          if (match) result.set(id, Number(match[1]) + 1);
+        }
+      } else {
+        for (const id of ids) {
+          if (id === "bed") result.set(id, 5);
+          else if (id === "door") result.set(id, 0);
+        }
+      }
+      return result;
+    },
+    planLocalRoute() {
+      singleCalls += 1;
+      throw new Error("single-target routing should not be used when batching exists");
+    },
+    startLocalJourney() { return true; },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans",
+    { kind: "nearest", tag: "bed" }
+  );
+
+  assert.ok(plan);
+  assert.equal(plan.resolvedTarget.placeId, "house-0");
+  assert.equal(plan.estimatedSeconds, 6);
+  assert.equal(singleCalls, 0);
+  assert.ok(largestBatch >= count);
+  assert.ok(batchCalls < 20, `expected bounded batch calls, got ${batchCalls}`);
+});
