@@ -417,6 +417,138 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
   return { plan: best, failedPair: null };
 }
 
+
+function computeReverseDomainDistances(registry, targetDomainId, options = {}) {
+  const distances = new Map([[targetDomainId, 0]]);
+  const queue = [targetDomainId];
+  const maxDomains = options.maxDomainSearchDomains ?? 1_000_000;
+
+  for (let index = 0; index < queue.length; index += 1) {
+    if (distances.size > maxDomains) {
+      throw new Error("place travel domain search exceeded maxDomainSearchDomains");
+    }
+    const domainId = queue[index];
+    const distance = distances.get(domainId);
+
+    for (const edge of transitionsInto(registry, domainId, options)) {
+      const predecessor = edge.from.domainId;
+      if (distances.has(predecessor)) continue;
+      distances.set(predecessor, distance + 1);
+      queue.push(predecessor);
+    }
+  }
+
+  return distances;
+}
+
+function optimizeAllShortestDomainPaths(
+  registry,
+  bridge,
+  entity,
+  resolvedTarget,
+  options,
+  reverseDistances
+) {
+  const startDomainId = entity.domainId ?? "default";
+  const minimumHops = reverseDistances.get(startDomainId);
+  if (minimumHops == null) return null;
+
+  const routeCache = new Map();
+  let states = [{
+    key: "start",
+    cost: 0,
+    domainId: startDomainId,
+    position: entity.position,
+    steps: [],
+    domains: [startDomainId]
+  }];
+
+  for (let remaining = minimumHops; remaining > 0; remaining -= 1) {
+    const nextByEndpoint = new Map();
+
+    for (const state of states) {
+      const stateDistance = reverseDistances.get(state.domainId);
+      if (stateDistance !== remaining) continue;
+
+      for (const edge of transitionsFrom(registry, state.domainId, options)) {
+        if (reverseDistances.get(edge.to.domainId) !== remaining - 1) continue;
+
+        const route = localRoute(
+          bridge,
+          entity.mobility,
+          state,
+          edge.from,
+          options,
+          routeCache,
+          state.key
+        );
+        if (!route) continue;
+
+        const cost = state.cost + route.estimatedSeconds + (edge.portal.transitionCost ?? 0);
+        const key = transitionKey(edge);
+        const existing = nextByEndpoint.get(key);
+        if (existing && existing.cost <= cost) continue;
+
+        const journeySteps = appendJourney(state.steps, state, edge.from, route);
+        nextByEndpoint.set(key, {
+          key,
+          cost,
+          domainId: edge.to.domainId,
+          position: edge.to.position,
+          domains: [...state.domains, edge.to.domainId],
+          steps: [...journeySteps, deepFreeze({
+            type: "traverse-portal",
+            portalKey: edge.portalKey,
+            placeId: edge.portal.instanceId,
+            portalId: edge.portal.id,
+            fromDomainId: edge.from.domainId,
+            toDomainId: edge.to.domainId,
+            destinationPosition: edge.to.position,
+            transitionCost: edge.portal.transitionCost ?? 0
+          })]
+        });
+      }
+    }
+
+    states = [...nextByEndpoint.values()]
+      .sort((a, b) => a.cost - b.cost || a.key.localeCompare(b.key));
+
+    if (!states.length) return null;
+
+    const cap = options.maxConcreteStatesPerLayer ?? 128;
+    if (states.length > cap) states.length = cap;
+  }
+
+  let best = null;
+  for (const state of states) {
+    if (state.domainId !== resolvedTarget.domainId) continue;
+
+    const route = localRoute(
+      bridge,
+      entity.mobility,
+      state,
+      resolvedTarget,
+      options,
+      routeCache,
+      state.key
+    );
+    if (!route) continue;
+
+    const cost = state.cost + route.estimatedSeconds;
+    const steps = appendJourney(state.steps, state, resolvedTarget, route);
+    if (!best || cost < best.cost || (cost === best.cost && state.key < best.key)) {
+      best = {
+        key: state.key,
+        cost,
+        steps,
+        domains: state.domains
+      };
+    }
+  }
+
+  return best;
+}
+
 export function planTravel(registry, a, b, c, d) {
   const { bridge, entityOrId, target, options } = resolvePlanCall(registry, a, b, c, d);
   if (!bridge) throw new Error("planTravel requires a WorldCoreBridge");
@@ -426,8 +558,41 @@ export function planTravel(registry, a, b, c, d) {
 
   const resolvedTarget = resolveTravelTarget(registry, target);
   const startDomainId = entity.domainId ?? "default";
-  const excludedPairs = new Set(options.excludedDomainPairs ?? []);
   const excludedPortalKeys = new Set(options.excludedPortalKeys ?? []);
+  const baseSearchOptions = { ...options, excludedPortalKeys };
+
+  const reverseDistances = computeReverseDomainDistances(
+    registry,
+    resolvedTarget.domainId,
+    baseSearchOptions
+  );
+
+  const shortest = optimizeAllShortestDomainPaths(
+    registry,
+    bridge,
+    entity,
+    resolvedTarget,
+    baseSearchOptions,
+    reverseDistances
+  );
+
+  if (shortest) {
+    const steps = Object.freeze(shortest.steps);
+    return deepFreeze({
+      entityId: entity.id,
+      target: cloneJson(target),
+      resolvedTarget,
+      graphRevision: registry.graphRevision,
+      startDomainId,
+      domainPath: Object.freeze([...shortest.domains]),
+      steps,
+      legs: steps,
+      estimatedSeconds: shortest.cost,
+      rejectedDomainPairs: Object.freeze([])
+    });
+  }
+
+  const excludedPairs = new Set(options.excludedDomainPairs ?? []);
   const maxAttempts = options.maxDomainPathAttempts ?? 32;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
