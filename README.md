@@ -368,6 +368,7 @@ npm run bench:snapshot
 npm run bench:mutations
 npm run bench:retention
 npm run bench:guardrails
+npm run bench:luebeck
 ```
 
 The suite exercises:
@@ -382,7 +383,7 @@ The suite exercises:
 - real `world-core` cross-domain travel
 - broad performance-regression guardrails
 
-CI runs tests, the real mini-city consumer and a reduced guardrail workload. Full-scale benchmarks remain available for dedicated/manual performance runs.
+CI runs tests, the real mini-city consumer, reduced regression guardrails and a reduced Lübeck integration workload. Full-scale 100k-instance, 20k-retention and multi-thousand-traveler workloads remain available for dedicated/manual performance runs.
 
 ## Responsibility boundary
 
