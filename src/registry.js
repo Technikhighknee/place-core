@@ -25,6 +25,19 @@ import {
 
 const PORTAL_STATE_KEYS = ["enabled", "open", "locked", "blocked", "destroyed"];
 
+function assertPlainObject(value, label) {
+  if (!value ||
+      typeof value !== "object" ||
+      Array.isArray(value)) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+  return value;
+}
+
 function assertVec2(value, label = "position") {
   if (!value ||
       typeof value !== "object" ||
@@ -868,27 +881,99 @@ export class PlaceRegistry {
   }
 
   createPlace(input) {
-    assertId(input?.id, "place instance id");
-    assertStringId(input?.definitionId, "definitionId");
-    if (this.#instances.has(input.id)) throw new Error(`place instance already exists: ${input.id}`);
+    assertPlainObject(input, "place input");
+
+    const allowedInputKeys = new Set([
+      "id",
+      "definitionId",
+      "parentId",
+      "layerDomains",
+      "attachments",
+      "placement",
+      "metadata"
+    ]);
+    for (const key of Object.keys(input)) {
+      if (!allowedInputKeys.has(key)) {
+        throw new Error(`place input contains unknown field ${key}`);
+      }
+    }
+
+    assertId(input.id, "place instance id");
+    assertStringId(input.definitionId, "definitionId");
+    if (this.#instances.has(input.id)) {
+      throw new Error(
+        `place instance already exists: ${String(input.id)}`
+      );
+    }
+
     const definition = this.#definitions.get(input.definitionId);
-    if (!definition) throw new Error(`unknown place definition: ${input.definitionId}`);
-    if (input.parentId != null && !this.#instances.has(input.parentId)) throw new Error(`unknown parent place: ${input.parentId}`);
+    if (!definition) {
+      throw new Error(
+        `unknown place definition: ${input.definitionId}`
+      );
+    }
+
+    if (input.parentId != null) {
+      assertId(input.parentId, "parentId");
+      if (!this.#instances.has(input.parentId)) {
+        throw new Error(
+          `unknown parent place: ${String(input.parentId)}`
+        );
+      }
+      if (input.parentId === input.id) {
+        throw new Error("place cannot parent itself");
+      }
+    }
+
+    const suppliedLayerDomains = input.layerDomains == null
+      ? {}
+      : assertPlainObject(input.layerDomains, "layerDomains");
+    const knownLayerIds = new Set(
+      definition.layers.map((layer) => layer.id)
+    );
+    for (const layerId of Object.keys(suppliedLayerDomains)) {
+      if (!knownLayerIds.has(layerId)) {
+        throw new Error(
+          `layerDomains contains unknown layer ${layerId}`
+        );
+      }
+    }
 
     const layerDomains = new Map();
-    const suppliedLayerDomains = input.layerDomains ?? {};
+    const claimedDomains = new Map();
     for (const layer of definition.layers) {
-      const domainId = suppliedLayerDomains[layer.id] ?? defaultLayerDomainId(input.id, layer.id);
+      const domainId =
+        suppliedLayerDomains[layer.id] ??
+        defaultLayerDomainId(input.id, layer.id);
       assertStringId(domainId, `layerDomains.${layer.id}`);
+
+      const claimedBy = claimedDomains.get(domainId);
+      if (claimedBy != null) {
+        throw new Error(
+          `domain ${domainId} is assigned to multiple layers: ${claimedBy}, ${layer.id}`
+        );
+      }
+      claimedDomains.set(domainId, layer.id);
+
       const existing = this.#domainBindings.get(domainId);
-      if (existing) throw new Error(`domain ${domainId} is already bound to ${String(existing.instanceId)}:${existing.layerId}`);
+      if (existing) {
+        throw new Error(
+          `domain ${domainId} is already bound to ${String(existing.instanceId)}:${existing.layerId}`
+        );
+      }
       layerDomains.set(layer.id, domainId);
     }
 
+    const attachmentsInput = input.attachments == null
+      ? {}
+      : assertPlainObject(input.attachments, "attachments");
     const attachments = new Map();
-    for (const [slot, value] of Object.entries(input.attachments ?? {})) {
+    for (const [slot, value] of Object.entries(attachmentsInput)) {
       assertStringId(slot, "attachment slot");
-      attachments.set(slot, normalizeAttachment(value, `attachment.${slot}`));
+      attachments.set(
+        slot,
+        normalizeAttachment(value, `attachment.${slot}`)
+      );
     }
     const placement = normalizePlacement(input.placement);
     if (placement?.parentPlaceId != null) {
