@@ -72,3 +72,46 @@ test("snapshot validation rejects missing parents and malformed dynamic portals"
   });
   assert.throws(() => validatePlaceCoreSnapshot(malformed), /invalid endpoint/);
 });
+
+
+test("state hash is independent of dynamic portal insertion order", () => {
+  const make = (order) => {
+    const places = new PlaceRegistry();
+    places.registerDefinition(tavernBlueprint());
+    const inn = places.createPlace({
+      id: "inn",
+      definitionId: "tavern",
+      attachments: {
+        street: { domainId: "street", position: { x: 10, y: 10 }, nodeId: "street-inn" }
+      }
+    });
+    const ground = inn.layerDomains.get("ground");
+
+    const specs = {
+      alpha: {
+        id: "alpha",
+        kind: "breach",
+        a: { domainId: ground, position: { x: 1, y: 0 }, nodeId: "g-door" },
+        b: { domainId: "street", position: { x: 11, y: 10 }, nodeId: "street-inn" }
+      },
+      beta: {
+        id: "beta",
+        kind: "breach",
+        a: { domainId: ground, position: { x: 2, y: 0 }, nodeId: "g-bar" },
+        b: { domainId: "street", position: { x: 12, y: 10 }, nodeId: "street-inn" }
+      }
+    };
+
+    for (const id of order) places.addPortal("inn", specs[id]);
+    return places;
+  };
+
+  const a = make(["alpha", "beta"]);
+  const b = make(["beta", "alpha"]);
+
+  assert.equal(computePlaceCoreStateHash(a), computePlaceCoreStateHash(b));
+  assert.deepEqual(
+    serializePlaceCore(a).instances[0].dynamicPortals.map((portal) => portal.id),
+    ["alpha", "beta"]
+  );
+});
