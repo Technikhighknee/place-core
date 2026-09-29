@@ -281,8 +281,8 @@ export class PlaceRegistry {
 
         for (const instance of instances) {
           const definition = this.#definitions.get(instance.definitionId);
-          bridge.materializePlace(instance, definition);
-          materialized.push({ instance, definition });
+          const receipt = bridge.materializePlace(instance, definition);
+          materialized.push({ instance, definition, receipt });
 
           for (const boundary of definition.boundaries) {
             bridge.syncBoundaryState?.(
@@ -308,9 +308,22 @@ export class PlaceRegistry {
       }
     } catch (error) {
       const rollbackErrors = [];
-      for (const { instance, definition } of materialized.reverse()) {
+      for (const {
+        instance,
+        definition,
+        receipt
+      } of materialized.reverse()) {
         try {
-          bridge.unmaterializePlace?.(instance, definition);
+          if (receipt != null &&
+              typeof bridge.rollbackMaterializePlace === "function") {
+            bridge.rollbackMaterializePlace(
+              instance,
+              definition,
+              receipt
+            );
+          } else {
+            bridge.unmaterializePlace?.(instance, definition);
+          }
         } catch (rollbackError) {
           rollbackErrors.push(rollbackError);
         }
@@ -684,6 +697,7 @@ export class PlaceRegistry {
     this.#reindexInstancePortals(instance, definition);
 
     let materialized = false;
+    let materializationReceipt = null;
     try {
       for (const portal of definition.portals) {
         assertSameDomainPortalEnforceable(
@@ -694,7 +708,8 @@ export class PlaceRegistry {
       }
 
       if (this.#bridge?.materializePlace) {
-        this.#bridge.materializePlace(instance, definition);
+        materializationReceipt =
+          this.#bridge.materializePlace(instance, definition);
         materialized = true;
       }
       for (const boundary of definition.boundaries) {
@@ -711,7 +726,16 @@ export class PlaceRegistry {
       let rollbackError = null;
       if (materialized) {
         try {
-          this.#bridge?.unmaterializePlace?.(instance, definition);
+          if (materializationReceipt != null &&
+              typeof this.#bridge?.rollbackMaterializePlace === "function") {
+            this.#bridge.rollbackMaterializePlace(
+              instance,
+              definition,
+              materializationReceipt
+            );
+          } else {
+            this.#bridge?.unmaterializePlace?.(instance, definition);
+          }
         } catch (cleanupError) {
           rollbackError = cleanupError;
         }
