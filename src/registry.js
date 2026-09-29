@@ -21,6 +21,7 @@ import {
   normalizeStringList
 } from "./utils.js";
 import { PlaceInstance } from "./registry/place-instance.js";
+import { SemanticGraphIndex } from "./registry/semantic-graph.js";
 import {
   PORTAL_STATE_KEYS,
   PLACE_INSTANCE_MUTATION_TOKEN,
@@ -57,9 +58,7 @@ export class PlaceRegistry {
   #exteriorIndexes = new Map();
   #indexedExteriorDomains = new Map();
   #placementChildren = new Map();
-  #semanticChildren = new Map();
-  #membershipChildren = new Map();
-  #semanticClosureCache = new Map();
+  #semanticGraph = new SemanticGraphIndex(this.#instances);
   #portalRecords = new Map();
   #portalsByDomain = new Map();
   #portalEndpointIndexes = new Map();
@@ -745,8 +744,8 @@ export class PlaceRegistry {
     });
 
     this.#instances.set(instance.id, instance);
-    this.#registerSemanticDependency(instance);
-    this.#registerMembershipDependencies(instance);
+    this.#semanticGraph.registerPrimary(instance);
+    this.#semanticGraph.registerMemberships(instance);
     this.#registerPlacementDependency(instance);
     for (const [layerId, domainId] of layerDomains) {
       this.#domainBindings.set(
@@ -837,20 +836,19 @@ export class PlaceRegistry {
   ) {
     const instance = this.#instances.get(instanceId);
     if (!instance) return false;
-    const semanticChildren = this.#semanticChildren.get(instanceId);
-    if (semanticChildren?.size) {
-      const childId = [...semanticChildren][0];
+    const semanticChild =
+      this.#semanticGraph.firstPrimaryChild(instanceId);
+    if (semanticChild != null) {
       throw new Error(
-        `cannot remove place ${String(instanceId)} while child ${String(childId)} exists`
+        `cannot remove place ${String(instanceId)} while child ${String(semanticChild)} exists`
       );
     }
 
-    const membershipChildren =
-      this.#membershipChildren.get(instanceId);
-    if (membershipChildren?.size) {
-      const childId = [...membershipChildren.keys()][0];
+    const membershipChild =
+      this.#semanticGraph.firstMembershipChild(instanceId);
+    if (membershipChild != null) {
       throw new Error(
-        `cannot remove place ${String(instanceId)} while semantic membership child ${String(childId)} exists`
+        `cannot remove place ${String(instanceId)} while semantic membership child ${String(membershipChild)} exists`
       );
     }
 
@@ -866,11 +864,11 @@ export class PlaceRegistry {
     this.clearEntityOccupancyForPlace(instanceId);
     for (const domainId of instance.layerDomains.values()) this.#domainBindings.delete(domainId);
     this.#unindexExterior(instance);
-    this.#unregisterSemanticDependency(instance);
-    this.#unregisterMembershipDependencies(instance);
+    this.#semanticGraph.unregisterPrimary(instance);
+    this.#semanticGraph.unregisterMemberships(instance);
     this.#unregisterPlacementDependency(instance);
     this.#removeInstancePortals(instance.id);
-    this.#semanticClosureCache.delete(instance.id);
+    this.#semanticGraph.deleteCached(instance.id);
     this.#instances.delete(instance.id);
     if (touchRevision) this.#touchState({ travel: true });
     if (emitEvent) {
@@ -1280,7 +1278,7 @@ export class PlaceRegistry {
       throw new Error("place cannot parent itself");
     }
     if (parentId != null) {
-      this.#assertSemanticEdgeDoesNotCycle(
+      this.#semanticGraph.assertEdgeDoesNotCycle(
         instanceId,
         parentId,
         "place parent cycle through semantic membership graph"
@@ -1290,13 +1288,13 @@ export class PlaceRegistry {
       return instance;
     }
     const affectedEntities = [...(this.#entitiesByPlace.get(instanceId) ?? [])];
-    this.#unregisterSemanticDependency(instance);
+    this.#semanticGraph.unregisterPrimary(instance);
     instance.setParentId(
       parentId ?? null,
       PLACE_INSTANCE_MUTATION_TOKEN
     );
-    this.#registerSemanticDependency(instance);
-    this.#invalidateSemanticClosureDescendants(
+    this.#semanticGraph.registerPrimary(instance);
+    this.#semanticGraph.invalidateClosureDescendants(
       instanceId
     );
     this.#touchState();
@@ -1353,7 +1351,7 @@ export class PlaceRegistry {
       );
     }
 
-    this.#assertSemanticEdgeDoesNotCycle(
+    this.#semanticGraph.assertEdgeDoesNotCycle(
       instanceId,
       membership.parentPlaceId
     );
@@ -1366,11 +1364,11 @@ export class PlaceRegistry {
       membership,
       PLACE_INSTANCE_MUTATION_TOKEN
     );
-    this.#registerMembershipDependency(
+    this.#semanticGraph.registerMembership(
       instance.id,
       membership
     );
-    this.#invalidateSemanticClosureDescendants(
+    this.#semanticGraph.invalidateClosureDescendants(
       instanceId
     );
 
@@ -1409,11 +1407,11 @@ export class PlaceRegistry {
       kind,
       PLACE_INSTANCE_MUTATION_TOKEN
     );
-    this.#unregisterMembershipDependency(
+    this.#semanticGraph.unregisterMembership(
       instance.id,
       membership
     );
-    this.#invalidateSemanticClosureDescendants(
+    this.#semanticGraph.invalidateClosureDescendants(
       instanceId
     );
 
@@ -1431,7 +1429,7 @@ export class PlaceRegistry {
     { includeSelf = false } = {}
   ) {
     if (!this.#instances.has(instanceId)) return [];
-    const closure = this.#semanticClosure([instanceId]);
+    const closure = this.#semanticGraph.closure([instanceId]);
     return includeSelf
       ? closure
       : closure.filter((id) => id !== instanceId);
@@ -1898,7 +1896,7 @@ export class PlaceRegistry {
     }
 
     const semanticPlaces =
-      this.#semanticClosure(places);
+      this.#semanticGraph.closure(places);
 
     return deepFreeze({
       domainId,
@@ -2013,9 +2011,9 @@ export class PlaceRegistry {
       domainBindingCount: this.#domainBindings.size,
       semanticMembershipCount,
       semanticMembershipParentCount:
-        this.#membershipChildren.size,
+        this.#semanticGraph.membershipParentCount,
       semanticClosureCacheSize:
-        this.#semanticClosureCache.size,
+        this.#semanticGraph.closureCacheSize,
       portalRecordCount: this.#portalRecords.size,
       portalEndpointCount: this.#portalEndpointRecords.size,
       portalEndpointDomainCount: this.#portalEndpointIndexes.size,
@@ -2047,40 +2045,7 @@ export class PlaceRegistry {
     for (const instance of this.#instances.values()) {
       const definition = this.#definitions.get(instance.definitionId);
       if (!definition) throw new Error(`instance ${String(instance.id)} references missing definition`);
-      if (instance.parentId != null) {
-        if (!this.#instances.has(instance.parentId)) {
-          throw new Error(
-            `instance ${String(instance.id)} references missing parent`
-          );
-        }
-        if (!this.#semanticChildren
-          .get(instance.parentId)
-          ?.has(instance.id)) {
-          throw new Error(
-            `instance ${String(instance.id)} missing semantic dependency index`
-          );
-        }
-      }
-
-      for (const membership of instance.getMemberships()) {
-        if (!this.#instances.has(membership.parentPlaceId)) {
-          throw new Error(
-            `instance ${String(instance.id)} references missing membership parent ${String(membership.parentPlaceId)}`
-          );
-        }
-        const count = this.#membershipChildren
-          .get(membership.parentPlaceId)
-          ?.get(instance.id) ?? 0;
-        const expectedCount = instance.getMemberships()
-          .filter((candidate) =>
-            candidate.parentPlaceId === membership.parentPlaceId
-          ).length;
-        if (count !== expectedCount) {
-          throw new Error(
-            `instance ${String(instance.id)} membership reverse index drift`
-          );
-        }
-      }
+      this.#semanticGraph.assertInstanceIndexed(instance);
 
       if (instance.placement?.parentPlaceId != null) {
         if (!this.#instances.has(instance.placement.parentPlaceId)) {
@@ -2093,58 +2058,7 @@ export class PlaceRegistry {
       }
     }
 
-    this.#assertSemanticGraphAcyclic();
-
-    let indexedMembershipCount = 0;
-    for (const [parentId, children] of this.#membershipChildren) {
-      if (!this.#instances.has(parentId)) {
-        throw new Error(
-          `membership reverse index references missing parent ${String(parentId)}`
-        );
-      }
-      for (const [childId, count] of children) {
-        if (!this.#instances.has(childId) ||
-            !Number.isInteger(count) ||
-            count < 1) {
-          throw new Error(
-            "membership reverse index contains invalid child/count"
-          );
-        }
-        indexedMembershipCount += count;
-      }
-    }
-
-    let actualMembershipCount = 0;
-    for (const instance of this.#instances.values()) {
-      actualMembershipCount +=
-        instance.getMemberships().length;
-    }
-    if (indexedMembershipCount !== actualMembershipCount) {
-      throw new Error(
-        "semantic membership reverse index count drift"
-      );
-    }
-
-    for (const [instanceId, cached] of
-      this.#semanticClosureCache) {
-      if (!this.#instances.has(instanceId)) {
-        throw new Error(
-          "semantic closure cache references missing instance"
-        );
-      }
-
-      const expected =
-        this.#computeSemanticClosure(instanceId);
-      if (cached.length !== expected.length ||
-          cached.some(
-            (id, index) =>
-              id !== expected[index]
-          )) {
-        throw new Error(
-          `semantic closure cache drift for ${String(instanceId)}`
-        );
-      }
-    }
+    this.#semanticGraph.assertConsistency();
 
     for (const [key, record] of this.#portalRecords) {
       if (!this.#instances.has(record.instanceId)) throw new Error(`portal record ${key} references missing instance`);
@@ -2245,376 +2159,6 @@ export class PlaceRegistry {
     }
     this.#indexedExteriorDomains.delete(instance.id);
   }
-
-  #registerSemanticDependency(instance) {
-    const parentId = instance?.parentId;
-    if (parentId == null) return;
-    let children = this.#semanticChildren.get(parentId);
-    if (!children) this.#semanticChildren.set(parentId, children = new Set());
-    children.add(instance.id);
-  }
-
-  #unregisterSemanticDependency(instance) {
-    const parentId = instance?.parentId;
-    if (parentId == null) return;
-    const children = this.#semanticChildren.get(parentId);
-    children?.delete(instance.id);
-    if (children?.size === 0) {
-      this.#semanticChildren.delete(parentId);
-    }
-  }
-
-  #registerMembershipDependency(childId, membership) {
-    let children = this.#membershipChildren.get(
-      membership.parentPlaceId
-    );
-    if (!children) {
-      this.#membershipChildren.set(
-        membership.parentPlaceId,
-        children = new Map()
-      );
-    }
-
-    children.set(
-      childId,
-      (children.get(childId) ?? 0) + 1
-    );
-  }
-
-  #unregisterMembershipDependency(childId, membership) {
-    const children = this.#membershipChildren.get(
-      membership.parentPlaceId
-    );
-    if (!children) return;
-
-    const count = children.get(childId) ?? 0;
-    if (count <= 1) {
-      children.delete(childId);
-    } else {
-      children.set(childId, count - 1);
-    }
-    if (children.size === 0) {
-      this.#membershipChildren.delete(
-        membership.parentPlaceId
-      );
-    }
-  }
-
-  #registerMembershipDependencies(instance) {
-    for (const membership of instance.getMemberships()) {
-      this.#registerMembershipDependency(
-        instance.id,
-        membership
-      );
-    }
-  }
-
-  #unregisterMembershipDependencies(instance) {
-    for (const membership of instance.getMemberships()) {
-      this.#unregisterMembershipDependency(
-        instance.id,
-        membership
-      );
-    }
-  }
-
-  #semanticParentIds(instanceId) {
-    const instance = this.#instances.get(instanceId);
-    if (!instance) return [];
-
-    const parents = new Map();
-    if (instance.parentId != null) {
-      parents.set(
-        typedIdKey(instance.parentId),
-        instance.parentId
-      );
-    }
-
-    for (const membership of instance.getMemberships()) {
-      parents.set(
-        typedIdKey(membership.parentPlaceId),
-        membership.parentPlaceId
-      );
-    }
-
-    return [...parents.values()]
-      .sort((a, b) =>
-        typedIdKey(a).localeCompare(typedIdKey(b))
-      );
-  }
-
-  #assertSemanticEdgeDoesNotCycle(
-    instanceId,
-    parentId,
-    message = "place semantic membership cycle"
-  ) {
-    const targetKey = typedIdKey(instanceId);
-    const stack = [parentId];
-    const visited = new Set();
-
-    while (stack.length) {
-      const currentId = stack.pop();
-      const currentKey = typedIdKey(currentId);
-      if (currentKey === targetKey) {
-        throw new Error(message);
-      }
-      if (visited.has(currentKey)) continue;
-      visited.add(currentKey);
-
-      const parents = this.#semanticParentIds(currentId);
-      for (let i = parents.length - 1; i >= 0; i -= 1) {
-        stack.push(parents[i]);
-      }
-    }
-  }
-
-  #semanticChildrenOf(instanceId) {
-    const children = new Map();
-
-    for (const childId of
-      this.#semanticChildren.get(instanceId) ?? []) {
-      children.set(
-        typedIdKey(childId),
-        childId
-      );
-    }
-
-    for (const childId of
-      this.#membershipChildren
-        .get(instanceId)
-        ?.keys?.() ?? []) {
-      children.set(
-        typedIdKey(childId),
-        childId
-      );
-    }
-
-    return [...children.values()]
-      .sort((a, b) =>
-        typedIdKey(a).localeCompare(
-          typedIdKey(b)
-        )
-      );
-  }
-
-  #invalidateSemanticClosureDescendants(instanceId) {
-    if (this.#semanticClosureCache.size === 0) {
-      return;
-    }
-
-    const queue = [instanceId];
-    const visited = new Set();
-
-    for (let i = 0; i < queue.length; i += 1) {
-      const currentId = queue[i];
-      const key = typedIdKey(currentId);
-      if (visited.has(key)) continue;
-      visited.add(key);
-
-      this.#semanticClosureCache.delete(
-        currentId
-      );
-
-      for (const childId of
-        this.#semanticChildrenOf(currentId)) {
-        queue.push(childId);
-      }
-    }
-  }
-
-  #computeSemanticClosure(instanceId) {
-    const output = [];
-    const permanent = new Set();
-    const visiting = new Set();
-    const stack = [{
-      id: instanceId,
-      entered: false,
-      parents: null,
-      index: 0
-    }];
-
-    while (stack.length) {
-      const frame = stack[stack.length - 1];
-      const key = typedIdKey(frame.id);
-
-      if (permanent.has(key)) {
-        stack.pop();
-        continue;
-      }
-
-      if (!frame.entered) {
-        const instance =
-          this.#instances.get(frame.id);
-        if (!instance) {
-          stack.pop();
-          continue;
-        }
-
-        if (visiting.has(key)) {
-          throw new Error(
-            "place semantic membership cycle"
-          );
-        }
-
-        visiting.add(key);
-        frame.entered = true;
-        frame.parents =
-          this.#semanticParentIds(frame.id);
-        frame.index = 0;
-      }
-
-      if (frame.index < frame.parents.length) {
-        const parentId =
-          frame.parents[frame.index++];
-        const parentKey =
-          typedIdKey(parentId);
-
-        if (permanent.has(parentKey)) {
-          continue;
-        }
-        if (visiting.has(parentKey)) {
-          throw new Error(
-            "place semantic membership cycle"
-          );
-        }
-
-        stack.push({
-          id: parentId,
-          entered: false,
-          parents: null,
-          index: 0
-        });
-        continue;
-      }
-
-      visiting.delete(key);
-      permanent.add(key);
-      output.push(frame.id);
-      stack.pop();
-    }
-
-    return output;
-  }
-
-  #semanticClosureForInstance(instanceId) {
-    const cached =
-      this.#semanticClosureCache.get(
-        instanceId
-      );
-    if (cached) return cached;
-
-    const computed = Object.freeze(
-      this.#computeSemanticClosure(instanceId)
-    );
-    this.#semanticClosureCache.set(
-      instanceId,
-      computed
-    );
-    return computed;
-  }
-
-  #semanticClosure(instanceIds) {
-    const output = [];
-    const seen = new Set();
-    const roots = [...instanceIds]
-      .sort((a, b) =>
-        typedIdKey(a).localeCompare(
-          typedIdKey(b)
-        )
-      );
-
-    for (const instanceId of roots) {
-      for (const semanticId of
-        this.#semanticClosureForInstance(
-          instanceId
-        )) {
-        const key = typedIdKey(semanticId);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        output.push(semanticId);
-      }
-    }
-
-    return output;
-  }
-
-
-  #assertSemanticGraphAcyclic() {
-    const permanent = new Set();
-    const visiting = new Set();
-    const roots = [...this.#instances.keys()]
-      .sort((a, b) =>
-        typedIdKey(a).localeCompare(
-          typedIdKey(b)
-        )
-      );
-
-    for (const rootId of roots) {
-      const rootKey = typedIdKey(rootId);
-      if (permanent.has(rootKey)) continue;
-
-      const stack = [{
-        id: rootId,
-        entered: false,
-        parents: null,
-        index: 0
-      }];
-
-      while (stack.length) {
-        const frame =
-          stack[stack.length - 1];
-        const key = typedIdKey(frame.id);
-
-        if (permanent.has(key)) {
-          stack.pop();
-          continue;
-        }
-
-        if (!frame.entered) {
-          if (visiting.has(key)) {
-            throw new Error(
-              "place semantic membership cycle"
-            );
-          }
-
-          visiting.add(key);
-          frame.entered = true;
-          frame.parents =
-            this.#semanticParentIds(frame.id);
-          frame.index = 0;
-        }
-
-        if (frame.index < frame.parents.length) {
-          const parentId =
-            frame.parents[frame.index++];
-          const parentKey =
-            typedIdKey(parentId);
-
-          if (permanent.has(parentKey)) {
-            continue;
-          }
-          if (visiting.has(parentKey)) {
-            throw new Error(
-              "place semantic membership cycle"
-            );
-          }
-
-          stack.push({
-            id: parentId,
-            entered: false,
-            parents: null,
-            index: 0
-          });
-          continue;
-        }
-
-        visiting.delete(key);
-        permanent.add(key);
-        stack.pop();
-      }
-    }
-  }
-
 
   #registerPlacementDependency(instance) {
     const parentId = instance?.placement?.parentPlaceId;
