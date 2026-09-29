@@ -132,3 +132,92 @@ test("snapshot roundtrip retains canonical state", () => {
   assert.equal(restored.resolveBoundary("golden-goose", "taproom-wall").enabled, false);
   restored.assertInternalConsistency();
 });
+
+
+test("compatibility createPlace aliases are consumed before strict core validation", () => {
+  const registry = new PlaceRegistry();
+  registry.registerDefinition(tavernBlueprint());
+
+  const place = registry.createPlace({
+    id: "legacy-shape",
+    definitionId: "tavern",
+    placementDomainId: "street",
+    placement: {
+      x: 25,
+      y: 30,
+      rotation: 0.5
+    },
+    containment: "footprint",
+    externalBindings: {
+      street: {
+        domainId: "street",
+        position: { x: 25, y: 30 },
+        nodeId: "legacy-door"
+      }
+    }
+  });
+
+  assert.ok(place);
+  assert.equal(place.attachments.get("street").nodeId, "legacy-door");
+  assert.equal(place.placement.domainId, "street");
+  assert.equal(place.placement.containment, "footprint");
+  assert.deepEqual(place.placement.transform, {
+    x: 25,
+    y: 30,
+    rotation: 0.5,
+    scale: 1
+  });
+});
+
+test("compatibility aliases reject ambiguous canonical duplicates", () => {
+  const registry = new PlaceRegistry();
+  registry.registerDefinition(tavernBlueprint());
+  registry.createPlace({
+    id: "parent",
+    definitionId: "tavern"
+  });
+
+  assert.throws(
+    () => registry.createPlace({
+      id: "attachments-conflict",
+      definitionId: "tavern",
+      attachments: {},
+      externalBindings: {}
+    }),
+    /both attachments and externalBindings/
+  );
+
+  assert.throws(
+    () => registry.createPlace({
+      id: "parent-conflict",
+      definitionId: "tavern",
+      parentId: "parent",
+      parentPlaceId: "parent"
+    }),
+    /both parentId and parentPlaceId/
+  );
+
+  assert.throws(
+    () => registry.createPlace({
+      id: "placement-conflict",
+      definitionId: "tavern",
+      placementDomainId: "street",
+      placement: {
+        domainId: "street",
+        transform: { x: 0, y: 0 }
+      }
+    }),
+    /placementDomainId cannot be combined/
+  );
+
+  assert.throws(
+    () => registry.createPlace({
+      id: "orphan-containment",
+      definitionId: "tavern",
+      containment: "footprint"
+    }),
+    /top-level containment requires placementDomainId/
+  );
+
+  assert.equal(registry.instances.size, 1);
+});
