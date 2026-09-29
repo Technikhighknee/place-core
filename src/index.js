@@ -9,7 +9,7 @@ export {
   PlaceRegistry,
   PlaceInstance,
   isPortalTraversable
-} from "./registry.js";
+} from "./place-registry.js";
 
 export { WorldCoreBridge } from "./world-core-bridge.js";
 
