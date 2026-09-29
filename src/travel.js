@@ -557,7 +557,6 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
   const startDomainId = entity.domainId ?? "default";
   const excludedPortalKeys = new Set(options.excludedPortalKeys ?? []);
   const searchOptions = { ...options, excludedPortalKeys };
-  const routeCache = new Map();
   const queue = new MinHeap();
   const bestCostByState = new Map();
   const maxExpansions = options.maxNearestTargetExpansions ?? 250_000;
@@ -590,12 +589,42 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
       tag: target.tag,
       kind: target.anchorKind,
       spaceId: target.spaceId
+    }).filter((anchor) => {
+      if (target.placeId != null && anchor.placeId !== target.placeId) return false;
+      if (typeof options.anchorPredicate === "function" &&
+          options.anchorPredicate(anchor) !== true) return false;
+      return true;
     });
 
+    const edges = transitionsFrom(registry, state.domainId, searchOptions);
+    const destinationNodeIds = new Set();
+
     for (const anchor of anchors) {
-      if (target.placeId != null && anchor.placeId !== target.placeId) continue;
-      if (typeof options.anchorPredicate === "function" &&
-          options.anchorPredicate(anchor) !== true) continue;
+      if (anchor.nodeId != null) destinationNodeIds.add(anchor.nodeId);
+    }
+    for (const edge of edges) {
+      if (edge.from.nodeId != null) destinationNodeIds.add(edge.from.nodeId);
+    }
+
+    const routeCosts = bridge.planLocalRouteCostsToMany({
+      domainId: state.domainId,
+      position: state.position,
+      destinationNodeIds,
+      mobility: entity.mobility,
+      options: searchOptions.journeyOptions
+    });
+
+    const costTo = destination => {
+      if (squaredDistance(state.position, destination.position) <= POSITION_EPSILON_SQ) {
+        return 0;
+      }
+      if (destination.nodeId == null) return null;
+      return routeCosts.get(destination.nodeId) ?? null;
+    };
+
+    for (const anchor of anchors) {
+      const localSeconds = costTo(anchor);
+      if (localSeconds == null) continue;
 
       const resolvedTarget = deepFreeze({
         placeId: anchor.placeId,
@@ -607,21 +636,15 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
         nodeId: anchor.nodeId
       });
 
-      const route = localRoute(
-        bridge,
-        entity.mobility,
-        state,
-        resolvedTarget,
-        searchOptions,
-        routeCache,
-        state.key
-      );
-      if (!route) continue;
-
-      const cost = state.cost + route.estimatedSeconds;
+      const cost = state.cost + localSeconds;
       if (cost > maxCost) continue;
       const key = anchorTargetKey(anchor);
-      const steps = appendJourney(state.steps, state, resolvedTarget, route);
+      const steps = appendJourney(
+        state.steps,
+        state,
+        resolvedTarget,
+        { estimatedSeconds: localSeconds }
+      );
 
       if (!bestGoal ||
           cost < bestGoal.cost ||
@@ -636,26 +659,23 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
       }
     }
 
-    for (const edge of transitionsFrom(registry, state.domainId, searchOptions)) {
-      const route = localRoute(
-        bridge,
-        entity.mobility,
-        state,
-        edge.from,
-        searchOptions,
-        routeCache,
-        state.key
-      );
-      if (!route) continue;
+    for (const edge of edges) {
+      const localSeconds = costTo(edge.from);
+      if (localSeconds == null) continue;
 
-      const cost = state.cost + route.estimatedSeconds + (edge.portal.transitionCost ?? 0);
+      const cost = state.cost + localSeconds + (edge.portal.transitionCost ?? 0);
       if (cost > maxCost || (bestGoal && cost >= bestGoal.cost)) continue;
 
       const key = transitionKey(edge);
       const previous = bestCostByState.get(key);
       if (previous != null && previous <= cost) continue;
 
-      const journeySteps = appendJourney(state.steps, state, edge.from, route);
+      const journeySteps = appendJourney(
+        state.steps,
+        state,
+        edge.from,
+        { estimatedSeconds: localSeconds }
+      );
       bestCostByState.set(key, cost);
       queue.push({
         key,
