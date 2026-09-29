@@ -9,9 +9,18 @@ import { deepFreeze, normalizeBoolean } from "./utils.js";
 export class PlaceRegistry extends CorePlaceRegistry {
   constructor(options = {}) {
     const normalized = { ...options };
-    if (normalized.bridge == null && normalized.worldCoreBridge != null) {
-      normalized.bridge = normalized.worldCoreBridge;
+
+    if (normalized.worldCoreBridge != null) {
+      if (normalized.bridge != null &&
+          normalized.bridge !== normalized.worldCoreBridge) {
+        throw new Error(
+          "cannot specify both bridge and worldCoreBridge with different values"
+        );
+      }
+      normalized.bridge ??= normalized.worldCoreBridge;
+      delete normalized.worldCoreBridge;
     }
+
     super(normalized);
   }
 
@@ -27,27 +36,62 @@ export class PlaceRegistry extends CorePlaceRegistry {
   }
 
   createPlace(input) {
-    if (!input || typeof input !== "object") return super.createPlace(input);
+    if (!input ||
+        typeof input !== "object" ||
+        Array.isArray(input)) {
+      return super.createPlace(input);
+    }
+
     const normalized = { ...input };
 
-    if (normalized.attachments == null && normalized.externalBindings != null) {
+    if (normalized.externalBindings != null) {
+      if (normalized.attachments != null) {
+        throw new Error(
+          "cannot specify both attachments and externalBindings"
+        );
+      }
       normalized.attachments = normalized.externalBindings;
     }
-    if (normalized.parentId == null && normalized.parentPlaceId != null) {
+    delete normalized.externalBindings;
+
+    if (normalized.parentPlaceId != null) {
+      if (normalized.parentId != null) {
+        throw new Error(
+          "cannot specify both parentId and parentPlaceId"
+        );
+      }
       normalized.parentId = normalized.parentPlaceId;
     }
+    delete normalized.parentPlaceId;
+
     if (normalized.layerDomains instanceof Map) {
-      normalized.layerDomains = Object.fromEntries(normalized.layerDomains);
+      normalized.layerDomains =
+        Object.fromEntries(normalized.layerDomains);
     }
 
-    if (normalized.placement?.domainId == null && normalized.placementDomainId != null) {
-      const transform = normalized.placement ?? {};
+    if (normalized.placementDomainId != null) {
+      const placement = normalized.placement;
+
+      if (placement?.domainId != null ||
+          placement?.parentPlaceId != null) {
+        throw new Error(
+          "placementDomainId cannot be combined with canonical placement ownership"
+        );
+      }
+
       normalized.placement = {
         domainId: normalized.placementDomainId,
-        transform,
+        transform: placement ?? {},
         containment: normalized.containment ?? "footprint"
       };
+    } else if (normalized.containment != null) {
+      throw new Error(
+        "top-level containment requires placementDomainId"
+      );
     }
+
+    delete normalized.placementDomainId;
+    delete normalized.containment;
 
     return super.createPlace(normalized);
   }
