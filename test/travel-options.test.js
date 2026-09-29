@@ -711,3 +711,67 @@ test("public domain path API cannot bypass validation with internal option names
     /domain path options contains unknown field excludedPairs/
   );
 });
+
+
+test("failed replacement travel leaves the existing travel untouched", () => {
+  const {
+    places,
+    entity,
+    bridge
+  } = twoLayerRuntime();
+
+  const existing = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "house",
+      anchorId: "target"
+    }
+  );
+  assert.ok(existing);
+
+  const existingJourney =
+    structuredClone(entity.journey);
+
+  const replacement = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      domainId: "unreachable-domain",
+      position: { x: 0, y: 0 },
+      nodeId: "unreachable-node"
+    }
+  );
+
+  assert.equal(replacement, null);
+  assert.equal(
+    places.activeTravels.get("hans"),
+    existing
+  );
+  assert.deepEqual(
+    entity.journey,
+    existingJourney
+  );
+
+  assert.throws(
+    () => startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "missing-place"
+      }
+    ),
+    /unknown target place/
+  );
+  assert.equal(
+    places.activeTravels.get("hans"),
+    existing
+  );
+  assert.deepEqual(
+    entity.journey,
+    existingJourney
+  );
+});

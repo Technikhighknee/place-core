@@ -572,3 +572,116 @@ test("all travel plan shapes expose the current travel revision", () => {
     assert.equal(plan.travelRevision, places.travelRevision);
   }
 });
+
+
+test("planner keeps a locally failed domain pair available through a different arrival", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({ id: "detour-graph" });
+  places.createPlace({
+    id: "graph",
+    definitionId: "detour-graph"
+  });
+
+  const add = (
+    id,
+    fromDomainId,
+    fromX,
+    fromNodeId,
+    toDomainId,
+    toX,
+    toNodeId
+  ) => {
+    places.addPortal("graph", {
+      id,
+      bidirectional: false,
+      a: {
+        domainId: fromDomainId,
+        position: { x: fromX, y: 0 },
+        nodeId: fromNodeId
+      },
+      b: {
+        domainId: toDomainId,
+        position: { x: toX, y: 0 },
+        nodeId: toNodeId
+      }
+    });
+  };
+
+  add("a-b", "A", 1, "a-to-b", "B", 0, "b-from-a");
+  add("b-c", "B", 10, "b-to-c", "C", 0, "c-from-b");
+  add("a-d", "A", 2, "a-to-d", "D", 0, "d-from-a");
+  add("d-b", "D", 1, "d-to-b", "B", 10, "b-from-d");
+
+  const entity = {
+    id: "hans",
+    domainId: "A",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const nodeX = new Map([
+    ["A:a-to-b", 1],
+    ["A:a-to-d", 2],
+    ["B:b-to-c", 10],
+    ["D:d-to-b", 1],
+    ["C:target", 1]
+  ]);
+
+  const bridge = {
+    getEntity(id) {
+      return id === "hans" ? entity : null;
+    },
+    planLocalRoute({
+      domainId,
+      position,
+      destinationNodeId
+    }) {
+      if (
+        domainId === "B" &&
+        destinationNodeId === "b-to-c" &&
+        position.x < 9
+      ) {
+        return null;
+      }
+
+      const x = nodeX.get(
+        `${domainId}:${destinationNodeId}`
+      );
+      return x == null
+        ? null
+        : {
+            estimatedSeconds:
+              Math.abs(position.x - x)
+          };
+    },
+    startLocalJourney() { return true; },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      domainId: "C",
+      position: { x: 1, y: 0 },
+      nodeId: "target"
+    }
+  );
+
+  assert.ok(
+    plan,
+    "A→D→B reaches the usable side of B→C"
+  );
+  assert.deepEqual(
+    plan.domainPath,
+    ["A", "D", "B", "C"]
+  );
+  assert.deepEqual(
+    plan.steps
+      .filter((step) => step.type === "traverse-portal")
+      .map((step) => step.portalId),
+    ["a-d", "d-b", "b-c"]
+  );
+});
