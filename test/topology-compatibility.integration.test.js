@@ -201,3 +201,38 @@ test("externally mutated shared topology cannot be silently reused", () => {
 
   assert.equal(places.getPlace("house-2"), null);
 });
+
+
+test("shared topology ID rejects different navigation runtime options", () => {
+  const { world, places } = setup();
+
+  const first = makeDefinition("base");
+  first.layers[0].navigation.options = {
+    spatialCellSize: 50,
+    routeCacheSize: 5000
+  };
+
+  const second = makeDefinition("conflict");
+  second.layers[0].navigation.options = {
+    spatialCellSize: 25,
+    routeCacheSize: 5000
+  };
+
+  places.registerDefinition(first);
+  places.registerDefinition(second);
+  places.createPlace({
+    id: "base-place",
+    definitionId: "base"
+  });
+
+  assert.throws(
+    () => places.createPlace({
+      id: "conflict-place",
+      definitionId: "conflict"
+    }),
+    /navigation option spatialCellSize differs/
+  );
+
+  assert.equal(world.getDomain("conflict-place:inside"), undefined);
+  assert.equal(places.getPlace("conflict-place"), null);
+});
