@@ -704,7 +704,8 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
     entityId: entity.id,
     target: cloneJson(target),
     resolvedTarget: bestGoal.resolvedTarget,
-    graphRevision: registry.graphRevision,
+    travelRevision: registry.travelRevision,
+    graphRevision: registry.travelRevision,
     startDomainId,
     domainPath: Object.freeze([...bestGoal.domains]),
     steps,
@@ -883,10 +884,12 @@ function replan(registry, bridge, state, options) {
   if (!plan) return fail(registry, bridge, state, "no-route-after-world-change");
 
   state.plan = plan;
-  state.graphRevision = registry.graphRevision;
+  state.travelRevision = registry.travelRevision;
+  state.graphRevision = registry.travelRevision;
   registry.emit("travel-replan", {
     entityId: state.entityId,
     target: state.target,
+    travelRevision: state.travelRevision,
     graphRevision: state.graphRevision,
     replans: state.replans,
     estimatedSeconds: plan.estimatedSeconds
@@ -1029,7 +1032,8 @@ export function startTravel(registry, a, b, c, d) {
     localStarted: false,
     portalEntered: false,
     portalTransitionRemaining: 0,
-    graphRevision: registry.graphRevision,
+    travelRevision: registry.travelRevision,
+    graphRevision: registry.travelRevision,
     worldChangePolicy: normalizeWorldChangePolicy(options.worldChangePolicy),
     status: "active",
     failureReason: null,
@@ -1062,7 +1066,8 @@ export function stepTravel(registry, a, b, c) {
     ? state.worldChangePolicy
     : normalizeWorldChangePolicy(options.worldChangePolicy);
 
-  if (worldChangePolicy === "eager" && state.graphRevision !== registry.graphRevision) {
+  if (worldChangePolicy === "eager" &&
+      (state.travelRevision ?? state.graphRevision) !== registry.travelRevision) {
     const next = replan(registry, bridge, state, options);
     if (next.status !== "active") return next;
   }
