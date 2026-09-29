@@ -1162,19 +1162,6 @@ export class PlaceRegistry {
       if (!this.#instances.has(record.instanceId)) throw new Error(`portal record ${key} references missing instance`);
       if (!record.connected || !record.a || !record.b) throw new Error(`portal record ${key} is disconnected`);
       const instance = this.#instances.get(record.instanceId);
-      if (instance) {
-        for (const binding of record.roadBindings ?? []) {
-          const domainId = instance.layerDomains.get(binding.layerId);
-          if (!domainId) continue;
-          const roads = this.#portalsByRoad.get(domainId);
-          const keysForRoad = roads?.get(binding.roadId);
-          keysForRoad?.delete(key);
-          if (keysForRoad?.size === 0) roads.delete(binding.roadId);
-          if (roads?.size === 0) this.#portalsByRoad.delete(domainId);
-        }
-      }
-
-      const instance = this.#instances.get(record.instanceId);
       for (const binding of record.roadBindings ?? []) {
         const domainId = instance?.layerDomains.get(binding.layerId);
         if (!domainId ||
@@ -1338,6 +1325,20 @@ export class PlaceRegistry {
     for (const key of keys) {
       const record = this.#portalRecords.get(key);
       if (!record) continue;
+
+      const instance = this.#instances.get(record.instanceId);
+      if (instance) {
+        for (const binding of record.roadBindings ?? []) {
+          const domainId = instance.layerDomains.get(binding.layerId);
+          if (!domainId) continue;
+          const roads = this.#portalsByRoad.get(domainId);
+          const keysForRoad = roads?.get(binding.roadId);
+          keysForRoad?.delete(key);
+          if (keysForRoad?.size === 0) roads.delete(binding.roadId);
+          if (roads?.size === 0) this.#portalsByRoad.delete(domainId);
+        }
+      }
+
       for (const [side, endpoint] of [["a", record.a], ["b", record.b]]) {
         const domainId = endpoint.domainId;
         const set = this.#portalsByDomain.get(domainId);
