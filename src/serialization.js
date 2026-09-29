@@ -57,7 +57,9 @@ export function serializePlaceCore(registry) {
         portalOverrides: mapToObject(instance.portalOverrides),
         boundaryOverrides: mapToObject(instance.boundaryOverrides),
         spaceOverrides: mapToObject(instance.spaceOverrides),
-        dynamicPortals: [...instance.dynamicPortals.values()].map(cloneJson)
+        dynamicPortals: [...instance.dynamicPortals.values()]
+          .map(cloneJson)
+          .sort((a, b) => a.id.localeCompare(b.id))
       }))
       .sort((a, b) => idKey(a.id).localeCompare(idKey(b.id))),
     activeTravels: [...registry.activeTravels.values()]
