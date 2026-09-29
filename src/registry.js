@@ -604,6 +604,9 @@ export class PlaceRegistry {
   #definitions = new Map();
   #instances = new Map();
   #domainBindings = new Map();
+  #definitionsView;
+  #instancesView;
+  #domainBindingsView;
   #exteriorIndexes = new Map();
   #indexedExteriorDomains = new Map();
   #placementChildren = new Map();
@@ -628,6 +631,13 @@ export class PlaceRegistry {
   #travelRevision = 0;
 
   constructor(options = {}) {
+    this.#definitionsView =
+      new ReadonlyMapView(this.#definitions);
+    this.#instancesView =
+      new ReadonlyMapView(this.#instances);
+    this.#domainBindingsView =
+      new ReadonlyMapView(this.#domainBindings);
+
     this.#captureEvents = normalizeBoolean(
       options.captureEvents,
       "captureEvents",
@@ -640,9 +650,9 @@ export class PlaceRegistry {
     if (options.bridge) this.attachBridge(options.bridge);
   }
 
-  get definitions() { return this.#definitions; }
-  get instances() { return this.#instances; }
-  get domainBindings() { return this.#domainBindings; }
+  get definitions() { return this.#definitionsView; }
+  get instances() { return this.#instancesView; }
+  get domainBindings() { return this.#domainBindingsView; }
   get activeTravels() {
     if (!this._activeTravels) this._activeTravels = new Map();
     return this._activeTravels;
