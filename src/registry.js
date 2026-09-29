@@ -17,7 +17,8 @@ import {
   BoundedEventQueue,
   canonicalStringify,
   cloneJson,
-  deepFreeze
+  deepFreeze,
+  normalizeStringList
 } from "./utils.js";
 
 const PORTAL_STATE_KEYS = ["enabled", "open", "locked", "blocked", "destroyed"];
@@ -1119,7 +1120,11 @@ export class PlaceRegistry {
     const portal = {
       id: spec.id,
       kind: spec.kind ?? "portal",
-      tags: [...new Set(spec.tags ?? [])],
+      tags: normalizeStringList(
+        spec.tags,
+        `dynamic portal ${spec.id}.tags`,
+        { defaultValue: [] }
+      ),
       a: normalizeResolved(spec.a, "portal.a"),
       b: normalizeResolved(spec.b, "portal.b"),
       bidirectional: spec.bidirectional !== false,
