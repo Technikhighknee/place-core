@@ -101,24 +101,28 @@ function normalizeNavigationSpec(spec, label) {
       surface,
       bidirectional: normalizeBoolean(
         road.bidirectional,
-        `${label}.road(${road.id}).bidirectional`
+        `${label}.road(${road.id}).bidirectional`,
+        { defaultValue: true }
       ),
       enabled: normalizeBoolean(
         road.enabled,
-        `${label}.road(${road.id}).enabled`
+        `${label}.road(${road.id}).enabled`,
+        { defaultValue: true }
       ),
       allowedProfiles: normalizeStringList(
         road.allowedProfiles,
         `${label}.road(${road.id}).allowedProfiles`,
-        { allowNull: true }
+        { allowNull: true, defaultValue: null }
       ),
       blockedProfiles: normalizeStringList(
         road.blockedProfiles,
-        `${label}.road(${road.id}).blockedProfiles`
+        `${label}.road(${road.id}).blockedProfiles`,
+        { defaultValue: [] }
       ),
       tags: normalizeStringList(
         road.tags,
-        `${label}.road(${road.id}).tags`
+        `${label}.road(${road.id}).tags`,
+        { defaultValue: [] }
       )
     });
   });
