@@ -180,6 +180,12 @@ function normalizeEndpoint(endpoint, portalId, layersById, spacesById) {
 
 function normalizePortal(portal, layersById, spacesById) {
   assertStringId(portal.id, "portal.id");
+  const transitionCost = portal.transitionCost ?? 0;
+  if (!Number.isFinite(transitionCost) || transitionCost < 0) {
+    throw new RangeError(
+      `portal ${portal.id} transitionCost must be a finite number >= 0`
+    );
+  }
   const a = normalizeEndpoint(portal.a, portal.id, layersById, spacesById);
   const b = normalizeEndpoint(portal.b, portal.id, layersById, spacesById);
   const roadBindings = (portal.roadBindings ?? []).map((binding, index) => {
@@ -195,7 +201,7 @@ function normalizePortal(portal, layersById, spacesById) {
     a,
     b,
     bidirectional: portal.bidirectional !== false,
-    transitionCost: Number.isFinite(portal.transitionCost) ? Math.max(0, portal.transitionCost) : 0,
+    transitionCost,
     enabled: portal.enabled !== false,
     open: portal.open !== false,
     locked: portal.locked === true,
