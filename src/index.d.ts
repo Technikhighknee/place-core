@@ -614,10 +614,28 @@ export interface TravelPlan {
   rejectedDomainPairs: readonly string[];
 }
 
+export interface RetainedTravelOptions {
+  journeyOptions?: any;
+  excludedPortalKeys?: readonly string[];
+  excludedDomainPairs?: readonly string[];
+  maxDomainPathAttempts?: number;
+  maxShortestDomainPaths?: number;
+  allowPartialShortestPathSearch?: boolean;
+  maxConcreteStatesPerLayer?: number;
+  maxNearestTargetExpansions?: number;
+  maxCost?: number;
+  anchorPredicate?: (
+    anchor: CompiledPlaceAnchor & { placeId: PlaceId; domainId: string }
+  ) => boolean;
+  worldChangePolicy: "encounter" | "eager";
+  portalEntryTolerance: number;
+}
+
 export interface TravelState {
   entityId: EntityId;
   target: TravelTarget;
   plan: TravelPlan;
+  options: Readonly<RetainedTravelOptions>;
   stepIndex: number;
   localStarted: boolean;
   portalEntered: boolean;
