@@ -260,3 +260,32 @@ test("registry-managed parent placement and attachment mutation still work throu
 
   places.assertInternalConsistency();
 });
+
+
+test("registry structural collections are readonly views", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(definition());
+  places.createPlace({
+    id: "house",
+    definitionId: "encapsulation-place"
+  });
+
+  assert.equal(typeof places.definitions.set, "undefined");
+  assert.equal(typeof places.instances.set, "undefined");
+  assert.equal(typeof places.domainBindings.set, "undefined");
+
+  assert.equal(
+    places.definitions.has("encapsulation-place"),
+    true
+  );
+  assert.equal(
+    places.instances.has("house"),
+    true
+  );
+  assert.equal(
+    places.domainBindings.size,
+    1
+  );
+
+  places.assertInternalConsistency();
+});
