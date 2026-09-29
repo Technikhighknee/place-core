@@ -126,7 +126,7 @@ test("detaching a portal makes an existing graph edge disappear immediately", ()
   const revisionBefore = places.travelRevision;
   assert.equal(places.getPortalsForDomain(inside).length, 1);
 
-  places.clearExternalBinding("house", "street");
+  places.clearAttachment("house", "street");
 
   assert.ok(places.travelRevision > revisionBefore);
   assert.equal(places.getPortalsForDomain(inside).length, 0);

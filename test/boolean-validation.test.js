@@ -128,8 +128,8 @@ test("runtime structural state rejects non-boolean patches atomically", () => {
     /enabled must be a boolean/
   );
 
-  assert.equal(places.getPortal("house", "door").locked, false);
-  assert.equal(places.getBoundary("house", "wall").enabled, true);
+  assert.equal(places.resolvePortal("house", "door").locked, false);
+  assert.equal(places.resolveBoundary("house", "wall").enabled, true);
   assert.equal(places.getSpace("house", "room").enabled, true);
   assert.equal(places.stateRevision, stateRevision);
   assert.equal(places.travelRevision, travelRevision);
@@ -175,7 +175,7 @@ test("dynamic portal booleans are strict at creation and mutation time", () => {
     /blocked must be a boolean/
   );
 
-  assert.equal(places.getPortal("hall", "good").blocked, false);
+  assert.equal(places.resolvePortal("hall", "good").blocked, false);
   assert.equal(places.stateRevision, stateRevision);
   assert.equal(places.travelRevision, travelRevision);
 });
@@ -263,11 +263,11 @@ test("live mutation patches reject unknown fields atomically", () => {
   );
 
   assert.equal(
-    places.getPortal("house", "door").locked,
+    places.resolvePortal("house", "door").locked,
     false
   );
   assert.equal(
-    places.getBoundary("house", "wall").enabled,
+    places.resolveBoundary("house", "wall").enabled,
     true
   );
   assert.equal(

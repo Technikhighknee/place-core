@@ -117,7 +117,7 @@ test("boundary bridge failure restores registry and world-core road state", () =
     /synthetic boundary failure/
   );
 
-  assert.equal(places.getBoundary("place", "wall").enabled, false);
+  assert.equal(places.resolveBoundary("place", "wall").enabled, false);
   assert.ok(nav().findRoute("a", "b", mobility));
   assertRevisions(places, before);
   assert.deepEqual(places.drainEvents(), []);
@@ -166,7 +166,7 @@ test("static portal bridge failure restores traversal state and road effect", ()
     /synthetic portal failure/
   );
 
-  assert.equal(places.getPortal("place", "door").locked, false);
+  assert.equal(places.resolvePortal("place", "door").locked, false);
   assert.ok(nav().findRoute("a", "b", mobility));
   assertRevisions(places, before);
   assert.deepEqual(places.drainEvents(), []);
@@ -224,7 +224,7 @@ test("attachment bridge failure restores endpoint index and road delay", () => {
     /synthetic attachment failure/
   );
 
-  const portal = places.getPortal("place", "gangway");
+  const portal = places.resolvePortal("place", "gangway");
   assert.equal(portal.a.domainId, "street-a");
   assert.equal(nav().roadTraversalDelaySeconds("road"), 0);
   assert.equal(
@@ -285,7 +285,7 @@ test("clearing an attachment rolls back a partial disconnected-road block", () =
     /synthetic clear failure/
   );
 
-  assert.equal(places.getPortal("place", "door").connected, true);
+  assert.equal(places.resolvePortal("place", "door").connected, true);
   assert.ok(nav().findRoute("a", "b", mobility));
   assert.equal(
     places.findNearestPortal("street-a", { x: 10, y: 0 })?.portal.id,
@@ -334,7 +334,7 @@ test("failed dynamic portal add removes partial world-core delay and registry st
     /synthetic dynamic add failure/
   );
 
-  assert.equal(places.getPortal("place", "slow-door"), null);
+  assert.equal(places.resolvePortal("place", "slow-door"), null);
   assert.equal(nav().roadTraversalDelaySeconds("road"), 0);
   assertRevisions(places, before);
   assert.deepEqual(places.drainEvents(), []);
@@ -384,7 +384,7 @@ test("failed dynamic portal removal restores its world-core delay and registry r
     /synthetic dynamic remove failure/
   );
 
-  assert.ok(places.getPortal("place", "slow-door"));
+  assert.ok(places.resolvePortal("place", "slow-door"));
   assert.equal(nav().roadTraversalDelaySeconds("road"), 2);
   assertRevisions(places, before);
   assert.deepEqual(places.drainEvents(), []);

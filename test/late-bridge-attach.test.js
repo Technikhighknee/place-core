@@ -97,7 +97,7 @@ test("late bridge attach materializes existing places and sparse road effects", 
 
   const { world, navigation, bridge } = makeBridge();
 
-  places.attachBridge(bridge);
+  places.attachWorldCoreBridge(bridge);
 
   const domainA = a.layerDomains.get("inside");
   const domainB = b.layerDomains.get("inside");
@@ -146,7 +146,7 @@ test("late bridge attach rolls every materialized place back on failure", () => 
   };
 
   assert.throws(
-    () => places.attachBridge(bridge),
+    () => places.attachWorldCoreBridge(bridge),
     /synthetic late-attach sync failure/
   );
 
@@ -167,11 +167,11 @@ test("attaching a different bridge after one is active is rejected", () => {
   const one = makeBridge();
   const two = makeBridge();
 
-  places.attachBridge(one.bridge);
-  assert.equal(places.attachBridge(one.bridge), places);
+  places.attachWorldCoreBridge(one.bridge);
+  assert.equal(places.attachWorldCoreBridge(one.bridge), places);
 
   assert.throws(
-    () => places.attachBridge(two.bridge),
+    () => places.attachWorldCoreBridge(two.bridge),
     /different bridge/
   );
   assert.equal(places.bridge, one.bridge);
@@ -183,10 +183,10 @@ test("one WorldCoreBridge cannot be silently hijacked by another registry", () =
   const two = new PlaceRegistry();
   const { bridge } = makeBridge();
 
-  one.attachBridge(bridge);
+  one.attachWorldCoreBridge(bridge);
 
   assert.throws(
-    () => two.attachBridge(bridge),
+    () => two.attachWorldCoreBridge(bridge),
     /already attached to a different PlaceRegistry/
   );
 
@@ -194,6 +194,6 @@ test("one WorldCoreBridge cannot be silently hijacked by another registry", () =
   assert.equal(two.bridge, null);
 
   bridge.dispose();
-  assert.equal(two.attachBridge(bridge), two);
+  assert.equal(two.attachWorldCoreBridge(bridge), two);
   assert.equal(two.bridge, bridge);
 });

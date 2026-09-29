@@ -166,7 +166,7 @@ test("dynamic endpoint metadata survives snapshot roundtrip", () => {
   const restored = deserializePlaceCore(
     JSON.parse(JSON.stringify(serializePlaceCore(places)))
   );
-  const portal = restored.getPortal("house", "annotated");
+  const portal = restored.resolvePortal("house", "annotated");
 
   assert.deepEqual(portal.a.metadata, {
     semanticSide: "inside",
@@ -238,7 +238,7 @@ test("static local endpoint metadata survives resolve and snapshot roundtrip", (
     }
   });
 
-  let portal = places.getPortal("house", "door");
+  let portal = places.resolvePortal("house", "door");
   assert.deepEqual(portal.a.metadata, {
     semanticSide: "outside"
   });
@@ -250,7 +250,7 @@ test("static local endpoint metadata survives resolve and snapshot roundtrip", (
   const restored = deserializePlaceCore(
     JSON.parse(JSON.stringify(serializePlaceCore(places)))
   );
-  portal = restored.getPortal("house", "door");
+  portal = restored.resolvePortal("house", "door");
 
   assert.deepEqual(portal.a.metadata, {
     semanticSide: "outside"

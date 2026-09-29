@@ -34,8 +34,8 @@ test("definitions are shared while instance state stays sparse", () => {
   assert.equal(places.definitions.size, 1);
   assert.equal(a.portalOverrides.size, 1);
   assert.equal(b.portalOverrides.size, 0);
-  assert.equal(places.getPortal("a", "stairs").traversable, false);
-  assert.equal(places.getPortal("b", "stairs").traversable, true);
+  assert.equal(places.resolvePortal("a", "stairs").traversable, false);
+  assert.equal(places.resolvePortal("b", "stairs").traversable, true);
 });
 
 test("semantic locate, occupancy and moving exterior footprints work", () => {
@@ -47,7 +47,7 @@ test("semantic locate, occupancy and moving exterior footprints work", () => {
     placement: { domainId: "city", transform: { x: 100, y: 100 }, containment: "footprint" }
   });
   assert.deepEqual(places.locate("city", { x: 105, y: 105 }).places, ["home"]);
-  places.syncEntityOccupancy({ id: "hans", domainId: "home:ground", position: { x: 5, y: 5 } });
+  places.updateEntityOccupancy({ id: "hans", domainId: "home:ground", position: { x: 5, y: 5 } });
   assert.equal(places.entitiesInSpace("home", "room").has("hans"), true);
   assert.ok(places.drainEvents().some((event) => event.type === "space-enter"));
 });
@@ -57,7 +57,7 @@ test("snapshot roundtrip keeps canonical state hash", () => {
   places.registerDefinition(definition);
   places.createPlace({ id: "home", definitionId: "house" });
   places.setBoundaryState("home", "wall", { enabled: false });
-  places.addInstancePortal("home", {
+  places.addPortal("home", {
     id: "breach",
     a: { domainId: "home:ground", position: { x: 9, y: 5 } },
     b: { domainId: "outside", position: { x: 0, y: 0 } }

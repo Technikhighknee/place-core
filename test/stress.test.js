@@ -44,8 +44,8 @@ function run(seed) {
     else if (op === 2) {
       const portalId = `breach-${Math.floor(random() * 4)}`;
       const instance = places.getPlace(id);
-      if (instance.dynamicPortals.has(portalId)) places.removeInstancePortal(id, portalId);
-      else places.addInstancePortal(id, {
+      if (instance.dynamicPortals.has(portalId)) places.removePortal(id, portalId);
+      else places.addPortal(id, {
         id: portalId,
         a: { domainId: `${id}:a`, position: { x: 9, y: 5 } },
         b: { domainId: `outside-${Math.floor(random() * 8)}`, position: { x: 0, y: 0 } }
