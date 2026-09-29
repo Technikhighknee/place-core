@@ -1070,6 +1070,31 @@ function advance(registry, bridge, state, options = {}) {
         return replan(registry, bridge, state, options);
       }
 
+      const portalEntryTolerance = options.portalEntryTolerance ?? 0.25;
+      if (!Number.isFinite(portalEntryTolerance) || portalEntryTolerance < 0) {
+        throw new RangeError("portalEntryTolerance must be a finite number >= 0");
+      }
+      if (squaredDistance(entity.position, direction.from.position) >
+          portalEntryTolerance * portalEntryTolerance) {
+        registry.emit("travel-obstacle-encountered", {
+          entityId: state.entityId,
+          stepIndex: state.stepIndex,
+          obstacle: "portal-endpoint-moved",
+          portalKey: step.portalKey,
+          placeId: portal.instanceId,
+          portalId: portal.id,
+          currentPosition: {
+            x: entity.position.x,
+            y: entity.position.y
+          },
+          expectedPosition: {
+            x: direction.from.position.x,
+            y: direction.from.position.y
+          }
+        });
+        return replan(registry, bridge, state, options);
+      }
+
       if (!state.portalEntered) {
         state.portalEntered = true;
         state.portalTransitionRemaining = Math.max(0, step.transitionCost ?? 0);
