@@ -49,6 +49,7 @@ function definition() {
         position: { x: 5, y: 0 },
         nodeId: "door"
       },
+      transitionCost: 3,
       roadBindings: [{
         layerId: "inside",
         roadId: "door-road"
@@ -92,7 +93,13 @@ test("unbound external portal blocks its world-core road until attached", () => 
 
   nav = navigation.navigationForDomain(domainId);
   assert.ok(nav.findRoute("room", "door", mobility));
+  assert.equal(
+    nav.roadTraversalDelaySeconds("door-road"),
+    0,
+    "cross-domain transitionCost must not be duplicated as a local road delay"
+  );
   assert.equal(places.resolvePortal("house", "front-door").connected, true);
+  assert.equal(places.resolvePortal("house", "front-door").transitionCost, 3);
 
   places.clearAttachment("house", "outside");
 
