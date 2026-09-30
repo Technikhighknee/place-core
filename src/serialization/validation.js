@@ -337,7 +337,11 @@ function assertSnapshotResolvedPortalPhysical(
 
   const domainId = portal.a.domainId;
   const thresholdBindings = (portal.roadBindings ?? []).filter(
-    (binding) => item.layerDomains[binding.layerId] === domainId
+    (binding) =>
+      ownValue(
+        item.layerDomains,
+        binding.layerId
+      ) === domainId
   );
   const crossesSpaces =
     portal.a.spaceId != null &&
