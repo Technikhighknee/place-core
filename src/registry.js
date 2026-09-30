@@ -899,25 +899,27 @@ export class PlaceRegistry {
       metadata: input.metadata
     });
 
-    this.#instances.set(instance.id, instance);
-    this.#semanticGraph.registerPrimary(instance);
-    this.#semanticGraph.registerMemberships(instance);
-    this.#placementGraph.register(instance);
-    for (const [layerId, domainId] of layerDomains) {
-      this.#domainBindings.set(
-        domainId,
-        deepFreeze({
-          instanceId: instance.id,
-          layerId
-        })
-      );
-    }
-    this.#indexExterior(instance, definition);
-    this.#reindexInstancePortals(instance, definition);
-
+    let registered = false;
     let materialized = false;
     let materializationReceipt = null;
     try {
+      this.#instances.set(instance.id, instance);
+      registered = true;
+      this.#semanticGraph.registerPrimary(instance);
+      this.#semanticGraph.registerMemberships(instance);
+      this.#placementGraph.register(instance);
+      for (const [layerId, domainId] of layerDomains) {
+        this.#domainBindings.set(
+          domainId,
+          deepFreeze({
+            instanceId: instance.id,
+            layerId
+          })
+        );
+      }
+      this.#indexExterior(instance, definition);
+      this.#reindexInstancePortals(instance, definition);
+
       for (const portal of definition.portals) {
         validateResolvedPortalRoadBindings(
           instance,
@@ -960,14 +962,27 @@ export class PlaceRegistry {
           rollbackError = cleanupError;
         }
       }
-      this.#removePlaceInternal(instance.id, false, {
-        touchRevision: false,
-        emitEvent: false
-      });
-      if (rollbackError) {
+      let localRollbackError = null;
+      if (registered) {
+        try {
+          this.#removePlaceInternal(instance.id, false, {
+            touchRevision: false,
+            emitEvent: false
+          });
+        } catch (cleanupError) {
+          localRollbackError = cleanupError;
+        }
+      }
+
+      if (rollbackError || localRollbackError) {
+        const errors = [
+          error,
+          rollbackError,
+          localRollbackError
+        ].filter(Boolean);
         throw new AggregateError(
-          [error, rollbackError],
-          `failed to create place ${String(instance.id)} and rollback bridge state`
+          errors,
+          `failed to create place ${String(instance.id)} and rollback state`
         );
       }
       throw error;
