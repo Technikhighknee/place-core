@@ -4,6 +4,7 @@ import {
   canonicalStringify,
   cloneJson,
   compareStrings,
+  deepFreeze,
   normalizeBoolean,
   sha256
 } from "./utils.js";
@@ -324,9 +325,10 @@ export function deserializePlaceCore(snapshot, options = {}) {
       });
       state.worldChangePolicy = state.options.worldChangePolicy;
       if (state.plan) {
-        state.plan.travelRevision = registry.travelRevision;
-        Object.freeze(state.plan.steps);
-        Object.freeze(state.plan);
+        state.plan.travelRevision =
+          registry.travelRevision;
+        state.plan.legs = state.plan.steps;
+        deepFreeze(state.plan);
       }
       state.travelRevision = registry.travelRevision;
       registry.activeTravels.set(state.entityId, state);
