@@ -312,3 +312,52 @@ test("prototype-shadowing layer IDs survive snapshot round-trip", () => {
     "house:constructor"
   );
 });
+
+
+test("nearest anchor selection survives finite coordinate subtraction overflow", () => {
+  const registry = new PlaceRegistry();
+  registry.registerDefinition({
+    id: "huge-anchor-space",
+    layers: [{ id: "ground" }],
+    anchors: [
+      {
+        id: "far",
+        layerId: "ground",
+        position: { x: 1e308, y: 0 }
+      },
+      {
+        id: "near",
+        layerId: "ground",
+        position: { x: 9e307, y: 0 }
+      }
+    ]
+  });
+  registry.createPlace({
+    id: "huge-place",
+    definitionId: "huge-anchor-space"
+  });
+
+  const position = { x: -1e308, y: 0 };
+
+  assert.equal(
+    registry.findNearestAnchor(
+      "huge-place",
+      position,
+      { layerId: "ground" }
+    )?.id,
+    "near"
+  );
+
+  const domainId =
+    registry.getLayerDomain(
+      "huge-place",
+      "ground"
+    );
+  assert.equal(
+    registry.findNearestAnchorInDomain(
+      domainId,
+      position
+    )?.id,
+    "near"
+  );
+});
