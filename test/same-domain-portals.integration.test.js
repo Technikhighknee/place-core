@@ -404,3 +404,56 @@ test("cancelled threshold traversal emits portal-abort rather than traverse", ()
   );
   assert.equal(events[1].reason, "cancelled");
 });
+
+
+test("external domain transfer aborts an open same-domain portal crossing", () => {
+  const {
+    world,
+    navigation,
+    bridge,
+    places
+  } = setup();
+
+  world.addDomain({ id: "escape" });
+
+  assert.equal(
+    bridge.startLocalJourney("hans", "target"),
+    true
+  );
+
+  let entered = false;
+  for (let i = 0; i < 100 && !entered; i += 1) {
+    stepSimulation(world, navigation, 0.1);
+    entered = places.peekEvents().some((event) =>
+      event.type === "portal-enter" &&
+      event.portalId === "kitchen-door"
+    );
+  }
+  assert.equal(entered, true);
+
+  world.transferEntity(
+    "hans",
+    {
+      domainId: "escape",
+      position: { x: 0, y: 0 }
+    }
+  );
+
+  const events = places.drainEvents()
+    .filter((event) =>
+      event.portalId === "kitchen-door"
+    );
+
+  assert.deepEqual(
+    events.map((event) => event.type),
+    ["portal-enter", "portal-abort"]
+  );
+  assert.equal(
+    events[1].reason,
+    "domain-transfer"
+  );
+  assert.equal(
+    places.getEntityLocation("hans")?.domainId,
+    "escape"
+  );
+});
