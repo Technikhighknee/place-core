@@ -620,21 +620,14 @@ test("definition revision must be a non-empty string or finite number", () => {
   );
 });
 
-test("unknown top-level authoring fields do not affect runtime definition identity", () => {
-  const plain = compilePlace({
-    id: "unknown-field-place",
-    layers: [{ id: "ground" }]
-  });
-  const noisy = compilePlace({
-    id: "unknown-field-place",
-    layers: [{ id: "ground" }],
-    accidentalField: "ignored"
-  });
-
-  assert.equal(plain.contentHash, noisy.contentHash);
-  assert.equal(
-    Object.hasOwn(noisy.getBlueprint(), "accidentalField"),
-    false
+test("unknown top-level authoring fields are rejected", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "unknown-field-place",
+      layers: [{ id: "ground" }],
+      accidentalField: "ignored"
+    }),
+    /place contains unknown field accidentalField/
   );
 });
 

@@ -63,7 +63,9 @@ test("snapshot roundtrip keeps canonical state hash", () => {
     b: { domainId: "outside", position: { x: 0, y: 0 } }
   });
   const before = computePlaceCoreStateHash(places);
-  const restored = deserializePlaceCore(serializePlaceCore(places), { definitions: [definition] });
+  const restored = deserializePlaceCore(
+    serializePlaceCore(places)
+  );
   assert.equal(computePlaceCoreStateHash(restored), before);
   restored.assertInternalConsistency();
 });

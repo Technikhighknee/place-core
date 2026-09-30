@@ -763,3 +763,80 @@ test("deserialize options reject unknown fields", () => {
     /deserialize options contains unknown field restartTrvels/
   );
 });
+
+
+test("snapshot validation treats prototype-shadowing layer IDs as own dictionary keys", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "prototype-threshold",
+    layers: [{
+      id: "constructor",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 }
+        ],
+        roads: [{
+          id: "threshold",
+          from: "a",
+          to: "b",
+          bidirectional: true
+        }]
+      }
+    }],
+    spaces: [
+      {
+        id: "left",
+        layerId: "constructor",
+        geometry: {
+          type: "aabb",
+          minX: -1,
+          minY: -1,
+          maxX: 0,
+          maxY: 1
+        }
+      },
+      {
+        id: "right",
+        layerId: "constructor",
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: -1,
+          maxX: 1,
+          maxY: 1
+        }
+      }
+    ],
+    portals: [{
+      id: "door",
+      a: {
+        layerId: "constructor",
+        spaceId: "left",
+        position: { x: 0, y: 0 },
+        nodeId: "a"
+      },
+      b: {
+        layerId: "constructor",
+        spaceId: "right",
+        position: { x: 0, y: 0 },
+        nodeId: "b"
+      },
+      roadBindings: [{
+        layerId: "constructor",
+        roadId: "threshold"
+      }]
+    }]
+  });
+  places.createPlace({
+    id: "house",
+    definitionId: "prototype-threshold"
+  });
+
+  assert.equal(
+    validatePlaceCoreSnapshot(
+      serializePlaceCore(places)
+    ),
+    true
+  );
+});
