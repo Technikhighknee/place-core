@@ -95,7 +95,10 @@ function nearestAnchorResult(candidates, position) {
 
   return {
     anchor: best,
-    distance: bestScaledDistance * scale
+    distance: Math.hypot(
+      position.x - best.position.x,
+      position.y - best.position.y
+    )
   };
 }
 
@@ -153,7 +156,11 @@ function nearestBoundaryResult(boundaries, position) {
 
   return {
     boundary: best,
-    distance: bestScaledDistance * scale
+    distance: distancePointToSegment(
+      position,
+      best.a,
+      best.b
+    )
   };
 }
 
