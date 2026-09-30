@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   compilePlace,
-  geometryContainsGeometry
+  geometryContainsGeometry,
+  pointInGeometry
 } from "../src/index.js";
 
 test("nested AABB spaces must be fully contained by their parent", () => {
@@ -203,5 +204,33 @@ test("valid nested mixed geometry compiles", () => {
   assert.equal(
     definition.getSpaceDepth("table-area"),
     1
+  );
+});
+
+
+test("large finite circle distances do not become Infinity-squared false positives", () => {
+  const hugeCircle = {
+    type: "circle",
+    center: { x: 0, y: 0 },
+    radius: 1e200
+  };
+
+  assert.equal(
+    pointInGeometry(
+      { x: 2e200, y: 0 },
+      hugeCircle
+    ),
+    false
+  );
+  assert.equal(
+    geometryContainsGeometry(
+      hugeCircle,
+      {
+        type: "circle",
+        center: { x: 2e200, y: 0 },
+        radius: 1
+      }
+    ),
+    false
   );
 });

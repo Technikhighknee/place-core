@@ -425,15 +425,18 @@ export class PlaceRegistry {
     }
 
     let best = null;
-    let bestDistanceSq = Infinity;
+    let bestDistance = Infinity;
 
     for (const anchor of eligible) {
-      const distanceSq = squaredDistance(position, anchor.position);
-      if (distanceSq < bestDistanceSq ||
-          (distanceSq === bestDistanceSq &&
+      const distance = Math.hypot(
+        position.x - anchor.position.x,
+        position.y - anchor.position.y
+      );
+      if (distance < bestDistance ||
+          (distance === bestDistance &&
            compareStrings(anchor.id, best?.id ?? "") < 0)) {
         best = anchor;
-        bestDistanceSq = distanceSq;
+        bestDistance = distance;
       }
     }
 
@@ -441,7 +444,7 @@ export class PlaceRegistry {
       ...best,
       placeId: instanceId,
       domainId: instance.layerDomains.get(best.layerId),
-      distance: Math.sqrt(bestDistanceSq)
+      distance: bestDistance
     } : null;
   }
 
@@ -486,20 +489,23 @@ export class PlaceRegistry {
     assertStringId(domainId, "findNearestAnchorInDomain.domainId");
     assertVec2(position, "findNearestAnchorInDomain.position");
     let best = null;
-    let bestDistanceSq = Infinity;
+    let bestDistance = Infinity;
 
     for (const anchor of this.getAnchorsForDomain(domainId, options)) {
-      const distanceSq = squaredDistance(position, anchor.position);
-      if (distanceSq < bestDistanceSq ||
-          (distanceSq === bestDistanceSq && compareStrings(anchor.id, best?.id ?? "") < 0)) {
+      const distance = Math.hypot(
+        position.x - anchor.position.x,
+        position.y - anchor.position.y
+      );
+      if (distance < bestDistance ||
+          (distance === bestDistance && compareStrings(anchor.id, best?.id ?? "") < 0)) {
         best = anchor;
-        bestDistanceSq = distanceSq;
+        bestDistance = distance;
       }
     }
 
     return best ? {
       ...best,
-      distance: Math.sqrt(bestDistanceSq)
+      distance: bestDistance
     } : null;
   }
 

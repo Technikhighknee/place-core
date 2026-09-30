@@ -191,19 +191,18 @@ export function geometryContainsGeometry(parent, child) {
     if (parent.type === "circle") {
       const dx = child.center.x - parent.center.x;
       const dy = child.center.y - parent.center.y;
-      const centerDistance = Math.sqrt(dx * dx + dy * dy);
+      const centerDistance = Math.hypot(dx, dy);
       return centerDistance + child.radius <= parent.radius + EPSILON;
     }
 
     if (parent.type === "polygon") {
       if (!pointInPolygon(child.center, parent.points)) return false;
-      const radiusSq = child.radius * child.radius;
       for (let i = 0; i < parent.points.length; i += 1) {
         const a = parent.points[i];
         const b = parent.points[(i + 1) % parent.points.length];
         if (
-          squaredDistancePointToSegment(child.center, a, b) <
-          radiusSq - EPSILON
+          distancePointToSegment(child.center, a, b) <
+          child.radius - EPSILON
         ) {
           return false;
         }
@@ -252,7 +251,8 @@ export function pointInGeometry(point, geometry) {
     case "circle": {
       const dx = point.x - geometry.center.x;
       const dy = point.y - geometry.center.y;
-      return dx * dx + dy * dy <= geometry.radius * geometry.radius + EPSILON;
+      return Math.hypot(dx, dy) <=
+        geometry.radius + EPSILON;
     }
     case "polygon":
       return pointInPolygon(point, geometry.points);
@@ -467,19 +467,53 @@ export function segmentBounds(a, b) {
   };
 }
 
-export function squaredDistancePointToSegment(point, a, b) {
+function distancePointToSegment(point, a, b) {
   assertVec2(point);
   assertVec2(a, "segment.a");
   assertVec2(b, "segment.b");
+
   const abX = b.x - a.x;
   const abY = b.y - a.y;
-  const len2 = abX * abX + abY * abY;
-  if (len2 <= EPSILON * EPSILON) {
-    return squaredDistance(point, a);
+  const length = Math.hypot(abX, abY);
+  if (length <= EPSILON) {
+    return Math.hypot(
+      point.x - a.x,
+      point.y - a.y
+    );
   }
-  const t = Math.max(0, Math.min(1, ((point.x - a.x) * abX + (point.y - a.y) * abY) / len2));
-  const closest = { x: a.x + abX * t, y: a.y + abY * t };
-  return squaredDistance(point, closest);
+
+  const unitX = abX / length;
+  const unitY = abY / length;
+  const pointX = point.x - a.x;
+  const pointY = point.y - a.y;
+  const projection =
+    pointX * unitX +
+    pointY * unitY;
+
+  if (projection <= 0) {
+    return Math.hypot(pointX, pointY);
+  }
+  if (projection >= length) {
+    return Math.hypot(
+      point.x - b.x,
+      point.y - b.y
+    );
+  }
+
+  const closestX =
+    a.x + unitX * projection;
+  const closestY =
+    a.y + unitY * projection;
+  return Math.hypot(
+    point.x - closestX,
+    point.y - closestY
+  );
+}
+
+export function squaredDistancePointToSegment(point, a, b) {
+  const distance =
+    distancePointToSegment(point, a, b);
+  return distance * distance;
 }
 
 export function segmentIntersectsBounds(a, b, bounds) {

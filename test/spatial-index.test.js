@@ -264,3 +264,25 @@ test("StaticGeometryIndex reuses its constructor geometry accessor by default", 
     []
   );
 });
+
+
+test("DynamicPointIndex radius and nearest remain correct when squared distances overflow", () => {
+  const index = new DynamicPointIndex(64);
+  index.set("near", { x: 1e200, y: 0 });
+  index.set("far", { x: 2e200, y: 0 });
+
+  assert.deepEqual(
+    index
+      .queryRadius(
+        { x: 0, y: 0 },
+        1.5e200
+      )
+      .map((hit) => hit.id),
+    ["near"]
+  );
+
+  assert.equal(
+    index.findNearest({ x: 0, y: 0 }).id,
+    "near"
+  );
+});

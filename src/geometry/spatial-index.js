@@ -483,7 +483,6 @@ export class DynamicPointIndex {
     const maxCellY = Math.floor((point.y + radius) / this.#cellSize);
     const minCellX = Math.floor((point.x - radius) / this.#cellSize);
     const maxCellX = Math.floor((point.x + radius) / this.#cellSize);
-    const radiusSq = radius * radius;
     const result = [];
 
     const rows = this.#rowCoordinates();
@@ -506,12 +505,12 @@ export class DynamicPointIndex {
           if (predicate && !predicate(id, record)) continue;
           const dx = record.x - point.x;
           const dy = record.y - point.y;
-          const distanceSq = dx * dx + dy * dy;
-          if (distanceSq <= radiusSq) {
+          const distance = Math.hypot(dx, dy);
+          if (distance <= radius) {
             result.push({
               id,
               point: { x: record.x, y: record.y },
-              distance: Math.sqrt(distanceSq)
+              distance
             });
           }
         }
@@ -536,7 +535,7 @@ export class DynamicPointIndex {
     if (this.#points.size === 0) return null;
 
     let best = null;
-    let bestDistanceSq = maxDistance * maxDistance;
+    let bestDistance = maxDistance;
     const rows = this.#rowCoordinates();
 
     for (const rowCandidate of coordinatesByDistance(
@@ -545,7 +544,7 @@ export class DynamicPointIndex {
       this.#cellSize
     )) {
       const dy = rowCandidate.distance;
-      if (dy * dy > bestDistanceSq) break;
+      if (dy > bestDistance) break;
 
       const y = rowCandidate.coordinate;
       const columns = this.#columnCoordinates(y);
@@ -556,8 +555,8 @@ export class DynamicPointIndex {
         this.#cellSize
       )) {
         const dx = columnCandidate.distance;
-        const cellDistanceSq = dx * dx + dy * dy;
-        if (cellDistanceSq > bestDistanceSq) break;
+        const cellDistance = Math.hypot(dx, dy);
+        if (cellDistance > bestDistance) break;
 
         const bucket = this.#rows.get(y)?.get(columnCandidate.coordinate);
         if (!bucket) continue;
@@ -569,24 +568,27 @@ export class DynamicPointIndex {
 
           const exactX = record.x - point.x;
           const exactY = record.y - point.y;
-          const distanceSq = exactX * exactX + exactY * exactY;
-          if (distanceSq > bestDistanceSq) continue;
+          const distance = Math.hypot(
+            exactX,
+            exactY
+          );
+          if (distance > bestDistance) continue;
 
           const winsTie =
             best != null &&
-            distanceSq === bestDistanceSq &&
+            distance === bestDistance &&
             compareIds != null &&
             compareIds(id, best.id) < 0;
 
           if (best == null ||
-              distanceSq < bestDistanceSq ||
+              distance < bestDistance ||
               winsTie) {
             best = {
               id,
               point: { x: record.x, y: record.y },
-              distance: Math.sqrt(distanceSq)
+              distance
             };
-            bestDistanceSq = distanceSq;
+            bestDistance = distance;
           }
         }
       }
