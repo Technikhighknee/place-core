@@ -1442,8 +1442,20 @@ export function stepTravel(registry, a, b, c) {
       return publicTravelState(state);
     }
 
-    if (entity.lastJourneyFailure?.destinationNodeId === step.destinationNodeId) {
-      const next = replan(registry, bridge, state, effectiveOptions);
+    const arrived =
+      (entity.domainId ?? "default") === step.domainId &&
+      squaredDistance(
+        entity.position,
+        step.destinationPosition
+      ) <= POSITION_EPSILON_SQ;
+
+    if (!arrived) {
+      const next = replan(
+        registry,
+        bridge,
+        state,
+        effectiveOptions
+      );
       if (next.status !== "active") {
         return publicTravelState(next);
       }

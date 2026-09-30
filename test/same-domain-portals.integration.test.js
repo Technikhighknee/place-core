@@ -457,3 +457,62 @@ test("external domain transfer aborts an open same-domain portal crossing", () =
     "escape"
   );
 });
+
+
+test("external journey cancellation cannot falsely complete a local travel leg", () => {
+  const {
+    world,
+    bridge,
+    places
+  } = setup();
+
+  world.addDomain({ id: "escape" });
+
+  const state = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "inn",
+      anchorId: "kitchen-target"
+    }
+  );
+  assert.ok(state);
+  assert.equal(
+    places.activeTravels.has("hans"),
+    true
+  );
+
+  world.transferEntity(
+    "hans",
+    {
+      domainId: "escape",
+      position: { x: 0, y: 0 }
+    }
+  );
+
+  stepPlaceSimulation(
+    places,
+    bridge,
+    0.1
+  );
+
+  assert.equal(
+    places.activeTravels.has("hans"),
+    false
+  );
+
+  const events = places.drainEvents();
+  assert.equal(
+    events.some((event) =>
+      event.type === "travel-complete" &&
+      event.entityId === "hans"
+    ),
+    false
+  );
+  assert.ok(events.some((event) =>
+    event.type === "travel-failed" &&
+    event.entityId === "hans" &&
+    event.reason === "no-route-after-world-change"
+  ));
+});
