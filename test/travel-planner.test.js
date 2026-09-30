@@ -790,3 +790,93 @@ test("concrete detour fallback may revisit a domain through a different portal",
     ["A", "B", "D", "B", "C"]
   );
 });
+
+
+test("default concrete-state search does not silently discard the globally cheapest portal choice", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({ id: "wide-portal-graph" });
+  places.createPlace({
+    id: "graph",
+    definitionId: "wide-portal-graph"
+  });
+
+  for (let i = 0; i < 129; i += 1) {
+    places.addPortal("graph", {
+      id: `p-${String(i).padStart(3, "0")}`,
+      bidirectional: false,
+      a: {
+        domainId: "A",
+        position: { x: i, y: 0 },
+        nodeId: `a-${i}`
+      },
+      b: {
+        domainId: "B",
+        position: { x: i, y: 0 },
+        nodeId: `b-${i}`
+      }
+    });
+  }
+
+  const entity = {
+    id: "hans",
+    domainId: "A",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const bridge = {
+    getEntity(id) {
+      return id === "hans" ? entity : null;
+    },
+    planLocalRoute({
+      domainId,
+      position,
+      destinationNodeId
+    }) {
+      const index = Number(
+        destinationNodeId.split("-").at(-1)
+      );
+      if (!Number.isInteger(index)) {
+        return null;
+      }
+
+      if (domainId === "A") {
+        return { estimatedSeconds: index };
+      }
+
+      if (domainId === "B") {
+        return {
+          estimatedSeconds:
+            index === 128
+              ? 0
+              : 1_000
+        };
+      }
+
+      return null;
+    },
+    startLocalJourney() { return true; },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      domainId: "B",
+      position: { x: 128, y: 0 },
+      nodeId: "target-128"
+    }
+  );
+
+  assert.ok(plan);
+  assert.equal(
+    plan.steps.find(
+      (step) => step.type === "traverse-portal"
+    ).portalId,
+    "p-128"
+  );
+  assert.equal(plan.estimatedSeconds, 128);
+});
