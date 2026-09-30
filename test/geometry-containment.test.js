@@ -8,6 +8,7 @@ import {
   geometryContainsGeometry,
   inverseTransformPoint,
   pointInGeometry,
+  segmentIntersectsBounds,
   squaredDistancePointToSegment,
   transformPoint
 } from "../src/index.js";
@@ -367,5 +368,45 @@ test("composeTransforms survives finite rotation-sum overflow", () => {
   );
   assert.ok(
     Math.abs(direct.y - sequential.y) <= 1e-12
+  );
+});
+
+
+test("segment-bounds intersection survives finite subtraction overflow", () => {
+  const a = {
+    x: -1e308,
+    y: -1e308
+  };
+  const b = {
+    x: 1e308,
+    y: 1e308
+  };
+
+  assert.equal(
+    segmentIntersectsBounds(
+      a,
+      b,
+      {
+        minX: 8.9e307,
+        minY: -9.1e307,
+        maxX: 9.1e307,
+        maxY: -8.9e307
+      }
+    ),
+    false
+  );
+
+  assert.equal(
+    segmentIntersectsBounds(
+      a,
+      b,
+      {
+        minX: -1e307,
+        minY: -1e307,
+        maxX: 1e307,
+        maxY: 1e307
+      }
+    ),
+    true
   );
 });
