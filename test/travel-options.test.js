@@ -681,17 +681,17 @@ test("delta-only step overrides preserve the travel's retained world-change poli
     { locked: true }
   );
 
-  stepTravel(
+  const current = stepTravel(
     places,
     bridge,
     "hans",
     { deltaSeconds: 0.5 }
   );
 
-  assert.equal(travel.replans, 1);
-  assert.equal(travel.status, "failed");
+  assert.equal(current.replans, 1);
+  assert.equal(current.status, "failed");
   assert.equal(
-    travel.failureReason,
+    current.failureReason,
     "no-route-after-world-change"
   );
 });

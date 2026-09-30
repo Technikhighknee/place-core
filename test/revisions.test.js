@@ -205,9 +205,16 @@ test("eager travel still replans on travel-affecting mutations", () => {
   assert.ok(travel);
 
   places.setSpaceState("house", "room", { enabled: false });
-  stepTravel(places, bridge, "hans");
+  const current = stepTravel(
+    places,
+    bridge,
+    "hans"
+  );
 
-  assert.ok(travel.replans >= 1 || travel.status === "failed");
+  assert.ok(
+    current.replans >= 1 ||
+    current.status === "failed"
+  );
 });
 
 

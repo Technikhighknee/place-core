@@ -27,7 +27,8 @@ export {
 };
 
 import {
-  PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN
+  PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+  snapshotTravelState
 } from "./registry/support.js";
 import {
   MinHeap,
@@ -1060,9 +1061,7 @@ function resolveStartCall(registry, a, b, c, d) {
 }
 
 function publicTravelState(state) {
-  return state == null
-    ? null
-    : deepFreeze(cloneJson(state));
+  return snapshotTravelState(state);
 }
 
 function fail(registry, bridge, state, reason) {

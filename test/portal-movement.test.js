@@ -88,7 +88,7 @@ test("encounter travel replans instead of teleporting through a moved portal end
     }
   };
 
-  const travel = startTravel(
+  let travel = startTravel(
     places,
     bridge,
     "hans",
@@ -111,7 +111,11 @@ test("encounter travel replans instead of teleporting through a moved portal end
 
   entity.position = { x: 10, y: 0 };
   entity.journey = null;
-  stepTravel(places, bridge, "hans");
+  travel = stepTravel(
+    places,
+    bridge,
+    "hans"
+  );
 
   assert.equal(transfers, 0, "stale portal endpoint must never transfer the entity");
   assert.equal(travel.replans, 1);
@@ -305,9 +309,11 @@ function reachPortalAndAttemptTransfer(runtime) {
 
   runtime.entity.position = { x: 10, y: 0 };
   runtime.entity.journey = null;
-  stepTravel(places, bridge, "hans");
-
-  return travel;
+  return stepTravel(
+    places,
+    bridge,
+    "hans"
+  );
 }
 
 test("portal travel does not advance when a bridge transfer is a no-op", () => {

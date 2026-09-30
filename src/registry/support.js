@@ -450,3 +450,34 @@ export function validateResolvedPortalRoadBindings(
     );
   }
 }
+
+
+export function snapshotTravelState(state) {
+  if (state == null) return null;
+
+  const options = {
+    ...(state.options ?? {})
+  };
+
+  if (options.journeyOptions !== undefined) {
+    options.journeyOptions =
+      deepFreeze(cloneJson(options.journeyOptions));
+  }
+  if (options.excludedPortalKeys !== undefined) {
+    options.excludedPortalKeys =
+      Object.freeze([...options.excludedPortalKeys]);
+  }
+  if (options.excludedDomainPairs !== undefined) {
+    options.excludedDomainPairs =
+      Object.freeze([...options.excludedDomainPairs]);
+  }
+
+  const snapshot = {
+    ...state,
+    target: deepFreeze(cloneJson(state.target)),
+    plan: state.plan,
+    options: deepFreeze(options)
+  };
+
+  return deepFreeze(snapshot);
+}

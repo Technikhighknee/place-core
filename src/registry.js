@@ -46,6 +46,7 @@ import {
   membershipKey,
   normalizeMembership,
   cloneState,
+  snapshotTravelState,
   portalTraversableState,
   validateResolvedPortalRoadBindings
 } from "./registry/support.js";
@@ -107,7 +108,7 @@ export class PlaceRegistry {
       new ReadonlyMapView(
         this.#activeTravels,
         (state) =>
-          deepFreeze(cloneJson(state))
+          snapshotTravelState(state)
       );
 
     this.#captureEvents = normalizeBoolean(
