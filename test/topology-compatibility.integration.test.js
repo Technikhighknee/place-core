@@ -236,3 +236,86 @@ test("shared topology ID rejects different navigation runtime options", () => {
   assert.equal(world.getDomain("conflict-place:inside"), undefined);
   assert.equal(places.getPlace("conflict-place"), null);
 });
+
+
+test("failed multi-layer materialization removes newly registered topologies", () => {
+  const { world, navigation, places } = setup();
+
+  const layer = (id, topologyId) => ({
+    id,
+    topologyId,
+    navigation: {
+      nodes: [
+        { id: "a", x: 0, y: 0 },
+        { id: "b", x: 1, y: 0 }
+      ],
+      roads: [{
+        id: "road",
+        from: "a",
+        to: "b"
+      }]
+    }
+  });
+
+  places.registerDefinition({
+    id: "two-layer-place",
+    layers: [
+      layer("ground", "topology-ground"),
+      layer("upper", "topology-upper")
+    ]
+  });
+
+  const originalBindDomain =
+    navigation.bindDomain.bind(navigation);
+  let bindCalls = 0;
+  navigation.bindDomain = (
+    domainId,
+    topologyId
+  ) => {
+    bindCalls += 1;
+    if (bindCalls === 2) {
+      throw new Error(
+        "synthetic second-layer bind failure"
+      );
+    }
+    return originalBindDomain(
+      domainId,
+      topologyId
+    );
+  };
+
+  assert.throws(
+    () => places.createPlace({
+      id: "house",
+      definitionId: "two-layer-place"
+    }),
+    /synthetic second-layer bind failure/
+  );
+
+  navigation.bindDomain = originalBindDomain;
+
+  assert.equal(
+    places.getPlace("house"),
+    null
+  );
+  assert.equal(
+    world.getDomain("house:ground"),
+    undefined
+  );
+  assert.equal(
+    world.getDomain("house:upper"),
+    undefined
+  );
+  assert.equal(
+    navigation.topologies.has(
+      "topology-ground"
+    ),
+    false
+  );
+  assert.equal(
+    navigation.topologies.has(
+      "topology-upper"
+    ),
+    false
+  );
+});
