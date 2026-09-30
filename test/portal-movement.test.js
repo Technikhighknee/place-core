@@ -402,3 +402,127 @@ test("portal travel fails cleanly if the entity disappears during transfer", () 
     event.reason === "entity-missing-after-portal-transfer"
   ));
 });
+
+
+test("portal entry tolerance survives squared-distance overflow", () => {
+  const places = new PlaceRegistry({ captureEvents: true });
+  places.registerDefinition({
+    id: "huge-tolerance-place",
+    layers: [{ id: "inside" }],
+    portals: [{
+      id: "door",
+      transitionCost: 1,
+      a: {
+        kind: "external",
+        slot: "street"
+      },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        nodeId: "inside-door"
+      }
+    }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      position: { x: 1, y: 0 },
+      nodeId: "target"
+    }]
+  });
+
+  places.createPlace({
+    id: "house",
+    definitionId: "huge-tolerance-place",
+    attachments: {
+      street: {
+        domainId: "street",
+        position: { x: -1e308, y: 0 },
+        nodeId: "street-door"
+      }
+    }
+  });
+
+  const entity = {
+    id: "hans",
+    domainId: "street",
+    position: { x: -1e308, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  let transfers = 0;
+
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 1 };
+    },
+    startLocalJourney(
+      id,
+      destinationNodeId
+    ) {
+      entity.journey = {
+        destinationNodeId
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity(id, endpoint) {
+      transfers += 1;
+      entity.domainId = endpoint.domainId;
+      entity.position = {
+        ...endpoint.position
+      };
+      entity.journey = null;
+      return entity;
+    }
+  };
+
+  const started = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "house",
+      anchorId: "target"
+    },
+    {
+      worldChangePolicy: "encounter",
+      portalEntryTolerance: 1e308
+    }
+  );
+
+  assert.ok(started);
+  assert.equal(transfers, 0);
+
+  entity.position = {
+    x: 1e308,
+    y: 0
+  };
+
+  const travel = stepTravel(
+    places,
+    bridge,
+    "hans",
+    { deltaSeconds: 1 }
+  );
+
+  assert.equal(
+    transfers,
+    0,
+    "entity outside the finite portal tolerance must not transfer"
+  );
+  assert.equal(travel.replans, 1);
+  assert.ok(
+    places.drainEvents().some((event) =>
+      event.type ===
+        "travel-obstacle-encountered" &&
+      event.obstacle ===
+        "portal-endpoint-moved"
+    )
+  );
+});
