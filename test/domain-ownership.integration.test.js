@@ -183,3 +183,90 @@ test("adopt rollback never removes a binding that existed before materialization
   assert.equal(world.getDomain("place:second"), undefined);
   assert.equal(places.getPlace("place"), null);
 });
+
+
+test("failed removal of adopted domains restores foreign road overrides", () => {
+  const {
+    world,
+    navigation,
+    bridge
+  } = runtime("adopt");
+  const compiled =
+    definition(
+      "adopt-remove-rollback",
+      ["first", "second"]
+    );
+
+  for (const layerId of ["first", "second"]) {
+    bridge.ensureLayerTopology(
+      compiled,
+      compiled.getLayer(layerId)
+    );
+    const domainId = `place:${layerId}`;
+    world.addDomain({ id: domainId });
+    navigation.bindDomain(
+      domainId,
+      compiled.getLayer(layerId).topologyId
+    );
+  }
+
+  navigation.setDomainRoadEffect(
+    "place:first",
+    "foreign-effect",
+    "road",
+    { costMultiplier: 2 }
+  );
+
+  const places =
+    new PlaceRegistry({ bridge });
+  places.registerDefinition(compiled);
+  places.createPlace({
+    id: "place",
+    definitionId: compiled.id
+  });
+
+  assert.equal(
+    navigation
+      .navigationForDomain("place:first")
+      .roadCostMultiplier("road"),
+    2
+  );
+
+  const originalRemoveDomain =
+    world.removeDomain.bind(world);
+  let calls = 0;
+  world.removeDomain = (domainId) => {
+    calls += 1;
+    if (calls === 2) {
+      throw new Error(
+        "synthetic adopted removal failure"
+      );
+    }
+    return originalRemoveDomain(domainId);
+  };
+
+  assert.throws(
+    () => places.removePlace("place"),
+    /synthetic adopted removal failure/
+  );
+  world.removeDomain = originalRemoveDomain;
+
+  assert.ok(places.getPlace("place"));
+  assert.ok(world.getDomain("place:first"));
+  assert.ok(world.getDomain("place:second"));
+
+  const restored =
+    navigation.navigationForDomain(
+      "place:first"
+    );
+  assert.equal(
+    restored.roadCostMultiplier("road"),
+    2
+  );
+  assert.ok(
+    restored.roadEffects
+      .get("road")
+      ?.has("foreign-effect")
+  );
+  places.assertInternalConsistency();
+});
