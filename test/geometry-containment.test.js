@@ -5,7 +5,8 @@ import {
   compilePlace,
   geometryBounds,
   geometryContainsGeometry,
-  pointInGeometry
+  pointInGeometry,
+  squaredDistancePointToSegment
 } from "../src/index.js";
 
 test("nested AABB spaces must be fully contained by their parent", () => {
@@ -249,4 +250,23 @@ test("circle bounds reject finite inputs whose derived bounds overflow", () => {
     }),
     /finite.*bounds|bounds.*finite/i
   );
+});
+
+
+test("point-to-segment distance survives finite coordinate subtraction overflow", () => {
+  assert.equal(
+    squaredDistancePointToSegment(
+      { x: 0, y: 0 },
+      { x: -1e308, y: 0 },
+      { x: 1e308, y: 0 }
+    ),
+    0
+  );
+
+  const squared = squaredDistancePointToSegment(
+    { x: 0, y: 1 },
+    { x: -1e308, y: 0 },
+    { x: 1e308, y: 0 }
+  );
+  assert.equal(squared, 1);
 });
