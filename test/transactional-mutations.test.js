@@ -451,7 +451,7 @@ test("failed placement reindex rolls back placement and exterior indexes", () =>
         containment: "footprint"
       }
     ),
-    /finite bounds/
+    /finite (?:bounds|Vec2)/
   );
 
   assert.deepEqual(
