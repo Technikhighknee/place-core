@@ -880,3 +880,106 @@ test("default concrete-state search does not silently discard the globally cheap
   );
   assert.equal(plan.estimatedSeconds, 128);
 });
+
+
+test("planner rejects invalid local routing costs instead of poisoning travel state", () => {
+  const places = new PlaceRegistry();
+  const entity = {
+    id: "hans",
+    domainId: "A",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  for (const estimatedSeconds of [
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    -1,
+    undefined
+  ]) {
+    const bridge = {
+      getEntity(id) {
+        return id === "hans" ? entity : null;
+      },
+      planLocalRoute() {
+        return estimatedSeconds === undefined
+          ? {}
+          : { estimatedSeconds };
+      }
+    };
+
+    assert.throws(
+      () => planTravel(
+        places,
+        bridge,
+        "hans",
+        {
+          domainId: "A",
+          position: { x: 10, y: 0 },
+          nodeId: "target"
+        }
+      ),
+      /estimatedSeconds.*finite.*>= 0/i
+    );
+  }
+});
+
+test("planner validates batched local route costs", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "batched-costs"
+  });
+  places.createPlace({
+    id: "graph",
+    definitionId: "batched-costs"
+  });
+  places.addPortal("graph", {
+    id: "a-b",
+    bidirectional: false,
+    a: {
+      domainId: "A",
+      position: { x: 1, y: 0 },
+      nodeId: "a-exit"
+    },
+    b: {
+      domainId: "B",
+      position: { x: 0, y: 0 },
+      nodeId: "b-entry"
+    }
+  });
+
+  const entity = {
+    id: "hans",
+    domainId: "A",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const bridge = {
+    getEntity(id) {
+      return id === "hans" ? entity : null;
+    },
+    planLocalRouteCostsToMany() {
+      return new Map([
+        ["a-exit", Number.NaN]
+      ]);
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 1 };
+    }
+  };
+
+  assert.throws(
+    () => planTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        domainId: "B",
+        position: { x: 1, y: 0 },
+        nodeId: "target"
+      }
+    ),
+    /route cost.*finite.*>= 0/i
+  );
+});
