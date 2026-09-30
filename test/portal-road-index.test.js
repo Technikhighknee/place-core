@@ -99,3 +99,45 @@ test("portal road index follows dynamic state reindex and removal", () => {
   assert.equal(places.getDiagnostics().portalRoadDomainCount, 0);
   places.assertInternalConsistency();
 });
+
+
+test("dynamic same-domain portals cannot share an existing threshold road", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(definition());
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "road-index-place"
+  });
+  const domain = place.layerDomains.get("inside");
+
+  assert.throws(
+    () => places.addPortal("house", {
+      id: "duplicate-threshold",
+      a: {
+        domainId: domain,
+        position: { x: 0, y: 0 },
+        nodeId: "left"
+      },
+      b: {
+        domainId: domain,
+        position: { x: 1, y: 0 },
+        nodeId: "right"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "threshold"
+      }]
+    }),
+    /already bound as a threshold/
+  );
+
+  assert.equal(
+    places.getPortalsForRoad(
+      domain,
+      "threshold"
+    ).length,
+    1
+  );
+  places.assertInternalConsistency();
+});

@@ -2036,6 +2036,35 @@ export class PlaceRegistry {
       `dynamic portal ${portal.id}`
     );
 
+    if (
+      resolvedPortal.a.domainId ===
+      resolvedPortal.b.domainId
+    ) {
+      const domainId = resolvedPortal.a.domainId;
+      for (const binding of roadBindings) {
+        if (
+          instance.layerDomains.get(binding.layerId) !==
+          domainId
+        ) {
+          continue;
+        }
+
+        const owner = this.getPortalsForRoad(
+          domainId,
+          binding.roadId
+        ).find((existing) =>
+          existing.a?.domainId === domainId &&
+          existing.b?.domainId === domainId
+        );
+
+        if (owner) {
+          throw new Error(
+            `navigation road ${binding.roadId} is already bound as a threshold by portal ${owner.id}`
+          );
+        }
+      }
+    }
+
     instance.addDynamicPortal(
       portal,
       PLACE_INSTANCE_MUTATION_TOKEN
