@@ -748,3 +748,34 @@ test("space tie-breaking uses locale-independent code-unit ordering", () => {
     "canonical ordering must not depend on host locale collation"
   );
 });
+
+
+test("nearest boundary remains defined when squared distance would overflow", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "huge-boundary-distance",
+    layers: [{ id: "inside" }],
+    boundaries: [{
+      id: "wall",
+      layerId: "inside",
+      a: { x: 0, y: 0 },
+      b: { x: 1, y: 0 }
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "huge-boundary-distance"
+  });
+  const domainId =
+    place.layerDomains.get("inside");
+
+  const nearest = places.findNearestBoundary(
+    domainId,
+    { x: 1e200, y: 0 }
+  );
+
+  assert.ok(nearest);
+  assert.equal(nearest.boundary.id, "wall");
+  assert.equal(nearest.distance, 1e200);
+});
