@@ -541,3 +541,100 @@ test("snapshot validation requires topology-backed dynamic road bindings", () =>
     /road binding requires navigation topology on layer cellar/
   );
 });
+
+
+test("snapshot validation rejects unknown nested runtime fields before restore", () => {
+  const badAttachment = snapshotFixture();
+  badAttachment.instances[0].attachments.street.postion = {
+    x: 1,
+    y: 2
+  };
+  assert.throws(
+    () => validatePlaceCoreSnapshot(badAttachment),
+    /attachments\.street contains unknown field postion/
+  );
+
+  const badAttachmentPoint = snapshotFixture();
+  badAttachmentPoint.instances[0]
+    .attachments.street.position.z = 3;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(badAttachmentPoint),
+    /attachments\.street\.position contains unknown field z/
+  );
+
+  const badPlacement = snapshotFixture();
+  badPlacement.instances[0].placement = {
+    domainId: "street",
+    containment: "footprint",
+    transform: {
+      x: 0,
+      y: 0,
+      rotation: 0,
+      scale: 1
+    },
+    parentPlacId: "typo"
+  };
+  assert.throws(
+    () => validatePlaceCoreSnapshot(badPlacement),
+    /placement contains unknown field parentPlacId/
+  );
+
+  const badTransform = snapshotFixture();
+  badTransform.instances[0].placement = {
+    domainId: "street",
+    containment: "footprint",
+    transform: {
+      x: 0,
+      y: 0,
+      rotation: 0,
+      scale: 1,
+      skew: 1
+    }
+  };
+  assert.throws(
+    () => validatePlaceCoreSnapshot(badTransform),
+    /placement\.transform contains unknown field skew/
+  );
+
+  const dynamic = snapshotFixture();
+  dynamic.instances[0].dynamicPortals.push({
+    id: "breach",
+    kind: "breach",
+    tags: [],
+    a: {
+      kind: "resolved",
+      domainId: "inn:ground",
+      position: { x: 1, y: 0 },
+      nodeId: null,
+      placeId: "inn",
+      spaceId: null,
+      layerId: "ground",
+      metadata: null
+    },
+    b: {
+      kind: "resolved",
+      domainId: "street",
+      position: { x: 0, y: 0 },
+      nodeId: null,
+      placeId: null,
+      spaceId: null,
+      layerId: null,
+      metadata: null
+    },
+    bidirectional: true,
+    transitionCost: 0,
+    enabled: true,
+    open: true,
+    locked: false,
+    blocked: false,
+    destroyed: false,
+    blocksWhenClosed: false,
+    roadBindings: [],
+    metadata: null,
+    bidirectionl: false
+  });
+  assert.throws(
+    () => validatePlaceCoreSnapshot(dynamic),
+    /dynamic portal contains unknown field bidirectionl/
+  );
+});

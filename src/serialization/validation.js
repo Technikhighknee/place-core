@@ -32,6 +32,18 @@ function assertArray(value, label) {
   if (!Array.isArray(value)) throw new TypeError(`${label} must be an array`);
 }
 
+function assertOnlyKeys(value, allowedKeys, label) {
+  assertObject(value, label);
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new Error(
+        `${label} contains unknown field ${key}`
+      );
+    }
+  }
+}
+
 function ownValue(object, key) {
   return Object.hasOwn(object, key)
     ? object[key]
@@ -202,8 +214,24 @@ function assertTravelPlan(plan, entityId) {
 }
 
 function assertAttachment(value, label) {
-  assertObject(value, label);
+  assertOnlyKeys(
+    value,
+    [
+      "domainId",
+      "position",
+      "nodeId",
+      "placeId",
+      "spaceId",
+      "metadata"
+    ],
+    label
+  );
   assertStringId(value.domainId, `${label}.domainId`);
+  assertOnlyKeys(
+    value.position,
+    ["x", "y"],
+    `${label}.position`
+  );
   assertFiniteVec2(value.position, `${label}.position`);
   assertNullableString(value.nodeId, `${label}.nodeId`);
   if (value.placeId != null) assertId(value.placeId, `${label}.placeId`);
@@ -338,7 +366,27 @@ function resolveSnapshotPortalEndpoint(endpoint, item) {
 }
 
 function assertDynamicPortal(portal, definition, item, dynamicIds) {
-  assertObject(portal, "dynamic portal");
+  assertOnlyKeys(
+    portal,
+    [
+      "id",
+      "kind",
+      "tags",
+      "a",
+      "b",
+      "bidirectional",
+      "transitionCost",
+      "enabled",
+      "open",
+      "locked",
+      "blocked",
+      "destroyed",
+      "blocksWhenClosed",
+      "roadBindings",
+      "metadata"
+    ],
+    "dynamic portal"
+  );
   assertStringId(portal.id, "dynamic portal.id");
 
   if (dynamicIds.has(portal.id) || definition.getPortal(portal.id)) {
@@ -380,14 +428,39 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
   }
 
   for (const [side, endpoint] of [["a", portal.a], ["b", portal.b]]) {
-    assertObject(endpoint, `dynamic portal ${portal.id}.${side}`);
+    const endpointLabel =
+      `dynamic portal ${portal.id}.${side}`;
+    assertOnlyKeys(
+      endpoint,
+      [
+        "kind",
+        "domainId",
+        "position",
+        "nodeId",
+        "placeId",
+        "spaceId",
+        "layerId",
+        "metadata"
+      ],
+      endpointLabel
+    );
+    if (endpoint.kind !== "resolved") {
+      throw new Error(
+        `${endpointLabel}.kind must be "resolved"`
+      );
+    }
     assertStringId(
       endpoint.domainId,
-      `dynamic portal ${portal.id}.${side}.domainId`
+      `${endpointLabel}.domainId`
+    );
+    assertOnlyKeys(
+      endpoint.position,
+      ["x", "y"],
+      `${endpointLabel}.position`
     );
     assertFiniteVec2(
       endpoint.position,
-      `dynamic portal ${portal.id}.${side}.position`
+      `${endpointLabel}.position`
     );
     assertNullableString(
       endpoint.nodeId,
@@ -421,8 +494,9 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
   );
   for (let i = 0; i < (portal.roadBindings ?? []).length; i += 1) {
     const binding = portal.roadBindings[i];
-    assertObject(
+    assertOnlyKeys(
       binding,
+      ["layerId", "roadId"],
       `dynamic portal ${portal.id}.roadBindings[${i}]`
     );
     assertStringId(
@@ -740,7 +814,18 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     }
 
     if (item.placement != null) {
-      assertObject(item.placement, `instance ${String(item.id)}.placement`);
+      const placementLabel =
+        `instance ${String(item.id)}.placement`;
+      assertOnlyKeys(
+        item.placement,
+        [
+          "domainId",
+          "parentPlaceId",
+          "containment",
+          "transform"
+        ],
+        placementLabel
+      );
       const hasDomain = item.placement.domainId != null;
       const hasParent = item.placement.parentPlaceId != null;
       if (hasDomain === hasParent) {
@@ -775,8 +860,9 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         );
       }
 
-      assertObject(
+      assertOnlyKeys(
         item.placement.transform,
+        ["x", "y", "rotation", "scale"],
         `instance ${String(item.id)}.placement.transform`
       );
       for (const key of ["x", "y", "rotation", "scale"]) {
