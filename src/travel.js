@@ -278,6 +278,13 @@ function travelCostSum(...values) {
   return total;
 }
 
+function pointDistance(a, b) {
+  return Math.hypot(
+    a.x - b.x,
+    a.y - b.y
+  );
+}
+
 function localRoute(bridge, mobility, from, destination, options, cache, cachePrefix) {
   if (from.domainId !== destination.domainId) return null;
   if (squaredDistance(from.position, destination.position) <= POSITION_EPSILON_SQ) {
@@ -1354,8 +1361,12 @@ function advance(registry, bridge, state, options = {}) {
       const portalEntryTolerance = normalizePortalEntryTolerance(
         options.portalEntryTolerance
       );
-      if (squaredDistance(entity.position, direction.from.position) >
-          portalEntryTolerance * portalEntryTolerance) {
+      if (
+        pointDistance(
+          entity.position,
+          direction.from.position
+        ) > portalEntryTolerance
+      ) {
         registry.emit("travel-obstacle-encountered", {
           entityId: state.entityId,
           stepIndex: state.stepIndex,
@@ -1413,14 +1424,18 @@ function advance(registry, bridge, state, options = {}) {
         moved.position &&
         Number.isFinite(moved.position.x) &&
         Number.isFinite(moved.position.y);
-      const transferPositionDistanceSq = transferPositionValid
-        ? squaredDistance(moved.position, direction.to.position)
-        : Infinity;
+      const transferPositionDistance =
+        transferPositionValid
+          ? pointDistance(
+              moved.position,
+              direction.to.position
+            )
+          : Infinity;
 
       if (
         movedDomainId !== step.toDomainId ||
-        transferPositionDistanceSq >
-          portalEntryTolerance * portalEntryTolerance
+        transferPositionDistance >
+          portalEntryTolerance
       ) {
         registry.emit("portal-transfer-failed", {
           entityId: state.entityId,
