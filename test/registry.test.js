@@ -361,3 +361,44 @@ test("nearest anchor selection survives finite coordinate subtraction overflow",
     "near"
   );
 });
+
+
+test("nearest boundary selection survives finite coordinate subtraction overflow", () => {
+  const registry = new PlaceRegistry();
+  registry.registerDefinition({
+    id: "huge-boundary-space",
+    layers: [{ id: "ground" }],
+    boundaries: [
+      {
+        id: "a-far",
+        layerId: "ground",
+        a: { x: 1e308, y: -1 },
+        b: { x: 1e308, y: 1 }
+      },
+      {
+        id: "z-near",
+        layerId: "ground",
+        a: { x: 9e307, y: -1 },
+        b: { x: 9e307, y: 1 }
+      }
+    ]
+  });
+  registry.createPlace({
+    id: "huge-boundary-place",
+    definitionId: "huge-boundary-space"
+  });
+
+  const domainId =
+    registry.getLayerDomain(
+      "huge-boundary-place",
+      "ground"
+    );
+
+  assert.equal(
+    registry.findNearestBoundary(
+      domainId,
+      { x: -1e308, y: 0 }
+    )?.boundary.id,
+    "z-near"
+  );
+});
