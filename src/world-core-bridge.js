@@ -241,6 +241,19 @@ export class WorldCoreBridge {
     }
 
     if (event.type === "entityDomainTransferred") {
+      const crossing =
+        this.#sameDomainPortalCrossings.get(event.entityId) ??
+        null;
+      if (crossing) {
+        this.#sameDomainPortalCrossings.delete(event.entityId);
+        this.#emitSameDomainPortalEvent(
+          "portal-abort",
+          event.entityId,
+          crossing,
+          { reason: "domain-transfer" }
+        );
+      }
+
       const entity = this.world.getEntity(event.entityId);
       if (entity) {
         this.#registry.updateEntityOccupancy(entity);
