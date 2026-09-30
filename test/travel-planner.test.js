@@ -998,3 +998,73 @@ test("planner validates batched local route costs", () => {
     /route cost.*finite.*>= 0/i
   );
 });
+
+
+test("planner rejects aggregate travel cost overflow", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "overflow-graph"
+  });
+  places.createPlace({
+    id: "graph",
+    definitionId: "overflow-graph"
+  });
+
+  places.addPortal("graph", {
+    id: "a-b",
+    bidirectional: false,
+    transitionCost: 1e308,
+    a: {
+      domainId: "A",
+      position: { x: 1, y: 0 },
+      nodeId: "a-exit"
+    },
+    b: {
+      domainId: "B",
+      position: { x: 0, y: 0 },
+      nodeId: "b-entry"
+    }
+  });
+
+  const entity = {
+    id: "hans",
+    domainId: "A",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const bridge = {
+    getEntity(id) {
+      return id === "hans" ? entity : null;
+    },
+    planLocalRoute({ domainId, destinationNodeId }) {
+      if (
+        domainId === "A" &&
+        destinationNodeId === "a-exit"
+      ) {
+        return { estimatedSeconds: 1e308 };
+      }
+      if (
+        domainId === "B" &&
+        destinationNodeId === "target"
+      ) {
+        return { estimatedSeconds: 0 };
+      }
+      return null;
+    }
+  };
+
+  assert.throws(
+    () => planTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        domainId: "B",
+        position: { x: 0, y: 0 },
+        nodeId: "target"
+      }
+    ),
+    /travel cost.*finite|cost.*overflow/i
+  );
+});
