@@ -311,3 +311,28 @@ test("DynamicPointIndex orders overflowed nearest distances correctly", () => {
   assert.ok(result);
   assert.equal(result.id, "z-near");
 });
+
+
+test("DynamicPointIndex nearest search survives overflowed cell coordinates", () => {
+  const index = new DynamicPointIndex(1e-308);
+
+  index.set("a-far", {
+    x: 0,
+    y: 0
+  });
+  index.set("z-near", {
+    x: 9e307,
+    y: 0
+  });
+
+  const result = index.findNearest(
+    { x: 1e308, y: 0 },
+    {
+      compareIds: (a, b) =>
+        String(a).localeCompare(String(b))
+    }
+  );
+
+  assert.ok(result);
+  assert.equal(result.id, "z-near");
+});
