@@ -1,6 +1,7 @@
 import { isPortalTraversable } from "./registry.js";
 import {
-  PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN
+  PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN,
+  PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN
 } from "./registry/support.js";
 import { compareStrings } from "./utils.js";
 
@@ -235,9 +236,40 @@ export class WorldCoreBridge {
   }
 
   #handleWorldEvent(event) {
-    if (!this.#registry || event?.entityId == null || event?.roadId == null) {
+    if (!this.#registry || event?.entityId == null) {
       return;
     }
+
+    if (event.type === "entityDomainTransferred") {
+      const entity = this.world.getEntity(event.entityId);
+      if (entity) {
+        this.#registry.updateEntityOccupancy(entity);
+      }
+      return;
+    }
+
+    if (event.type === "entityRemoved") {
+      const crossing =
+        this.#sameDomainPortalCrossings.get(event.entityId) ??
+        null;
+      if (crossing) {
+        this.#sameDomainPortalCrossings.delete(event.entityId);
+        this.#emitSameDomainPortalEvent(
+          "portal-abort",
+          event.entityId,
+          crossing,
+          { reason: "entity-removed" }
+        );
+      }
+
+      this.#registry._handleWorldEntityRemoved(
+        PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+        event.entityId
+      );
+      return;
+    }
+
+    if (event.roadId == null) return;
 
     if (event.type === "roadEntered") {
       const entity = this.world.getEntity(event.entityId);

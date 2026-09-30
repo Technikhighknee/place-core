@@ -206,3 +206,83 @@ test("encounter policy discovers a locked portal only when the traveler reaches 
     event.reason === "no-route-after-world-change"
   ));
 });
+
+
+test("external world-core domain transfers refresh tracked place occupancy", () => {
+  const { world, places } = buildIntegratedWorld();
+
+  assert.equal(
+    places.getEntityLocation("hans")?.placeId,
+    "home"
+  );
+
+  world.transferEntity(
+    "hans",
+    {
+      domainId: "street",
+      position: { x: 20, y: 0 }
+    }
+  );
+
+  const location =
+    places.getEntityLocation("hans");
+  assert.ok(location);
+  assert.equal(location.domainId, "street");
+  assert.equal(location.placeId, null);
+  assert.equal(
+    places.entitiesInPlace("home").has("hans"),
+    false
+  );
+});
+
+test("world-core entity removal clears occupancy and active travel", () => {
+  const {
+    world,
+    bridge,
+    places
+  } = buildIntegratedWorld();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "golden-goose",
+        anchorId: "barrel"
+      }
+    )
+  );
+  assert.equal(
+    places.activeTravels.has("hans"),
+    true
+  );
+  assert.ok(
+    places.getEntityLocation("hans")
+  );
+
+  assert.equal(
+    world.removeEntity("hans"),
+    true
+  );
+
+  assert.equal(
+    places.activeTravels.has("hans"),
+    false
+  );
+  assert.equal(
+    places.getEntityLocation("hans"),
+    null
+  );
+  assert.equal(
+    places.entitiesInPlace("home").has("hans"),
+    false
+  );
+
+  const events = places.drainEvents();
+  assert.ok(events.some((event) =>
+    event.type === "travel-failed" &&
+    event.entityId === "hans" &&
+    event.reason === "entity-removed"
+  ));
+});

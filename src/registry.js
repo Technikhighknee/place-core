@@ -189,6 +189,30 @@ export class PlaceRegistry {
     this.#pendingTravels.push(stored);
     return stored;
   }
+
+  _handleWorldEntityRemoved(token, entityId) {
+    this.#assertTravelMutationToken(token);
+
+    const state = this.#activeTravels.get(entityId) ?? null;
+    if (state) {
+      this.#activeTravels.delete(entityId);
+      state.status = "failed";
+      state.failureReason = "entity-removed";
+      this.emit("travel-failed", {
+        entityId,
+        reason: "entity-removed",
+        target: state.target
+      });
+    }
+
+    const occupancyRemoved =
+      this.#occupancyIndex.remove(entityId);
+
+    return {
+      travelRemoved: state != null,
+      occupancyRemoved
+    };
+  }
   get stateRevision() { return this.#stateRevision; }
   get travelRevision() { return this.#travelRevision; }
   get bridge() { return this.#bridge; }
