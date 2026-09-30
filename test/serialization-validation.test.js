@@ -69,8 +69,8 @@ test("snapshot validation rejects missing parents and malformed dynamic portals"
   const malformed = snapshotFixture();
   malformed.instances[0].dynamicPortals.push({
     id: "breach",
-    a: { domainId: "inn:ground", position: { x: Number.NaN, y: 0 } },
-    b: { domainId: "street", position: { x: 0, y: 0 } }
+    a: { kind: "resolved", domainId: "inn:ground", position: { x: Number.NaN, y: 0 } },
+    b: { kind: "resolved", domainId: "street", position: { x: 0, y: 0 } }
   });
   assert.throws(
     () => validatePlaceCoreSnapshot(malformed),
@@ -239,10 +239,12 @@ test("snapshot validation rejects invalid dynamic portal semantics", () => {
   invalidCost.instances[0].dynamicPortals.push({
     id: "slow-breach",
     a: {
+      kind: "resolved",
       domainId: "inn:ground",
       position: { x: 1, y: 0 }
     },
     b: {
+      kind: "resolved",
       domainId: "street",
       position: { x: 0, y: 0 }
     },
@@ -257,10 +259,12 @@ test("snapshot validation rejects invalid dynamic portal semantics", () => {
   invalidBoolean.instances[0].dynamicPortals.push({
     id: "weird-breach",
     a: {
+      kind: "resolved",
       domainId: "inn:ground",
       position: { x: 1, y: 0 }
     },
     b: {
+      kind: "resolved",
       domainId: "street",
       position: { x: 0, y: 0 }
     },
@@ -275,10 +279,12 @@ test("snapshot validation rejects invalid dynamic portal semantics", () => {
   invalidRoad.instances[0].dynamicPortals.push({
     id: "bad-road",
     a: {
+      kind: "resolved",
       domainId: "inn:ground",
       position: { x: 0, y: 0 }
     },
     b: {
+      kind: "resolved",
       domainId: "street",
       position: { x: 0, y: 0 }
     },
@@ -512,10 +518,12 @@ test("snapshot validation requires topology-backed dynamic road bindings", () =>
   snapshot.instances[0].dynamicPortals.push({
     id: "bad-topology-binding",
     a: {
+      kind: "resolved",
       domainId: "street",
       position: { x: 0, y: 0 }
     },
     b: {
+      kind: "resolved",
       domainId: "other",
       position: { x: 0, y: 0 }
     },
