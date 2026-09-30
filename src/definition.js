@@ -20,6 +20,75 @@ import {
 
 const DEFAULT_SPACE_INDEX_CELL_SIZE = 8;
 
+function assertPlainObject(value, label) {
+  if (!value ||
+      typeof value !== "object" ||
+      Array.isArray(value)) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype &&
+      prototype !== null) {
+    throw new TypeError(`${label} must be a plain object`);
+  }
+  return value;
+}
+
+function assertOnlyKeys(value, allowedKeys, label) {
+  assertPlainObject(value, label);
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new Error(
+        `${label} contains unknown field ${key}`
+      );
+    }
+  }
+}
+
+function assertVec2Shape(value, label) {
+  assertOnlyKeys(value, ["x", "y"], label);
+}
+
+function assertGeometryShape(geometry, label) {
+  assertPlainObject(geometry, label);
+  if (geometry.type === "aabb") {
+    assertOnlyKeys(
+      geometry,
+      ["type", "minX", "minY", "maxX", "maxY"],
+      label
+    );
+    return;
+  }
+  if (geometry.type === "circle") {
+    assertOnlyKeys(
+      geometry,
+      ["type", "center", "radius"],
+      label
+    );
+    assertVec2Shape(
+      geometry.center,
+      `${label}.center`
+    );
+    return;
+  }
+  if (geometry.type === "polygon") {
+    assertOnlyKeys(
+      geometry,
+      ["type", "points"],
+      label
+    );
+    if (Array.isArray(geometry.points)) {
+      for (let i = 0; i < geometry.points.length; i += 1) {
+        assertVec2Shape(
+          geometry.points[i],
+          `${label}.points[${i}]`
+        );
+      }
+    }
+  }
+}
+
 function uniqueById(items, label) {
   const seen = new Set();
   for (const item of items) {
@@ -51,9 +120,11 @@ function normalizeNullableStringId(value, label) {
 
 function normalizeNavigationSpec(spec, label) {
   if (spec == null) return null;
-  if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
-    throw new TypeError(`${label} must be an object`);
-  }
+  assertOnlyKeys(
+    spec,
+    ["options", "regions", "nodes", "roads"],
+    label
+  );
 
   const rawOptions = spec.options ?? {};
   if (!rawOptions ||
@@ -96,6 +167,11 @@ function normalizeNavigationSpec(spec, label) {
     spec.regions,
     `${label}.regions`
   ).map((region, index) => {
+    assertOnlyKeys(
+      region,
+      ["id"],
+      `${label}.regions[${index}]`
+    );
     assertStringId(region.id, `${label}.regions[${index}].id`);
     return deepFreeze({ id: region.id });
   });
@@ -105,6 +181,11 @@ function normalizeNavigationSpec(spec, label) {
     spec.nodes,
     `${label}.nodes`
   ).map((node, index) => {
+    assertOnlyKeys(
+      node,
+      ["id", "x", "y", "junctionRadius", "regionId"],
+      `${label}.nodes[${index}]`
+    );
     assertStringId(node.id, `${label}.nodes[${index}].id`);
     if (!Number.isFinite(node.x) ||
         !Number.isFinite(node.y)) {
@@ -138,6 +219,23 @@ function normalizeNavigationSpec(spec, label) {
     spec.roads,
     `${label}.roads`
   ).map((road, index) => {
+    assertOnlyKeys(
+      road,
+      [
+        "id",
+        "from",
+        "to",
+        "shape",
+        "width",
+        "surface",
+        "bidirectional",
+        "enabled",
+        "allowedProfiles",
+        "blockedProfiles",
+        "tags"
+      ],
+      `${label}.roads[${index}]`
+    );
     assertStringId(road.id, `${label}.roads[${index}].id`);
     assertStringId(road.from, `${label}.road(${road.id}).from`);
     assertStringId(road.to, `${label}.road(${road.id}).to`);
@@ -162,6 +260,10 @@ function normalizeNavigationSpec(spec, label) {
     }
     const shape = Object.freeze(
       (road.shape ?? []).map((point, shapeIndex) => {
+        assertVec2Shape(
+          point,
+          `${label}.road(${road.id}).shape[${shapeIndex}]`
+        );
         try {
           return cloneVec2(point);
         } catch (error) {
@@ -235,6 +337,18 @@ function defaultTopologyId(definitionId, layerId) {
 }
 
 function normalizeLayer(layer, definitionId) {
+  assertOnlyKeys(
+    layer,
+    [
+      "id",
+      "kind",
+      "tags",
+      "topologyId",
+      "navigation",
+      "metadata"
+    ],
+    "layer"
+  );
   assertStringId(layer.id, "layer.id");
   const navigation = normalizeNavigationSpec(
     layer.navigation,
@@ -261,9 +375,28 @@ function normalizeLayer(layer, definitionId) {
 }
 
 function normalizeSpace(space, layersById) {
+  assertOnlyKeys(
+    space,
+    [
+      "id",
+      "layerId",
+      "kind",
+      "tags",
+      "geometry",
+      "parentSpaceId",
+      "defaultAnchorId",
+      "priority",
+      "metadata"
+    ],
+    "space"
+  );
   assertStringId(space.id, "space.id");
   assertStringId(space.layerId, `space(${space.id}).layerId`);
   if (!layersById.has(space.layerId)) throw new Error(`space ${space.id} references unknown layer ${space.layerId}`);
+  assertGeometryShape(
+    space.geometry,
+    `space(${space.id}).geometry`
+  );
   const geometry = normalizeGeometry(space.geometry);
   const parentSpaceId = normalizeNullableStringId(
     space.parentSpaceId,
@@ -297,6 +430,21 @@ function normalizeSpace(space, layersById) {
 }
 
 function normalizeBoundary(boundary, layersById) {
+  assertOnlyKeys(
+    boundary,
+    [
+      "id",
+      "layerId",
+      "kind",
+      "tags",
+      "a",
+      "b",
+      "enabled",
+      "roadBindings",
+      "metadata"
+    ],
+    "boundary"
+  );
   assertStringId(boundary.id, "boundary.id");
   assertStringId(boundary.layerId, `boundary(${boundary.id}).layerId`);
   if (!layersById.has(boundary.layerId)) {
@@ -305,10 +453,23 @@ function normalizeBoundary(boundary, layersById) {
     );
   }
   if (!boundary.a || !boundary.b) throw new TypeError(`boundary ${boundary.id} requires endpoints a and b`);
+  assertVec2Shape(
+    boundary.a,
+    `boundary(${boundary.id}).a`
+  );
+  assertVec2Shape(
+    boundary.b,
+    `boundary(${boundary.id}).b`
+  );
   const roadBindings = requireArray(
     boundary.roadBindings,
     `boundary(${boundary.id}).roadBindings`
   ).map((binding, index) => {
+    assertOnlyKeys(
+      binding,
+      ["roadId"],
+      `boundary(${boundary.id}).roadBindings[${index}]`
+    );
     assertStringId(binding.roadId, `boundary(${boundary.id}).roadBindings[${index}].roadId`);
     return deepFreeze({ roadId: binding.roadId });
   });
@@ -334,9 +495,24 @@ function normalizeBoundary(boundary, layersById) {
 }
 
 function normalizeEndpoint(endpoint, portalId, layersById, spacesById) {
-  if (!endpoint || typeof endpoint !== "object") throw new TypeError(`portal ${portalId} endpoint is required`);
+  assertPlainObject(
+    endpoint,
+    `portal(${portalId}).endpoint`
+  );
   const kind = endpoint.kind ?? "local";
   if (kind === "local") {
+    assertOnlyKeys(
+      endpoint,
+      [
+        "kind",
+        "layerId",
+        "spaceId",
+        "position",
+        "nodeId",
+        "metadata"
+      ],
+      `portal(${portalId}).endpoint`
+    );
     assertStringId(endpoint.layerId, `portal(${portalId}).endpoint.layerId`);
     if (!layersById.has(endpoint.layerId)) {
     throw new Error(
@@ -355,6 +531,10 @@ function normalizeEndpoint(endpoint, portalId, layersById, spacesById) {
         );
       }
     }
+    assertVec2Shape(
+      endpoint.position,
+      `portal(${portalId}).endpoint.position`
+    );
     const position = cloneVec2(endpoint.position);
     const nodeId = normalizeNullableStringId(
       endpoint.nodeId,
@@ -375,6 +555,11 @@ function normalizeEndpoint(endpoint, portalId, layersById, spacesById) {
     });
   }
   if (kind === "external") {
+    assertOnlyKeys(
+      endpoint,
+      ["kind", "slot", "metadata"],
+      `portal(${portalId}).endpoint`
+    );
     assertStringId(endpoint.slot, `portal(${portalId}).endpoint.slot`);
     return deepFreeze({
       kind: "external",
@@ -386,6 +571,27 @@ function normalizeEndpoint(endpoint, portalId, layersById, spacesById) {
 }
 
 function normalizePortal(portal, layersById, spacesById) {
+  assertOnlyKeys(
+    portal,
+    [
+      "id",
+      "kind",
+      "tags",
+      "a",
+      "b",
+      "bidirectional",
+      "transitionCost",
+      "enabled",
+      "open",
+      "locked",
+      "blocked",
+      "destroyed",
+      "blocksWhenClosed",
+      "roadBindings",
+      "metadata"
+    ],
+    "portal"
+  );
   assertStringId(portal.id, "portal.id");
   const transitionCost = portal.transitionCost ?? 0;
   if (!Number.isFinite(transitionCost) || transitionCost < 0) {
@@ -399,6 +605,11 @@ function normalizePortal(portal, layersById, spacesById) {
     portal.roadBindings,
     `portal(${portal.id}).roadBindings`
   ).map((binding, index) => {
+    assertOnlyKeys(
+      binding,
+      ["layerId", "roadId"],
+      `portal(${portal.id}).roadBindings[${index}]`
+    );
     assertStringId(binding.layerId, `portal(${portal.id}).roadBindings[${index}].layerId`);
     assertStringId(binding.roadId, `portal(${portal.id}).roadBindings[${index}].roadId`);
     if (!layersById.has(binding.layerId)) {
@@ -460,6 +671,20 @@ function normalizePortal(portal, layersById, spacesById) {
 }
 
 function normalizeAnchor(anchor, layersById, spacesById) {
+  assertOnlyKeys(
+    anchor,
+    [
+      "id",
+      "layerId",
+      "spaceId",
+      "position",
+      "nodeId",
+      "tags",
+      "kind",
+      "metadata"
+    ],
+    "anchor"
+  );
   assertStringId(anchor.id, "anchor.id");
   assertStringId(anchor.layerId, `anchor(${anchor.id}).layerId`);
   if (!layersById.has(anchor.layerId)) {
@@ -475,6 +700,10 @@ function normalizeAnchor(anchor, layersById, spacesById) {
       throw new Error(`anchor ${anchor.id} space ${anchor.spaceId} is on another layer`);
     }
   }
+  assertVec2Shape(
+    anchor.position,
+    `anchor(${anchor.id}).position`
+  );
   const position = cloneVec2(anchor.position);
   const nodeId = normalizeNullableStringId(
     anchor.nodeId,
@@ -622,9 +851,29 @@ export class CompiledPlaceDefinition {
 const EMPTY = Object.freeze([]);
 
 export function compilePlace(input, options = {}) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new TypeError("place blueprint is required");
-  }
+  assertOnlyKeys(
+    input,
+    [
+      "id",
+      "kind",
+      "tags",
+      "revision",
+      "defaultAnchorId",
+      "layers",
+      "spaces",
+      "boundaries",
+      "portals",
+      "anchors",
+      "footprint",
+      "metadata"
+    ],
+    "place"
+  );
+  assertOnlyKeys(
+    options,
+    ["spaceIndexCellSize"],
+    "compilePlace options"
+  );
   const blueprint = input;
   assertStringId(blueprint.id, "place.id");
   const layersInput = requireArray(blueprint.layers, "place.layers");
@@ -909,6 +1158,12 @@ export function compilePlace(input, options = {}) {
     }
   }
 
+  if (blueprint.footprint != null) {
+    assertGeometryShape(
+      blueprint.footprint,
+      "place.footprint"
+    );
+  }
   const footprint = blueprint.footprint == null
     ? null
     : normalizeGeometry(blueprint.footprint);

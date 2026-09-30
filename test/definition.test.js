@@ -955,3 +955,143 @@ test("set-like definition fields are canonical across input order", () => {
     reverse.getBlueprint()
   );
 });
+
+
+test("compiler rejects unknown blueprint fields at every structural layer", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "bad-top",
+      layres: []
+    }),
+    /place contains unknown field layres/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-layer",
+      layers: [{
+        id: "inside",
+        metdata: {}
+      }]
+    }),
+    /layer contains unknown field metdata/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-nav",
+      layers: [{
+        id: "inside",
+        navigation: {
+          nodse: []
+        }
+      }]
+    }),
+    /navigation contains unknown field nodse/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-node",
+      layers: [{
+        id: "inside",
+        navigation: {
+          nodes: [{
+            id: "a",
+            x: 0,
+            y: 0,
+            regioId: null
+          }]
+        }
+      }]
+    }),
+    /nodes\[0\] contains unknown field regioId/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-road",
+      layers: [{
+        id: "inside",
+        navigation: {
+          nodes: [
+            { id: "a", x: 0, y: 0 },
+            { id: "b", x: 1, y: 0 }
+          ],
+          roads: [{
+            id: "ab",
+            from: "a",
+            to: "b",
+            bidirectionl: true
+          }]
+        }
+      }]
+    }),
+    /roads\[0\] contains unknown field bidirectionl/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-space",
+      layers: [{ id: "inside" }],
+      spaces: [{
+        id: "room",
+        layerId: "inside",
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: 0,
+          maxX: 1,
+          maxY: 1,
+          maxZ: 1
+        }
+      }]
+    }),
+    /geometry contains unknown field maxZ/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-portal",
+      layers: [{ id: "inside" }],
+      portals: [{
+        id: "door",
+        a: {
+          layerId: "inside",
+          position: { x: 0, y: 0 },
+          postion: { x: 1, y: 0 }
+        },
+        b: {
+          kind: "external",
+          slot: "street"
+        }
+      }]
+    }),
+    /endpoint contains unknown field postion/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "bad-anchor",
+      layers: [{ id: "inside" }],
+      anchors: [{
+        id: "center",
+        layerId: "inside",
+        position: {
+          x: 0,
+          y: 0,
+          z: 0
+        }
+      }]
+    }),
+    /anchor\(center\)\.position contains unknown field z/
+  );
+
+  assert.throws(
+    () => compilePlace(
+      { id: "bad-options" },
+      { spaceIndexCells: 4 }
+    ),
+    /compilePlace options contains unknown field spaceIndexCells/
+  );
+});
