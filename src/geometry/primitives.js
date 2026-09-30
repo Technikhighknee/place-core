@@ -115,33 +115,71 @@ function boundsContainBounds(parent, child) {
 }
 
 function segmentIntersectionParameters(a, b, c, d) {
-  const rx = b.x - a.x;
-  const ry = b.y - a.y;
-  const sx = d.x - c.x;
-  const sy = d.y - c.y;
-  const qx = c.x - a.x;
-  const qy = c.y - a.y;
+  const scale = Math.max(
+    1,
+    Math.abs(a.x),
+    Math.abs(a.y),
+    Math.abs(b.x),
+    Math.abs(b.y),
+    Math.abs(c.x),
+    Math.abs(c.y),
+    Math.abs(d.x),
+    Math.abs(d.y)
+  );
+  const ax = a.x / scale;
+  const ay = a.y / scale;
+  const bx = b.x / scale;
+  const by = b.y / scale;
+  const cx = c.x / scale;
+  const cy = c.y / scale;
+  const dx = d.x / scale;
+  const dy = d.y / scale;
+
+  const rx = bx - ax;
+  const ry = by - ay;
+  const sx = dx - cx;
+  const sy = dy - cy;
+  const qx = cx - ax;
+  const qy = cy - ay;
   const rxs = cross2(rx, ry, sx, sy);
   const qxr = cross2(qx, qy, rx, ry);
+  const crossEpsilon =
+    EPSILON / scale / scale;
 
-  if (Math.abs(rxs) <= EPSILON) {
-    if (Math.abs(qxr) > EPSILON) return [];
+  if (Math.abs(rxs) <= crossEpsilon) {
+    if (Math.abs(qxr) > crossEpsilon) {
+      return [];
+    }
     const rr = rx * rx + ry * ry;
-    if (rr <= EPSILON) return [];
-    const t0 = (qx * rx + qy * ry) / rr;
-    const t1 = t0 + (sx * rx + sy * ry) / rr;
-    const lo = Math.max(0, Math.min(t0, t1));
-    const hi = Math.min(1, Math.max(t0, t1));
+    if (rr <= crossEpsilon) return [];
+
+    const t0 =
+      (qx * rx + qy * ry) / rr;
+    const t1 =
+      t0 + (sx * rx + sy * ry) / rr;
+    const lo = Math.max(
+      0,
+      Math.min(t0, t1)
+    );
+    const hi = Math.min(
+      1,
+      Math.max(t0, t1)
+    );
     if (hi < lo - EPSILON) return [];
-    return [lo, hi]
-      .map((t) => Math.max(0, Math.min(1, t)));
+    return [lo, hi].map((t) =>
+      Math.max(0, Math.min(1, t))
+    );
   }
 
-  const t = cross2(qx, qy, sx, sy) / rxs;
-  const u = cross2(qx, qy, rx, ry) / rxs;
+  const t =
+    cross2(qx, qy, sx, sy) / rxs;
+  const u =
+    cross2(qx, qy, rx, ry) / rxs;
   if (
-    t < -EPSILON || t > 1 + EPSILON ||
-    u < -EPSILON || u > 1 + EPSILON
+    t < -EPSILON ||
+    t > 1 + EPSILON ||
+    u < -EPSILON ||
+    u > 1 + EPSILON
   ) {
     return [];
   }
@@ -149,9 +187,11 @@ function segmentIntersectionParameters(a, b, c, d) {
 }
 
 function pointAlongSegment(a, b, t) {
+  if (t <= 0) return { x: a.x, y: a.y };
+  if (t >= 1) return { x: b.x, y: b.y };
   return {
-    x: a.x + (b.x - a.x) * t,
-    y: a.y + (b.y - a.y) * t
+    x: a.x * (1 - t) + b.x * t,
+    y: a.y * (1 - t) + b.y * t
   };
 }
 
@@ -330,6 +370,13 @@ export function pointOnSegment(point, a, b) {
 
 function validateSimplePolygon(points) {
   const count = points.length;
+  const scale = Math.max(
+    1,
+    ...points.flatMap((point) => [
+      Math.abs(point.x),
+      Math.abs(point.y)
+    ])
+  );
 
   let signedArea2 = 0;
   for (let i = 0; i < count; i += 1) {
@@ -342,11 +389,20 @@ function validateSimplePolygon(points) {
         "polygon geometry cannot contain zero-length edges or repeated closing points"
       );
     }
-    signedArea2 += a.x * b.y - b.x * a.y;
+
+    const ax = a.x / scale;
+    const ay = a.y / scale;
+    const bx = b.x / scale;
+    const by = b.y / scale;
+    signedArea2 += ax * by - bx * ay;
   }
 
-  if (Math.abs(signedArea2) <= EPSILON) {
-    throw new RangeError("polygon geometry must have non-zero area");
+  const areaEpsilon =
+    EPSILON / scale / scale;
+  if (Math.abs(signedArea2) <= areaEpsilon) {
+    throw new RangeError(
+      "polygon geometry must have non-zero area"
+    );
   }
 
   for (let i = 0; i < count; i += 1) {
