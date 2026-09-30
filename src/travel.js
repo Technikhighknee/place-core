@@ -323,6 +323,7 @@ function transitionsBetween(registry, fromDomainId, toDomainId, options) {
 
 function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget, options) {
   const routeCache = new Map();
+  let truncated = false;
   let states = [{
     key: "start",
     cost: 0,
@@ -336,7 +337,11 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
     const toDomainId = domains[layer + 1];
     const candidates = transitionsBetween(registry, fromDomainId, toDomainId, options);
     if (!candidates.length) {
-      return { plan: null, failedPair: pairKey(fromDomainId, toDomainId) };
+      return {
+        plan: null,
+        failedPair: pairKey(fromDomainId, toDomainId),
+        truncated
+      };
     }
 
     const nextByEndpoint = new Map();
@@ -381,11 +386,18 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
     states = [...nextByEndpoint.values()]
       .sort((a, b) => a.cost - b.cost || compareStrings(a.key, b.key));
     if (!states.length) {
-      return { plan: null, failedPair: pairKey(fromDomainId, toDomainId) };
+      return {
+        plan: null,
+        failedPair: pairKey(fromDomainId, toDomainId),
+        truncated
+      };
     }
 
     const cap = options.maxConcreteStatesPerLayer;
-    if (states.length > cap) states.length = cap;
+    if (states.length > cap) {
+      states.length = cap;
+      truncated = true;
+    }
   }
 
   let best = null;
@@ -411,10 +423,18 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
     const failedPair = domains.length > 1
       ? pairKey(domains[domains.length - 2], domains[domains.length - 1])
       : null;
-    return { plan: null, failedPair };
+    return {
+      plan: null,
+      failedPair,
+      truncated
+    };
   }
 
-  return { plan: best, failedPair: null };
+  return {
+    plan: best,
+    failedPair: null,
+    truncated
+  };
 }
 
 
@@ -942,6 +962,7 @@ export function planTravel(registry, a, b, c, d) {
   );
 
   let bestShortest = null;
+  let shortestSearchTruncated = false;
   const failedPairs = new Set();
 
   for (const domains of candidatePaths) {
@@ -954,8 +975,14 @@ export function planTravel(registry, a, b, c, d) {
       baseSearchOptions
     );
 
+    if (optimized.truncated) {
+      shortestSearchTruncated = true;
+    }
+
     if (!optimized.plan) {
-      if (optimized.failedPair) failedPairs.add(optimized.failedPair);
+      if (optimized.failedPair) {
+        failedPairs.add(optimized.failedPair);
+      }
       continue;
     }
 
@@ -970,6 +997,17 @@ export function planTravel(registry, a, b, c, d) {
         plan: optimized.plan
       };
     }
+  }
+
+  if (shortestSearchTruncated) {
+    return planConcreteDetour(
+      registry,
+      bridge,
+      entity,
+      target,
+      resolvedTarget,
+      options
+    );
   }
 
   if (bestShortest) {
@@ -1014,6 +1052,17 @@ export function planTravel(registry, a, b, c, d) {
       resolvedTarget,
       { ...options, excludedPairs, excludedPortalKeys }
     );
+
+    if (optimized.truncated) {
+      return planConcreteDetour(
+        registry,
+        bridge,
+        entity,
+        target,
+        resolvedTarget,
+        options
+      );
+    }
 
     if (optimized.plan) {
       const steps = Object.freeze(optimized.plan.steps);
