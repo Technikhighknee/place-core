@@ -536,6 +536,7 @@ export class DynamicPointIndex {
 
     let best = null;
     let bestDistance = maxDistance;
+    const overflowCandidates = [];
     const rows = this.#rowCoordinates();
 
     for (const rowCandidate of coordinatesByDistance(
@@ -572,6 +573,13 @@ export class DynamicPointIndex {
             exactX,
             exactY
           );
+          if (distance === Infinity &&
+              bestDistance === Infinity) {
+            overflowCandidates.push({
+              id,
+              record
+            });
+          }
           if (distance > bestDistance) continue;
 
           const winsTie =
@@ -591,6 +599,65 @@ export class DynamicPointIndex {
             bestDistance = distance;
           }
         }
+      }
+    }
+
+    if (
+      bestDistance === Infinity &&
+      overflowCandidates.length > 0
+    ) {
+      let scale = Math.max(
+        1,
+        Math.abs(point.x),
+        Math.abs(point.y)
+      );
+      for (const candidate of overflowCandidates) {
+        scale = Math.max(
+          scale,
+          Math.abs(candidate.record.x),
+          Math.abs(candidate.record.y)
+        );
+      }
+
+      let scaledBest = null;
+      let scaledBestDistance = Infinity;
+      for (const candidate of overflowCandidates) {
+        const scaledDistance = Math.hypot(
+          point.x / scale -
+            candidate.record.x / scale,
+          point.y / scale -
+            candidate.record.y / scale
+        );
+
+        const winsTie =
+          scaledBest != null &&
+          scaledDistance === scaledBestDistance &&
+          compareIds != null &&
+          compareIds(
+            candidate.id,
+            scaledBest.id
+          ) < 0;
+
+        if (
+          scaledBest == null ||
+          scaledDistance < scaledBestDistance ||
+          winsTie
+        ) {
+          scaledBest = candidate;
+          scaledBestDistance = scaledDistance;
+        }
+      }
+
+      if (scaledBest) {
+        best = {
+          id: scaledBest.id,
+          point: {
+            x: scaledBest.record.x,
+            y: scaledBest.record.y
+          },
+          distance:
+            scaledBestDistance * scale
+        };
       }
     }
 
