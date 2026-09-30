@@ -374,18 +374,56 @@ function *coordinatesByDistance(values, value, cellSize) {
   let left = right - 1;
 
   while (left >= 0 || right < values.length) {
-    const leftDistance = left >= 0
-      ? axisDistanceToCell(value, values[left], cellSize)
-      : Infinity;
-    const rightDistance = right < values.length
-      ? axisDistanceToCell(value, values[right], cellSize)
-      : Infinity;
+    if (left < 0) {
+      yield {
+        coordinate: values[right],
+        distance: axisDistanceToCell(
+          value,
+          values[right],
+          cellSize
+        )
+      };
+      right += 1;
+      continue;
+    }
+
+    if (right >= values.length) {
+      yield {
+        coordinate: values[left],
+        distance: axisDistanceToCell(
+          value,
+          values[left],
+          cellSize
+        )
+      };
+      left -= 1;
+      continue;
+    }
+
+    const leftDistance =
+      axisDistanceToCell(
+        value,
+        values[left],
+        cellSize
+      );
+    const rightDistance =
+      axisDistanceToCell(
+        value,
+        values[right],
+        cellSize
+      );
 
     if (leftDistance <= rightDistance) {
-      yield { coordinate: values[left], distance: leftDistance };
+      yield {
+        coordinate: values[left],
+        distance: leftDistance
+      };
       left -= 1;
     } else {
-      yield { coordinate: values[right], distance: rightDistance };
+      yield {
+        coordinate: values[right],
+        distance: rightDistance
+      };
       right += 1;
     }
   }
