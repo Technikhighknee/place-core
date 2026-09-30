@@ -202,3 +202,26 @@ test("cyclic JSON metadata is rejected explicitly", () => {
     /circular/i
   );
 });
+
+
+test("deep acyclic JSON metadata does not depend on the JavaScript call stack", () => {
+  let metadata = null;
+  const depth = 20_000;
+
+  for (let i = 0; i < depth; i += 1) {
+    metadata = { next: metadata };
+  }
+
+  const compiled = compilePlace(
+    simpleDefinition({ metadata })
+  );
+
+  assert.equal(
+    typeof compiled.contentHash,
+    "string"
+  );
+  assert.equal(
+    compiled.contentHash.length,
+    64
+  );
+});

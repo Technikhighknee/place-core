@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   compilePlace,
+  geometryBounds,
   geometryContainsGeometry,
   pointInGeometry
 } from "../src/index.js";
@@ -232,5 +233,20 @@ test("large finite circle distances do not become Infinity-squared false positiv
       }
     ),
     false
+  );
+});
+
+
+test("circle bounds reject finite inputs whose derived bounds overflow", () => {
+  assert.throws(
+    () => geometryBounds({
+      type: "circle",
+      center: {
+        x: 1e308,
+        y: 0
+      },
+      radius: 1e308
+    }),
+    /finite.*bounds|bounds.*finite/i
   );
 });
