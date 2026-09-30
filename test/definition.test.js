@@ -1088,3 +1088,40 @@ test("compiler rejects unknown blueprint fields at every structural layer", () =
     /compilePlace options contains unknown field spaceIndexCells/
   );
 });
+
+
+test("deep space containment does not depend on the JavaScript call stack", () => {
+  const depth = 10_000;
+  const spaces = [];
+
+  for (let i = depth - 1; i >= 0; i -= 1) {
+    spaces.push({
+      id: `space-${i}`,
+      layerId: "inside",
+      parentSpaceId:
+        i === 0
+          ? null
+          : `space-${i - 1}`,
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 1,
+        maxY: 1
+      }
+    });
+  }
+
+  const compiled = compilePlace({
+    id: "deep-spaces",
+    layers: [{ id: "inside" }],
+    spaces
+  });
+
+  assert.equal(
+    compiled.getSpaceDepth(
+      `space-${depth - 1}`
+    ),
+    depth - 1
+  );
+});

@@ -728,25 +728,64 @@ function normalizeAnchor(anchor, layersById, spacesById) {
   });
 }
 
-function computeSpaceDepth(space, spacesById, memo, visiting) {
-  if (memo.has(space.id)) return memo.get(space.id);
-  if (visiting.has(space.id)) throw new Error(`space containment cycle involving ${space.id}`);
-  visiting.add(space.id);
-  let depth = 0;
-  if (space.parentSpaceId != null) {
-    const parent = spacesById.get(space.parentSpaceId);
-    if (!parent) throw new Error(`space ${space.id} references unknown parent ${space.parentSpaceId}`);
-    if (parent.layerId !== space.layerId) throw new Error(`space ${space.id} cannot have a parent in another layer`);
-    if (!geometryContainsGeometry(parent.geometry, space.geometry)) {
+function computeSpaceDepth(space, spacesById, memo) {
+  const cached = memo.get(space.id);
+  if (cached != null) return cached;
+
+  const path = [];
+  const visiting = new Set();
+  let current = space;
+
+  while (current != null && !memo.has(current.id)) {
+    if (visiting.has(current.id)) {
       throw new Error(
-        `space ${space.id} geometry is not fully contained by parent ${parent.id}`
+        `space containment cycle involving ${current.id}`
       );
     }
-    depth = computeSpaceDepth(parent, spacesById, memo, visiting) + 1;
+
+    visiting.add(current.id);
+    path.push(current);
+
+    if (current.parentSpaceId == null) {
+      current = null;
+      break;
+    }
+
+    const parent =
+      spacesById.get(current.parentSpaceId);
+    if (!parent) {
+      throw new Error(
+        `space ${current.id} references unknown parent ${current.parentSpaceId}`
+      );
+    }
+    if (parent.layerId !== current.layerId) {
+      throw new Error(
+        `space ${current.id} cannot have a parent in another layer`
+      );
+    }
+    if (!geometryContainsGeometry(
+      parent.geometry,
+      current.geometry
+    )) {
+      throw new Error(
+        `space ${current.id} geometry is not fully contained by parent ${parent.id}`
+      );
+    }
+
+    current = parent;
   }
-  visiting.delete(space.id);
-  memo.set(space.id, depth);
-  return depth;
+
+  let depth =
+    current == null
+      ? -1
+      : memo.get(current.id);
+
+  for (let i = path.length - 1; i >= 0; i -= 1) {
+    depth += 1;
+    memo.set(path[i].id, depth);
+  }
+
+  return memo.get(space.id);
 }
 
 export function definePlace(blueprint) {
@@ -1102,7 +1141,13 @@ export function compilePlace(input, options = {}) {
   }
 
   const spaceDepth = new Map();
-  for (const space of spaces) computeSpaceDepth(space, spacesById, spaceDepth, new Set());
+  for (const space of spaces) {
+    computeSpaceDepth(
+      space,
+      spacesById,
+      spaceDepth
+    );
+  }
 
   const spaceIndexes = new Map();
   const cellSize = options.spaceIndexCellSize ?? DEFAULT_SPACE_INDEX_CELL_SIZE;
