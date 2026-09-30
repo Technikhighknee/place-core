@@ -286,3 +286,28 @@ test("DynamicPointIndex radius and nearest remain correct when squared distances
     "near"
   );
 });
+
+
+test("DynamicPointIndex orders overflowed nearest distances correctly", () => {
+  const index = new DynamicPointIndex(64);
+
+  index.set("a-far", {
+    x: 1e308,
+    y: 0
+  });
+  index.set("z-near", {
+    x: 9e307,
+    y: 0
+  });
+
+  const result = index.findNearest(
+    { x: -1e308, y: 0 },
+    {
+      compareIds: (a, b) =>
+        String(a).localeCompare(String(b))
+    }
+  );
+
+  assert.ok(result);
+  assert.equal(result.id, "z-near");
+});
