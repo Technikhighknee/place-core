@@ -980,9 +980,15 @@ export class PlaceRegistry {
           rollbackError,
           localRollbackError
         ].filter(Boolean);
+        const rollbackLabel =
+          rollbackError && localRollbackError
+            ? "bridge and local state"
+            : rollbackError
+              ? "bridge state"
+              : "local state";
         throw new AggregateError(
           errors,
-          `failed to create place ${String(instance.id)} and rollback state`
+          `failed to create place ${String(instance.id)} and rollback ${rollbackLabel}`
         );
       }
       throw error;
