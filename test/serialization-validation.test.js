@@ -819,7 +819,7 @@ test("snapshot validation treats prototype-shadowing layer IDs as own dictionary
       b: {
         layerId: "constructor",
         spaceId: "right",
-        position: { x: 0, y: 0 },
+        position: { x: 1, y: 0 },
         nodeId: "b"
       },
       roadBindings: [{

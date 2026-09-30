@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { compilePlace } from "../src/index.js";
+import {
+  compilePlace,
+  pointInGeometry
+} from "../src/index.js";
 
 function compileWithPolygon(id, points) {
   return compilePlace({
