@@ -261,6 +261,23 @@ function routeEstimatedSeconds(plan, label) {
   );
 }
 
+function travelCostSum(...values) {
+  let total = 0;
+  for (const value of values) {
+    assertRouteCost(
+      value,
+      "travel cost component"
+    );
+    total += value;
+    if (!Number.isFinite(total)) {
+      throw new RangeError(
+        "aggregate travel cost must be finite (cost overflow)"
+      );
+    }
+  }
+  return total;
+}
+
 function localRoute(bridge, mobility, from, destination, options, cache, cachePrefix) {
   if (from.domainId !== destination.domainId) return null;
   if (squaredDistance(from.position, destination.position) <= POSITION_EPSILON_SQ) {
@@ -416,7 +433,11 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
         );
         if (!route) continue;
 
-        const cost = state.cost + route.estimatedSeconds + (edge.portal.transitionCost ?? 0);
+        const cost = travelCostSum(
+          state.cost,
+          route.estimatedSeconds,
+          edge.portal.transitionCost ?? 0
+        );
         const key = transitionKey(edge);
         const existing = nextByEndpoint.get(key);
         if (existing && existing.cost <= cost) continue;
@@ -470,7 +491,10 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
       state.key
     );
     if (!route) continue;
-    const cost = state.cost + route.estimatedSeconds;
+    const cost = travelCostSum(
+      state.cost,
+      route.estimatedSeconds
+    );
     const steps = appendJourney(state.steps, state, resolvedTarget, route);
     if (!best || cost < best.cost || (cost === best.cost && state.key < best.key)) {
       best = { key: state.key, cost, steps };
@@ -684,7 +708,10 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
         nodeId: anchor.nodeId
       });
 
-      const cost = state.cost + localSeconds;
+      const cost = travelCostSum(
+        state.cost,
+        localSeconds
+      );
       if (cost > maxCost) continue;
       const key = anchorTargetKey(anchor);
       const steps = appendJourney(
@@ -711,7 +738,11 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
       const localSeconds = costTo(edge.from);
       if (localSeconds == null) continue;
 
-      const cost = state.cost + localSeconds + (edge.portal.transitionCost ?? 0);
+      const cost = travelCostSum(
+        state.cost,
+        localSeconds,
+        edge.portal.transitionCost ?? 0
+      );
       if (cost > maxCost || (bestGoal && cost > bestGoal.cost)) continue;
 
       const key = transitionKey(edge);
@@ -879,7 +910,10 @@ function planConcreteDetour(
     if (canReachTargetDomain) {
       const localSeconds = costTo(resolvedTarget);
       if (localSeconds != null) {
-        const cost = state.cost + localSeconds;
+        const cost = travelCostSum(
+        state.cost,
+        localSeconds
+      );
         if (cost <= maxCost) {
           const steps = appendJourney(
             state.steps,
@@ -913,10 +947,11 @@ function planConcreteDetour(
       const localSeconds = costTo(edge.from);
       if (localSeconds == null) continue;
 
-      const cost =
-        state.cost +
-        localSeconds +
-        (edge.portal.transitionCost ?? 0);
+      const cost = travelCostSum(
+        state.cost,
+        localSeconds,
+        edge.portal.transitionCost ?? 0
+      );
       if (
         cost > maxCost ||
         (bestGoal && cost > bestGoal.cost)
