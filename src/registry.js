@@ -1284,11 +1284,22 @@ export class PlaceRegistry {
       this.#placementGraph.assertParentDoesNotCycle(instanceId, next.parentPlaceId);
     }
 
-    const affected = this.#placementGraph.collectDescendants(instanceId);
+    const affected =
+      this.#placementGraph.collectDescendants(
+        instanceId
+      );
     const affectedEntities = new Set(
-      this.#collectTrackedEntitiesForIndexedPlaces(affected)
+      this.#collectTrackedEntitiesForIndexedPlaces(
+        affected
+      )
     );
-    for (const id of affected) this.#unindexExterior(this.#instances.get(id));
+    const previousPlacement = instance.placement;
+
+    for (const id of affected) {
+      this.#unindexExterior(
+        this.#instances.get(id)
+      );
+    }
 
     this.#placementGraph.unregister(instance);
     instance.setPlacement(
@@ -1297,13 +1308,62 @@ export class PlaceRegistry {
     );
     this.#placementGraph.register(instance);
 
-    for (const id of affected) {
-      const child = this.#instances.get(id);
-      if (!child) continue;
-      this.#indexExterior(child, this.#definitions.get(child.definitionId));
+    try {
+      for (const id of affected) {
+        const child = this.#instances.get(id);
+        if (!child) continue;
+        this.#indexExterior(
+          child,
+          this.#definitions.get(
+            child.definitionId
+          )
+        );
+      }
+    } catch (error) {
+      let rollbackError = null;
+      try {
+        for (const id of affected) {
+          this.#unindexExterior(
+            this.#instances.get(id)
+          );
+        }
+
+        this.#placementGraph.unregister(instance);
+        instance.setPlacement(
+          previousPlacement,
+          PLACE_INSTANCE_MUTATION_TOKEN
+        );
+        this.#placementGraph.register(instance);
+
+        for (const id of affected) {
+          const child = this.#instances.get(id);
+          if (!child) continue;
+          this.#indexExterior(
+            child,
+            this.#definitions.get(
+              child.definitionId
+            )
+          );
+        }
+      } catch (restoreError) {
+        rollbackError = restoreError;
+      }
+
+      if (rollbackError) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `failed to update placement for ${String(instanceId)} and restore exterior indexes`
+        );
+      }
+      throw error;
     }
 
-    for (const entityId of this.#collectTrackedEntitiesForIndexedPlaces(affected)) {
+    for (
+      const entityId of
+      this.#collectTrackedEntitiesForIndexedPlaces(
+        affected
+      )
+    ) {
       affectedEntities.add(entityId);
     }
 
