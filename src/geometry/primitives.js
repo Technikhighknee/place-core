@@ -462,6 +462,21 @@ export function normalizeTransform(transform = {}) {
   return Object.freeze({ x, y, rotation, scale });
 }
 
+function composeRotation(a, b) {
+  const sum = a + b;
+  if (Number.isFinite(sum)) return sum;
+
+  const sinA = Math.sin(a);
+  const cosA = Math.cos(a);
+  const sinB = Math.sin(b);
+  const cosB = Math.cos(b);
+
+  return Math.atan2(
+    sinA * cosB + cosA * sinB,
+    cosA * cosB - sinA * sinB
+  );
+}
+
 export function composeTransforms(parent, child) {
   const a = normalizeTransform(parent);
   const b = normalizeTransform(child);
@@ -472,7 +487,10 @@ export function composeTransforms(parent, child) {
   return normalizeTransform({
     x: origin.x,
     y: origin.y,
-    rotation: a.rotation + b.rotation,
+    rotation: composeRotation(
+      a.rotation,
+      b.rotation
+    ),
     scale: a.scale * b.scale
   });
 }
