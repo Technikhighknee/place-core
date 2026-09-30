@@ -925,11 +925,29 @@ test("planner rejects invalid local routing costs instead of poisoning travel st
 test("planner validates batched local route costs", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
-    id: "batched-costs"
+    id: "batched-costs",
+    layers: [{ id: "inside" }],
+    anchors: [{
+      id: "goal",
+      layerId: "inside",
+      tags: ["goal"],
+      position: { x: 1, y: 0 },
+      nodeId: "target"
+    }]
+  });
+  places.createPlace({
+    id: "goal-place",
+    definitionId: "batched-costs",
+    layerDomains: {
+      inside: "B"
+    }
+  });
+  places.registerDefinition({
+    id: "portal-holder"
   });
   places.createPlace({
     id: "graph",
-    definitionId: "batched-costs"
+    definitionId: "portal-holder"
   });
   places.addPortal("graph", {
     id: "a-b",
@@ -973,9 +991,8 @@ test("planner validates batched local route costs", () => {
       bridge,
       "hans",
       {
-        domainId: "B",
-        position: { x: 1, y: 0 },
-        nodeId: "target"
+        kind: "nearest",
+        tag: "goal"
       }
     ),
     /route cost.*finite.*>= 0/i
