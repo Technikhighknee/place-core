@@ -84,3 +84,23 @@ test("valid concave polygons remain supported", () => {
     "polygon"
   );
 });
+
+
+test("degenerate polygon edges do not contain arbitrary points", () => {
+  const geometry = {
+    type: "polygon",
+    points: [
+      { x: 0, y: 0 },
+      { x: 0, y: 0 },
+      { x: 1, y: 0 }
+    ]
+  };
+
+  assert.equal(
+    pointInGeometry(
+      { x: 100, y: 100 },
+      geometry
+    ),
+    false
+  );
+});

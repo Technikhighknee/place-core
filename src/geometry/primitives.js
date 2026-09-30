@@ -274,11 +274,24 @@ export function pointInPolygon(point, points) {
 }
 
 export function pointOnSegment(point, a, b) {
-  const cross = (point.y - a.y) * (b.x - a.x) - (point.x - a.x) * (b.y - a.y);
+  const abX = b.x - a.x;
+  const abY = b.y - a.y;
+  const len2 = abX * abX + abY * abY;
+
+  if (len2 <= EPSILON * EPSILON) {
+    return squaredDistance(point, a) <=
+      EPSILON * EPSILON;
+  }
+
+  const cross =
+    (point.y - a.y) * abX -
+    (point.x - a.x) * abY;
   if (Math.abs(cross) > EPSILON) return false;
-  const dot = (point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y);
+
+  const dot =
+    (point.x - a.x) * abX +
+    (point.y - a.y) * abY;
   if (dot < -EPSILON) return false;
-  const len2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
   return dot <= len2 + EPSILON;
 }
 
