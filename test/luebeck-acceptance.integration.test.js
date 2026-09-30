@@ -326,6 +326,27 @@ test("P90 world-core and place-core snapshots resume the same active trip determ
     placeHashBefore
   );
   assert.ok(restored.places.activeTravels.has("hans"));
+  const resumedTravel =
+    restored.places.activeTravels.get("hans");
+  assert.equal(
+    resumedTravel.plan.legs,
+    resumedTravel.plan.steps,
+    "resumed plan must restore the legs/steps alias"
+  );
+  for (const value of [
+    resumedTravel.plan,
+    resumedTravel.plan.steps,
+    resumedTravel.plan.legs,
+    resumedTravel.plan.domainPath,
+    resumedTravel.plan.rejectedDomainPairs,
+    resumedTravel.plan.resolvedTarget
+  ]) {
+    assert.equal(
+      Object.isFrozen(value),
+      true,
+      "resumed plan must retain deep immutability"
+    );
+  }
 
   let ticks = 0;
   while (
