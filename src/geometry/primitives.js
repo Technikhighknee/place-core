@@ -244,6 +244,7 @@ export function pointInBounds(point, bounds) {
 
 export function pointInGeometry(point, geometry) {
   assertVec2(point);
+  geometryBounds(geometry);
   switch (geometry.type) {
     case "aabb":
       return point.x >= geometry.minX - EPSILON && point.x <= geometry.maxX + EPSILON &&
@@ -454,7 +455,9 @@ export function squaredDistancePointToSegment(point, a, b) {
   const abX = b.x - a.x;
   const abY = b.y - a.y;
   const len2 = abX * abX + abY * abY;
-  if (len2 <= EPSILON) return squaredDistance(point, a);
+  if (len2 <= EPSILON * EPSILON) {
+    return squaredDistance(point, a);
+  }
   const t = Math.max(0, Math.min(1, ((point.x - a.x) * abX + (point.y - a.y) * abY) / len2));
   const closest = { x: a.x + abX * t, y: a.y + abY * t };
   return squaredDistance(point, closest);
