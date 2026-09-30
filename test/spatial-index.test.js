@@ -234,3 +234,33 @@ test("StaticGeometryIndex keeps huge geometry in a sparse fallback", () => {
     ["world-sized"]
   );
 });
+
+
+test("StaticGeometryIndex reuses its constructor geometry accessor by default", () => {
+  const items = [{
+    id: "custom",
+    shape: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 4,
+      maxY: 4
+    }
+  }];
+
+  const index = new StaticGeometryIndex(
+    items,
+    {
+      geometryOf: (item) => item.shape
+    }
+  );
+
+  assert.deepEqual(
+    index.queryPoint({ x: 2, y: 2 }),
+    items
+  );
+  assert.deepEqual(
+    index.queryPoint({ x: 10, y: 10 }),
+    []
+  );
+});

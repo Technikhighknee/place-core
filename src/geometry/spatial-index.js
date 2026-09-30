@@ -78,14 +78,19 @@ export class StaticGeometryIndex {
   #cells = new Map();
   #largeItems = [];
   #items;
+  #geometryOf;
 
   constructor(items, { cellSize = 8, geometryOf = (item) => item.geometry } = {}) {
     if (!Number.isFinite(cellSize) || cellSize <= 0) throw new RangeError("cellSize must be > 0");
+    if (typeof geometryOf !== "function") {
+      throw new TypeError("geometryOf must be a function");
+    }
     this.#cellSize = cellSize;
+    this.#geometryOf = geometryOf;
     this.#items = Object.freeze([...items]);
     for (let index = 0; index < this.#items.length; index += 1) {
       const bounds = geometryBounds(
-        geometryOf(this.#items[index])
+        this.#geometryOf(this.#items[index])
       );
       const range = cellRangeForBounds(
         bounds,
@@ -111,8 +116,11 @@ export class StaticGeometryIndex {
     for (const bucket of this.#cells.values()) Object.freeze(bucket);
   }
 
-  queryPoint(point, predicate = null, geometryOf = (item) => item.geometry) {
+  queryPoint(point, predicate = null, geometryOf = this.#geometryOf) {
     assertVec2(point);
+    if (typeof geometryOf !== "function") {
+      throw new TypeError("geometryOf must be a function");
+    }
     const bucket =
       this.#cells.get(
         this.#key(point.x, point.y)
