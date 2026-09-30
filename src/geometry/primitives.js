@@ -809,19 +809,41 @@ export function segmentIntersectsBounds(a, b, bounds) {
   if (!boundsIntersect(segmentBounds(a, b), bounds)) return false;
   if (pointInBounds(a, bounds) || pointInBounds(b, bounds)) return true;
 
+  const scale = Math.max(
+    1,
+    Math.abs(a.x),
+    Math.abs(a.y),
+    Math.abs(b.x),
+    Math.abs(b.y),
+    Math.abs(bounds.minX),
+    Math.abs(bounds.minY),
+    Math.abs(bounds.maxX),
+    Math.abs(bounds.maxY)
+  );
+
+  const ax = a.x / scale;
+  const ay = a.y / scale;
+  const bx = b.x / scale;
+  const by = b.y / scale;
+  const minX = bounds.minX / scale;
+  const minY = bounds.minY / scale;
+  const maxX = bounds.maxX / scale;
+  const maxY = bounds.maxY / scale;
+
   let t0 = 0;
   let t1 = 1;
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const parallelEpsilon = EPSILON / scale;
   const checks = [
-    [-dx, a.x - bounds.minX],
-    [ dx, bounds.maxX - a.x],
-    [-dy, a.y - bounds.minY],
-    [ dy, bounds.maxY - a.y]
+    [-dx, ax - minX],
+    [ dx, maxX - ax],
+    [-dy, ay - minY],
+    [ dy, maxY - ay]
   ];
 
   for (const [p, q] of checks) {
-    if (Math.abs(p) <= EPSILON) {
+    if (Math.abs(p) <= parallelEpsilon) {
       if (q < 0) return false;
       continue;
     }
