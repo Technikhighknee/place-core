@@ -70,6 +70,28 @@ function cross2(ax, ay, bx, by) {
   return ax * by - ay * bx;
 }
 
+function orientation(a, b, c) {
+  const scale = Math.max(
+    1,
+    Math.abs(a.x),
+    Math.abs(a.y),
+    Math.abs(b.x),
+    Math.abs(b.y),
+    Math.abs(c.x),
+    Math.abs(c.y)
+  );
+  const ax = a.x / scale;
+  const ay = a.y / scale;
+  const bx = b.x / scale;
+  const by = b.y / scale;
+  const cx = c.x / scale;
+  const cy = c.y / scale;
+  return (
+    (bx - ax) * (cy - ay) -
+    (by - ay) * (cx - ax)
+  );
+}
+
 function geometryVertices(geometry) {
   if (geometry.type === "aabb") {
     return [
@@ -268,38 +290,42 @@ export function pointInGeometry(point, geometry) {
 }
 
 export function pointInPolygon(point, points) {
-  let inside = false;
-  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-    const a = points[i];
-    const b = points[j];
-    if (pointOnSegment(point, a, b)) return true;
-    const intersect = ((a.y > point.y) !== (b.y > point.y)) &&
-      (point.x < ((b.x - a.x) * (point.y - a.y)) / ((b.y - a.y) || Number.EPSILON) + a.x);
-    if (intersect) inside = !inside;
+  let winding = 0;
+
+  for (
+    let i = 0, j = points.length - 1;
+    i < points.length;
+    j = i++
+  ) {
+    const a = points[j];
+    const b = points[i];
+
+    if (pointOnSegment(point, a, b)) {
+      return true;
+    }
+
+    const turn = orientation(a, b, point);
+    if (a.y <= point.y) {
+      if (b.y > point.y && turn > 0) {
+        winding += 1;
+      }
+    } else if (
+      b.y <= point.y &&
+      turn < 0
+    ) {
+      winding -= 1;
+    }
   }
-  return inside;
+
+  return winding !== 0;
 }
 
 export function pointOnSegment(point, a, b) {
-  const abX = b.x - a.x;
-  const abY = b.y - a.y;
-  const len2 = abX * abX + abY * abY;
-
-  if (len2 <= EPSILON * EPSILON) {
-    return squaredDistance(point, a) <=
-      EPSILON * EPSILON;
-  }
-
-  const cross =
-    (point.y - a.y) * abX -
-    (point.x - a.x) * abY;
-  if (Math.abs(cross) > EPSILON) return false;
-
-  const dot =
-    (point.x - a.x) * abX +
-    (point.y - a.y) * abY;
-  if (dot < -EPSILON) return false;
-  return dot <= len2 + EPSILON;
+  return distancePointToSegment(
+    point,
+    a,
+    b
+  ) <= EPSILON;
 }
 
 function validateSimplePolygon(points) {

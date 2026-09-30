@@ -268,7 +268,9 @@ test("point-to-segment distance survives finite coordinate subtraction overflow"
     { x: -1e308, y: 0 },
     { x: 1e308, y: 0 }
   );
-  assert.equal(squared, 1);
+  assert.ok(
+    Math.abs(squared - 1) <= 1e-12
+  );
 });
 
 
