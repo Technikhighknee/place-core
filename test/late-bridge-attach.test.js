@@ -11,7 +11,8 @@ import {
 
 import {
   PlaceRegistry,
-  WorldCoreBridge
+  WorldCoreBridge,
+  startTravel
 } from "../src/index.js";
 
 const mobility = {
@@ -236,4 +237,71 @@ test("disposing an active bridge with materialized places is rejected", () => {
   );
   assert.equal(places.bridge, bridge);
   assert.ok(world.getDomain(domainId));
+});
+
+
+test("disposing a bridge with active direct-domain travel is rejected", () => {
+  const places = new PlaceRegistry();
+  const {
+    world,
+    navigation,
+    bridge
+  } = makeBridge();
+
+  const nav = new Navigation();
+  nav.addNode({ id: "a", x: 0, y: 0 });
+  nav.addNode({ id: "b", x: 5, y: 0 });
+  nav.addRoad({
+    id: "road",
+    from: "a",
+    to: "b"
+  });
+  navigation.registerTopology(
+    "outside-topology",
+    nav
+  );
+  navigation.bindDomain(
+    "outside",
+    "outside-topology"
+  );
+
+  world.addEntity({
+    id: "hans",
+    domainId: "outside",
+    position: { x: 0, y: 0 },
+    body: { radius: 0.25 },
+    mobility
+  });
+
+  places.attachWorldCoreBridge(bridge);
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        domainId: "outside",
+        position: { x: 5, y: 0 },
+        nodeId: "b"
+      }
+    )
+  );
+  assert.equal(
+    places.activeTravels.has("hans"),
+    true
+  );
+
+  assert.throws(
+    () => bridge.dispose(),
+    /active travel/
+  );
+  assert.equal(
+    places.bridge,
+    bridge
+  );
+  assert.equal(
+    places.activeTravels.has("hans"),
+    true
+  );
 });
