@@ -335,4 +335,23 @@ test("DynamicPointIndex nearest search survives overflowed cell coordinates", ()
 
   assert.ok(result);
   assert.equal(result.id, "z-near");
+
+  assert.deepEqual(
+    index.queryRadius(
+      { x: 1e308, y: 0 },
+      2e307
+    ).map((hit) => hit.id),
+    ["z-near"]
+  );
+
+  assert.equal(
+    index.delete("z-near"),
+    true
+  );
+  assert.equal(
+    index.findNearest(
+      { x: 1e308, y: 0 }
+    )?.id,
+    "a-far"
+  );
 });
