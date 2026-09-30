@@ -53,6 +53,52 @@ import {
 
 export { PlaceInstance };
 
+function nearestAnchorResult(candidates, position) {
+  if (candidates.length === 0) return null;
+
+  let scale = Math.max(
+    1,
+    Math.abs(position.x),
+    Math.abs(position.y)
+  );
+  for (const anchor of candidates) {
+    scale = Math.max(
+      scale,
+      Math.abs(anchor.position.x),
+      Math.abs(anchor.position.y)
+    );
+  }
+
+  let best = null;
+  let bestScaledDistance = Infinity;
+
+  for (const anchor of candidates) {
+    const scaledDistance = Math.hypot(
+      position.x / scale -
+        anchor.position.x / scale,
+      position.y / scale -
+        anchor.position.y / scale
+    );
+
+    if (
+      best === null ||
+      scaledDistance < bestScaledDistance ||
+      (
+        scaledDistance === bestScaledDistance &&
+        compareStrings(anchor.id, best.id) < 0
+      )
+    ) {
+      best = anchor;
+      bestScaledDistance = scaledDistance;
+    }
+  }
+
+  return {
+    anchor: best,
+    distance: bestScaledDistance * scale
+  };
+}
+
 export class PlaceRegistry {
   #definitions = new Map();
   #instances = new Map();
@@ -424,27 +470,20 @@ export class PlaceRegistry {
       }
     }
 
-    let best = null;
-    let bestDistance = Infinity;
-
-    for (const anchor of eligible) {
-      const distance = Math.hypot(
-        position.x - anchor.position.x,
-        position.y - anchor.position.y
+    const nearest =
+      nearestAnchorResult(
+        eligible,
+        position
       );
-      if (distance < bestDistance ||
-          (distance === bestDistance &&
-           compareStrings(anchor.id, best?.id ?? "") < 0)) {
-        best = anchor;
-        bestDistance = distance;
-      }
-    }
 
-    return best ? {
-      ...best,
+    return nearest ? {
+      ...nearest.anchor,
       placeId: instanceId,
-      domainId: instance.layerDomains.get(best.layerId),
-      distance: bestDistance
+      domainId:
+        instance.layerDomains.get(
+          nearest.anchor.layerId
+        ),
+      distance: nearest.distance
     } : null;
   }
 
@@ -488,24 +527,18 @@ export class PlaceRegistry {
   findNearestAnchorInDomain(domainId, position, options = {}) {
     assertStringId(domainId, "findNearestAnchorInDomain.domainId");
     assertVec2(position, "findNearestAnchorInDomain.position");
-    let best = null;
-    let bestDistance = Infinity;
-
-    for (const anchor of this.getAnchorsForDomain(domainId, options)) {
-      const distance = Math.hypot(
-        position.x - anchor.position.x,
-        position.y - anchor.position.y
+    const nearest =
+      nearestAnchorResult(
+        this.getAnchorsForDomain(
+          domainId,
+          options
+        ),
+        position
       );
-      if (distance < bestDistance ||
-          (distance === bestDistance && compareStrings(anchor.id, best?.id ?? "") < 0)) {
-        best = anchor;
-        bestDistance = distance;
-      }
-    }
 
-    return best ? {
-      ...best,
-      distance: bestDistance
+    return nearest ? {
+      ...nearest.anchor,
+      distance: nearest.distance
     } : null;
   }
 
