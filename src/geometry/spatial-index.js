@@ -6,6 +6,45 @@ import {
   pointInGeometry
 } from "./primitives.js";
 
+const MAX_INDEX_CELLS_PER_ITEM = 4096;
+
+function cellRangeForBounds(bounds, cellSize) {
+  return {
+    minX: Math.floor(bounds.minX / cellSize),
+    minY: Math.floor(bounds.minY / cellSize),
+    maxX: Math.floor(bounds.maxX / cellSize),
+    maxY: Math.floor(bounds.maxY / cellSize)
+  };
+}
+
+function rangeCellCount(range) {
+  const values = [
+    range.minX,
+    range.minY,
+    range.maxX,
+    range.maxY
+  ];
+  if (!values.every(Number.isSafeInteger)) {
+    return Infinity;
+  }
+
+  const width = range.maxX - range.minX + 1;
+  const height = range.maxY - range.minY + 1;
+  if (
+    !Number.isSafeInteger(width) ||
+    !Number.isSafeInteger(height) ||
+    width > MAX_INDEX_CELLS_PER_ITEM ||
+    height > MAX_INDEX_CELLS_PER_ITEM
+  ) {
+    return Infinity;
+  }
+
+  const count = width * height;
+  return Number.isSafeInteger(count)
+    ? count
+    : Infinity;
+}
+
 function assertFiniteBounds(bounds, label = "bounds") {
   if (!bounds ||
       typeof bounds !== "object" ||
@@ -37,6 +76,7 @@ function assertFiniteIndexPoint(point) {
 export class StaticGeometryIndex {
   #cellSize;
   #cells = new Map();
+  #largeItems = [];
   #items;
 
   constructor(items, { cellSize = 8, geometryOf = (item) => item.geometry } = {}) {
@@ -44,10 +84,27 @@ export class StaticGeometryIndex {
     this.#cellSize = cellSize;
     this.#items = Object.freeze([...items]);
     for (let index = 0; index < this.#items.length; index += 1) {
-      const bounds = geometryBounds(geometryOf(this.#items[index]));
-      for (const key of this.#keysForBounds(bounds)) {
+      const bounds = geometryBounds(
+        geometryOf(this.#items[index])
+      );
+      const range = cellRangeForBounds(
+        bounds,
+        this.#cellSize
+      );
+
+      if (
+        rangeCellCount(range) >
+        MAX_INDEX_CELLS_PER_ITEM
+      ) {
+        this.#largeItems.push(index);
+        continue;
+      }
+
+      for (const key of this.#keysForRange(range)) {
         let bucket = this.#cells.get(key);
-        if (!bucket) this.#cells.set(key, bucket = []);
+        if (!bucket) {
+          this.#cells.set(key, bucket = []);
+        }
         bucket.push(index);
       }
     }
@@ -56,12 +113,28 @@ export class StaticGeometryIndex {
 
   queryPoint(point, predicate = null, geometryOf = (item) => item.geometry) {
     assertVec2(point);
-    const bucket = this.#cells.get(this.#key(point.x, point.y));
-    if (!bucket) return [];
+    const bucket =
+      this.#cells.get(
+        this.#key(point.x, point.y)
+      ) ?? [];
     const result = [];
-    for (const index of bucket) {
+
+    const visit = (index) => {
       const item = this.#items[index];
-      if ((!predicate || predicate(item)) && pointInGeometry(point, geometryOf(item))) result.push(item);
+      if (
+        (!predicate || predicate(item)) &&
+        pointInGeometry(
+          point,
+          geometryOf(item)
+        )
+      ) {
+        result.push(item);
+      }
+    };
+
+    for (const index of bucket) visit(index);
+    for (const index of this.#largeItems) {
+      visit(index);
     }
     return result;
   }
@@ -70,17 +143,27 @@ export class StaticGeometryIndex {
     return this.#cells.size;
   }
 
+  get largeItemCount() {
+    return this.#largeItems.length;
+  }
+
   #key(x, y) {
     return `${Math.floor(x / this.#cellSize)},${Math.floor(y / this.#cellSize)}`;
   }
 
-  *#keysForBounds(bounds) {
-    const minX = Math.floor(bounds.minX / this.#cellSize);
-    const minY = Math.floor(bounds.minY / this.#cellSize);
-    const maxX = Math.floor(bounds.maxX / this.#cellSize);
-    const maxY = Math.floor(bounds.maxY / this.#cellSize);
-    for (let y = minY; y <= maxY; y += 1) {
-      for (let x = minX; x <= maxX; x += 1) yield `${x},${y}`;
+  *#keysForRange(range) {
+    for (
+      let y = range.minY;
+      y <= range.maxY;
+      y += 1
+    ) {
+      for (
+        let x = range.minX;
+        x <= range.maxX;
+        x += 1
+      ) {
+        yield `${x},${y}`;
+      }
     }
   }
 }
@@ -90,6 +173,7 @@ export class DynamicAabbIndex {
   #cells = new Map();
   #bounds = new Map();
   #memberships = new Map();
+  #largeIds = new Set();
 
   constructor(cellSize = 64) {
     if (!Number.isFinite(cellSize) || cellSize <= 0) throw new RangeError("cellSize must be > 0");
@@ -97,27 +181,58 @@ export class DynamicAabbIndex {
   }
 
   set(id, bounds) {
-    assertFiniteBounds(bounds, "DynamicAabbIndex bounds");
-    const keys = [...this.#keysForBounds(bounds)];
+    assertFiniteBounds(
+      bounds,
+      "DynamicAabbIndex bounds"
+    );
+    const range = cellRangeForBounds(
+      bounds,
+      this.#cellSize
+    );
+    const useLargeFallback =
+      rangeCellCount(range) >
+      MAX_INDEX_CELLS_PER_ITEM;
+    const keys = useLargeFallback
+      ? null
+      : [...this.#keysForRange(range)];
+
     this.delete(id);
     this.#bounds.set(id, { ...bounds });
     this.#memberships.set(id, keys);
+
+    if (useLargeFallback) {
+      this.#largeIds.add(id);
+      return;
+    }
+
     for (const key of keys) {
       let bucket = this.#cells.get(key);
-      if (!bucket) this.#cells.set(key, bucket = new Set());
+      if (!bucket) {
+        this.#cells.set(
+          key,
+          bucket = new Set()
+        );
+      }
       bucket.add(id);
     }
   }
 
   delete(id) {
+    if (!this.#bounds.has(id)) return false;
     const keys = this.#memberships.get(id);
-    if (!keys) return false;
-    for (const key of keys) {
-      const bucket = this.#cells.get(key);
-      if (!bucket) continue;
-      bucket.delete(id);
-      if (bucket.size === 0) this.#cells.delete(key);
+    if (keys) {
+      for (const key of keys) {
+        const bucket = this.#cells.get(key);
+        if (!bucket) continue;
+        bucket.delete(id);
+        if (bucket.size === 0) {
+          this.#cells.delete(key);
+        }
+      }
+    } else {
+      this.#largeIds.delete(id);
     }
+
     this.#memberships.delete(id);
     this.#bounds.delete(id);
     return true;
@@ -125,12 +240,25 @@ export class DynamicAabbIndex {
 
   queryPoint(point) {
     assertFiniteIndexPoint(point);
-    const bucket = this.#cells.get(this.#key(point.x, point.y));
-    if (!bucket) return [];
+    const bucket =
+      this.#cells.get(
+        this.#key(point.x, point.y)
+      ) ?? [];
     const result = [];
-    for (const id of bucket) {
+
+    const visit = (id) => {
       const bounds = this.#bounds.get(id);
-      if (bounds && pointInBounds(point, bounds)) result.push(id);
+      if (
+        bounds &&
+        pointInBounds(point, bounds)
+      ) {
+        result.push(id);
+      }
+    };
+
+    for (const id of bucket) visit(id);
+    for (const id of this.#largeIds) {
+      visit(id);
     }
     return result;
   }
@@ -144,7 +272,8 @@ export class DynamicAabbIndex {
     const width = maxX - minX + 1;
     const height = maxY - minY + 1;
     const queryCellCount = width * height;
-    const candidates = new Set();
+    const candidates =
+      new Set(this.#largeIds);
 
     // Never let a sparse query spend time proportional to empty world area.
     // Small windows probe their cells directly; huge windows scan the
@@ -184,18 +313,27 @@ export class DynamicAabbIndex {
   get size() { return this.#bounds.size; }
   get cellSize() { return this.#cellSize; }
   get cellCount() { return this.#cells.size; }
+  get largeItemCount() {
+    return this.#largeIds.size;
+  }
 
   #key(x, y) {
     return `${Math.floor(x / this.#cellSize)},${Math.floor(y / this.#cellSize)}`;
   }
 
-  *#keysForBounds(bounds) {
-    const minX = Math.floor(bounds.minX / this.#cellSize);
-    const minY = Math.floor(bounds.minY / this.#cellSize);
-    const maxX = Math.floor(bounds.maxX / this.#cellSize);
-    const maxY = Math.floor(bounds.maxY / this.#cellSize);
-    for (let y = minY; y <= maxY; y += 1) {
-      for (let x = minX; x <= maxX; x += 1) yield `${x},${y}`;
+  *#keysForRange(range) {
+    for (
+      let y = range.minY;
+      y <= range.maxY;
+      y += 1
+    ) {
+      for (
+        let x = range.minX;
+        x <= range.maxX;
+        x += 1
+      ) {
+        yield `${x},${y}`;
+      }
     }
   }
 }

@@ -900,6 +900,7 @@ export class StaticGeometryIndex<T = any> {
     geometryOf?: (item: T) => Geometry
   ): T[];
   readonly cellCount: number;
+  readonly largeItemCount: number;
 }
 
 export class DynamicAabbIndex {
@@ -912,4 +913,5 @@ export class DynamicAabbIndex {
   readonly size: number;
   readonly cellSize: number;
   readonly cellCount: number;
+  readonly largeItemCount: number;
 }

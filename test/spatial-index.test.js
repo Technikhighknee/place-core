@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   DynamicAabbIndex,
-  DynamicPointIndex
+  DynamicPointIndex,
+  StaticGeometryIndex
 } from "../src/geometry.js";
 
 test("DynamicAabbIndex huge sparse bounds query does not enumerate empty world cells", () => {
@@ -163,5 +164,73 @@ test("DynamicAabbIndex rejects invalid bounds before mutating existing entries",
       y: 0
     }),
     /finite Vec2/
+  );
+});
+
+
+test("DynamicAabbIndex stores huge items without materializing covered empty cells", () => {
+  const index = new DynamicAabbIndex(64);
+  const huge = {
+    minX: -1_000_000_000_000,
+    minY: -1_000_000_000_000,
+    maxX: 1_000_000_000_000,
+    maxY: 1_000_000_000_000
+  };
+
+  index.set("world-sized", huge);
+
+  assert.equal(index.size, 1);
+  assert.equal(index.cellCount, 0);
+  assert.equal(index.largeItemCount, 1);
+  assert.deepEqual(
+    index.queryPoint({ x: 0, y: 0 }),
+    ["world-sized"]
+  );
+  assert.deepEqual(
+    index.queryBounds({
+      minX: 100,
+      minY: 100,
+      maxX: 101,
+      maxY: 101
+    }),
+    ["world-sized"]
+  );
+
+  index.set("world-sized", {
+    minX: 0,
+    minY: 0,
+    maxX: 1,
+    maxY: 1
+  });
+  assert.equal(index.largeItemCount, 0);
+  assert.ok(index.cellCount > 0);
+
+  index.delete("world-sized");
+  assert.equal(index.size, 0);
+  assert.equal(index.cellCount, 0);
+});
+
+test("StaticGeometryIndex keeps huge geometry in a sparse fallback", () => {
+  const index = new StaticGeometryIndex(
+    [{
+      id: "world-sized",
+      geometry: {
+        type: "aabb",
+        minX: -1_000_000_000_000,
+        minY: -1_000_000_000_000,
+        maxX: 1_000_000_000_000,
+        maxY: 1_000_000_000_000
+      }
+    }],
+    { cellSize: 8 }
+  );
+
+  assert.equal(index.cellCount, 0);
+  assert.equal(index.largeItemCount, 1);
+  assert.deepEqual(
+    index
+      .queryPoint({ x: 123, y: -456 })
+      .map((item) => item.id),
+    ["world-sized"]
   );
 });
