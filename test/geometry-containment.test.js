@@ -5,8 +5,10 @@ import {
   compilePlace,
   geometryBounds,
   geometryContainsGeometry,
+  inverseTransformPoint,
   pointInGeometry,
-  squaredDistancePointToSegment
+  squaredDistancePointToSegment,
+  transformPoint
 } from "../src/index.js";
 
 test("nested AABB spaces must be fully contained by their parent", () => {
@@ -297,5 +299,31 @@ test("polygon containment survives finite cross-product overflow", () => {
       triangle
     ),
     true
+  );
+});
+
+
+test("transform helpers survive finite intermediate overflow when the result is finite", () => {
+  const transform = {
+    x: -1e308,
+    y: 0,
+    rotation: 0,
+    scale: 1e308
+  };
+
+  assert.deepEqual(
+    transformPoint(
+      { x: 2, y: 0 },
+      transform
+    ),
+    { x: 1e308, y: 0 }
+  );
+
+  assert.deepEqual(
+    inverseTransformPoint(
+      { x: 1e308, y: 0 },
+      transform
+    ),
+    { x: 2, y: 0 }
   );
 });
