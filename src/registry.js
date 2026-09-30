@@ -15,6 +15,7 @@ import {
   assertStringId,
   BoundedEventQueue,
   cloneJson,
+  compareStrings,
   deepFreeze,
   normalizeBoolean,
   normalizeStringList,
@@ -165,7 +166,7 @@ export class PlaceRegistry {
 
       if (typeof bridge.materializePlace === "function") {
         const instances = [...this.#instances.values()]
-          .sort((a, b) => typedIdKey(a.id).localeCompare(typedIdKey(b.id)));
+          .sort((a, b) => compareStrings(typedIdKey(a.id), typedIdKey(b.id)));
 
         for (const instance of instances) {
           const definition = this.#definitions.get(instance.definitionId);
@@ -346,7 +347,7 @@ export class PlaceRegistry {
       const distanceSq = squaredDistance(position, anchor.position);
       if (distanceSq < bestDistanceSq ||
           (distanceSq === bestDistanceSq &&
-           anchor.id.localeCompare(best?.id ?? "") < 0)) {
+           compareStrings(anchor.id, best?.id ?? "") < 0)) {
         best = anchor;
         bestDistanceSq = distanceSq;
       }
@@ -393,7 +394,7 @@ export class PlaceRegistry {
       });
     }
 
-    result.sort((a, b) => a.id.localeCompare(b.id));
+    result.sort((a, b) => compareStrings(a.id, b.id));
     return result;
   }
 
@@ -406,7 +407,7 @@ export class PlaceRegistry {
     for (const anchor of this.getAnchorsForDomain(domainId, options)) {
       const distanceSq = squaredDistance(position, anchor.position);
       if (distanceSq < bestDistanceSq ||
-          (distanceSq === bestDistanceSq && anchor.id.localeCompare(best?.id ?? "") < 0)) {
+          (distanceSq === bestDistanceSq && compareStrings(anchor.id, best?.id ?? "") < 0)) {
         best = anchor;
         bestDistanceSq = distanceSq;
       }
@@ -491,8 +492,8 @@ export class PlaceRegistry {
 
     result.sort((a, b) =>
       a.distance - b.distance ||
-      a.portal.key.localeCompare(b.portal.key) ||
-      a.side.localeCompare(b.side)
+      compareStrings(a.portal.key, b.portal.key) ||
+      compareStrings(a.side, b.side)
     );
     return result;
   }
@@ -550,10 +551,10 @@ export class PlaceRegistry {
         const left = this.#portalEndpointRecords.get(leftKey);
         const right = this.#portalEndpointRecords.get(rightKey);
         if (!left || !right) {
-          return String(leftKey).localeCompare(String(rightKey));
+          return compareStrings(String(leftKey), String(rightKey));
         }
-        return left.portalKey.localeCompare(right.portalKey) ||
-          left.side.localeCompare(right.side);
+        return compareStrings(left.portalKey, right.portalKey) ||
+          compareStrings(left.side, right.side);
       }
     });
 
@@ -624,7 +625,7 @@ export class PlaceRegistry {
     for (const boundary of this.getBoundariesForDomain(domainId, options)) {
       const distanceSq = squaredDistancePointToSegment(position, boundary.a, boundary.b);
       if (distanceSq < bestDistanceSq ||
-          (distanceSq === bestDistanceSq && boundary.id.localeCompare(best?.id ?? "") < 0)) {
+          (distanceSq === bestDistanceSq && compareStrings(boundary.id, best?.id ?? "") < 0)) {
         best = boundary;
         bestDistanceSq = distanceSq;
       }
@@ -643,7 +644,7 @@ export class PlaceRegistry {
       if (!instance) continue;
       result.push(instance);
     }
-    result.sort((a, b) => typedIdKey(a.id).localeCompare(typedIdKey(b.id)));
+    result.sort((a, b) => compareStrings(typedIdKey(a.id), typedIdKey(b.id)));
     return result;
   }
 
@@ -1377,9 +1378,11 @@ export class PlaceRegistry {
     return instance.getMemberships()
       .slice()
       .sort((a, b) =>
-        typedIdKey(a.parentPlaceId)
-          .localeCompare(typedIdKey(b.parentPlaceId)) ||
-        a.kind.localeCompare(b.kind)
+        compareStrings(
+          typedIdKey(a.parentPlaceId),
+          typedIdKey(b.parentPlaceId)
+        ) ||
+        compareStrings(a.kind, b.kind)
       );
   }
 

@@ -1,3 +1,4 @@
+import { compareStrings } from "../utils.js";
 import { typedIdKey } from "./support.js";
 
 export class SemanticGraphIndex {
@@ -121,7 +122,7 @@ export class SemanticGraphIndex {
 
     return [...parents.values()]
       .sort((a, b) =>
-        typedIdKey(a).localeCompare(typedIdKey(b))
+        compareStrings(typedIdKey(a), typedIdKey(b))
       );
   }
 
@@ -167,7 +168,7 @@ export class SemanticGraphIndex {
 
     return [...children.values()]
       .sort((a, b) =>
-        typedIdKey(a).localeCompare(typedIdKey(b))
+        compareStrings(typedIdKey(a), typedIdKey(b))
       );
   }
 
@@ -270,7 +271,7 @@ export class SemanticGraphIndex {
     const seen = new Set();
     const roots = [...instanceIds]
       .sort((a, b) =>
-        typedIdKey(a).localeCompare(typedIdKey(b))
+        compareStrings(typedIdKey(a), typedIdKey(b))
       );
 
     for (const instanceId of roots) {
@@ -381,7 +382,7 @@ export class SemanticGraphIndex {
     const visiting = new Set();
     const roots = [...this.#instances.keys()]
       .sort((a, b) =>
-        typedIdKey(a).localeCompare(typedIdKey(b))
+        compareStrings(typedIdKey(a), typedIdKey(b))
       );
 
     for (const rootId of roots) {

@@ -2,6 +2,7 @@ import { squaredDistance } from "./geometry.js";
 import { isPortalTraversable } from "./registry.js";
 import {
   cloneJson,
+  compareStrings,
   deepFreeze,
   tupleKey
 } from "./utils.js";
@@ -112,9 +113,11 @@ export function resolveTravelTarget(registry, target) {
       );
     }
     candidates.sort((a, b) =>
-      travelTargetIdKey(a.placeId)
-        .localeCompare(travelTargetIdKey(b.placeId)) ||
-      a.id.localeCompare(b.id)
+      compareStrings(
+        travelTargetIdKey(a.placeId),
+        travelTargetIdKey(b.placeId)
+      ) ||
+      compareStrings(a.id, b.id)
     );
     const anchor = candidates[0];
     return deepFreeze({
@@ -175,7 +178,7 @@ export function resolveTravelTarget(registry, target) {
         registry,
         target.placeId,
         definition.getAnchorsForSpace(space.id)
-      ).sort((a, b) => a.id.localeCompare(b.id))[0] ?? null;
+      ).sort((a, b) => compareStrings(a.id, b.id))[0] ?? null;
     }
   } else {
     if (definition.defaultAnchorId) {
@@ -187,12 +190,12 @@ export function resolveTravelTarget(registry, target) {
         registry,
         target.placeId,
         definition.getAnchorsByTag("entry")
-      ).sort((a, b) => a.id.localeCompare(b.id))[0] ??
+      ).sort((a, b) => compareStrings(a.id, b.id))[0] ??
         availableAnchors(
           registry,
           target.placeId,
           definition.anchors
-        ).sort((a, b) => a.id.localeCompare(b.id))[0] ??
+        ).sort((a, b) => compareStrings(a.id, b.id))[0] ??
         null;
     }
   }
@@ -368,7 +371,7 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
     }
 
     states = [...nextByEndpoint.values()]
-      .sort((a, b) => a.cost - b.cost || a.key.localeCompare(b.key));
+      .sort((a, b) => a.cost - b.cost || compareStrings(a.key, b.key));
     if (!states.length) {
       return { plan: null, failedPair: pairKey(fromDomainId, toDomainId) };
     }
@@ -449,7 +452,10 @@ function shortestDomainPathCandidates(
   const result = [];
 
   while (pending.length > 0) {
-    pending.sort((a, b) => domainPathKey(a.domains).localeCompare(domainPathKey(b.domains)));
+    pending.sort((a, b) => compareStrings(
+      domainPathKey(a.domains),
+      domainPathKey(b.domains)
+    ));
     const current = pending.shift();
     const pathKey = domainPathKey(current.domains);
     if (seenPaths.has(pathKey)) continue;
@@ -604,7 +610,7 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
 
       if (!bestGoal ||
           cost < bestGoal.cost ||
-          (cost === bestGoal.cost && key.localeCompare(bestGoal.key) < 0)) {
+          (cost === bestGoal.cost && compareStrings(key, bestGoal.key) < 0)) {
         bestGoal = {
           key,
           cost,
@@ -801,7 +807,8 @@ function planConcreteDetour(
             cost < bestGoal.cost ||
             (
               cost === bestGoal.cost &&
-              state.key.localeCompare(
+              compareStrings(
+                state.key,
                 bestGoal.key
               ) < 0
             )
@@ -950,7 +957,7 @@ export function planTravel(registry, a, b, c, d) {
     if (!bestShortest ||
         optimized.plan.cost < bestShortest.plan.cost ||
         (optimized.plan.cost === bestShortest.plan.cost &&
-         candidateKey.localeCompare(bestShortest.key) < 0)) {
+         compareStrings(candidateKey, bestShortest.key) < 0)) {
       bestShortest = {
         key: candidateKey,
         domains,

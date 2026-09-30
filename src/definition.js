@@ -10,6 +10,7 @@ import {
   assertStringId,
   canonicalStringify,
   cloneJson,
+  compareStrings,
   deepFreeze,
   normalizeBoolean,
   normalizeStringList,
@@ -595,7 +596,7 @@ export class CompiledPlaceDefinition {
 
       // The final entry wins. Reverse lexical order here so the smaller ID is
       // the deterministic winner when depth and priority are identical.
-      return b.id.localeCompare(a.id);
+      return compareStrings(b.id, a.id);
     });
   }
 

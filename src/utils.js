@@ -16,6 +16,10 @@ export function assertStringId(id, label = "id") {
   return id;
 }
 
+export function compareStrings(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 export function tupleKey(...parts) {
   let key = "";
   for (const part of parts) {

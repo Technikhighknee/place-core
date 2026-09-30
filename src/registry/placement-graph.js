@@ -1,5 +1,8 @@
 import { composeTransforms } from "../geometry.js";
-import { deepFreeze } from "../utils.js";
+import {
+  compareStrings,
+  deepFreeze
+} from "../utils.js";
 import { typedIdKey } from "./support.js";
 
 export class PlacementGraphIndex {
@@ -56,7 +59,7 @@ export class PlacementGraphIndex {
       if (children) {
         queue.push(
           ...[...children].sort((a, b) =>
-            typedIdKey(a).localeCompare(typedIdKey(b))
+            compareStrings(typedIdKey(a), typedIdKey(b))
           )
         );
       }

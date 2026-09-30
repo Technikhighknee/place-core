@@ -4,6 +4,7 @@ import {
   assertStringId,
   canonicalStringify,
   cloneJson,
+  compareStrings,
   normalizeBoolean,
   normalizeStringList,
   tupleKey
@@ -815,13 +816,13 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
     return [...parents.values()]
       .sort((a, b) =>
-        idKey(a).localeCompare(idKey(b))
+        compareStrings(idKey(a), idKey(b))
       );
   };
 
   const semanticRoots = [...snapshot.instances]
     .sort((a, b) =>
-      idKey(a.id).localeCompare(idKey(b.id))
+      compareStrings(idKey(a.id), idKey(b.id))
     );
 
   for (const item of semanticRoots) {

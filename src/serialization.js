@@ -3,6 +3,7 @@ import { compilePlace } from "./definition.js";
 import {
   canonicalStringify,
   cloneJson,
+  compareStrings,
   normalizeBoolean,
   sha256
 } from "./utils.js";
@@ -99,7 +100,7 @@ export function serializePlaceCore(registry) {
         contentHash: definition.contentHash,
         blueprint: canonicalClone(definition.getBlueprint())
       }))
-      .sort((a, b) => a.id.localeCompare(b.id)),
+      .sort((a, b) => compareStrings(a.id, b.id)),
     instances: [...registry.instances.values()]
       .map((instance) => ({
         id: instance.id,
@@ -108,9 +109,11 @@ export function serializePlaceCore(registry) {
         memberships: instance.getMemberships()
           .map(canonicalClone)
           .sort((a, b) =>
-            idKey(a.parentPlaceId)
-              .localeCompare(idKey(b.parentPlaceId)) ||
-            a.kind.localeCompare(b.kind)
+            compareStrings(
+              idKey(a.parentPlaceId),
+              idKey(b.parentPlaceId)
+            ) ||
+            compareStrings(a.kind, b.kind)
           ),
         layerDomains: mapToObject(instance.layerDomains),
         attachments: mapToObject(instance.attachments),
@@ -121,13 +124,13 @@ export function serializePlaceCore(registry) {
         spaceOverrides: mapToObject(instance.spaceOverrides),
         dynamicPortals: [...instance.dynamicPortals.values()]
           .map(canonicalClone)
-          .sort((a, b) => a.id.localeCompare(b.id))
+          .sort((a, b) => compareStrings(a.id, b.id))
       }))
-      .sort((a, b) => idKey(a.id).localeCompare(idKey(b.id))),
+      .sort((a, b) => compareStrings(idKey(a.id), idKey(b.id))),
     activeTravels: [...registry.activeTravels.values()]
       .filter((state) => state.status === "active")
       .map(serializeTravelState)
-      .sort((a, b) => idKey(a.entityId).localeCompare(idKey(b.entityId))),
+      .sort((a, b) => compareStrings(idKey(a.entityId), idKey(b.entityId))),
     pendingTravels: registry.pendingTravels.map(canonicalClone)
   };
 }
@@ -174,7 +177,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
 
   const orderedInstances = [...snapshot.instances]
     .sort((a, b) =>
-      idKey(a.id).localeCompare(idKey(b.id))
+      compareStrings(idKey(a.id), idKey(b.id))
     );
 
   // Restore graph-independent instance state first. Semantic containment,

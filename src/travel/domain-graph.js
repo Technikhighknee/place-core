@@ -1,6 +1,7 @@
 import { isPortalTraversable } from "../registry.js";
 import {
   assertStringId,
+  compareStrings,
   tupleKey
 } from "../utils.js";
 import { normalizeDomainPathOptions } from "./input.js";
@@ -48,7 +49,7 @@ export class MinHeap {
 
 function compareQueue(a, b) {
   if (a.cost !== b.cost) return a.cost - b.cost;
-  return a.key.localeCompare(b.key);
+  return compareStrings(a.key, b.key);
 }
 
 export function pairKey(a, b) {
@@ -92,7 +93,7 @@ export function transitionsFrom(registry, domainId, options = {}) {
     }
   }
 
-  edges.sort((a, b) => transitionKey(a).localeCompare(transitionKey(b)));
+  edges.sort((a, b) => compareStrings(transitionKey(a), transitionKey(b)));
   return edges;
 }
 
@@ -117,7 +118,7 @@ function transitionsInto(registry, domainId, options = {}) {
     }
   }
 
-  edges.sort((a, b) => transitionKey(a).localeCompare(transitionKey(b)));
+  edges.sort((a, b) => compareStrings(transitionKey(a), transitionKey(b)));
   return edges;
 }
 

@@ -2,6 +2,7 @@ import { isPortalTraversable } from "./registry.js";
 import {
   PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN
 } from "./registry/support.js";
+import { compareStrings } from "./utils.js";
 
 function sortedStrings(values) {
   if (values == null) return null;
@@ -317,8 +318,8 @@ export class WorldCoreBridge {
     }
 
     roadEffects.sort((a, b) =>
-      String(a.roadId).localeCompare(String(b.roadId)) ||
-      String(a.effectId).localeCompare(String(b.effectId))
+      compareStrings(String(a.roadId), String(b.roadId)) ||
+      compareStrings(String(a.effectId), String(b.effectId))
     );
 
     return {
