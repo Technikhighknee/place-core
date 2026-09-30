@@ -132,3 +132,63 @@ test("internal rollback still completes when bridge cleanup itself fails", () =>
   assert.deepEqual(places.drainEvents(), []);
   places.assertInternalConsistency();
 });
+
+
+test("derived exterior overflow cannot leave a partially created place", () => {
+  const places = new PlaceRegistry({
+    captureEvents: true
+  });
+  places.registerDefinition({
+    id: "overflow-footprint-place",
+    layers: [{
+      id: "inside"
+    }],
+    footprint: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 1e308,
+      maxY: 1
+    }
+  });
+
+  const stateRevision = places.stateRevision;
+  const travelRevision = places.travelRevision;
+
+  assert.throws(
+    () => places.createPlace({
+      id: "broken",
+      definitionId: "overflow-footprint-place",
+      placement: {
+        domainId: "street",
+        containment: "footprint",
+        transform: {
+          scale: 2
+        }
+      }
+    }),
+    /finite Vec2|finite.*transform|transform.*finite/i
+  );
+
+  assert.equal(places.getPlace("broken"), null);
+  assert.equal(
+    places.getDomainBinding("broken:inside"),
+    null
+  );
+  assert.deepEqual(
+    places.placesInBounds(
+      "street",
+      {
+        minX: -1,
+        minY: -1,
+        maxX: 1,
+        maxY: 1
+      }
+    ),
+    []
+  );
+  assert.equal(places.stateRevision, stateRevision);
+  assert.equal(places.travelRevision, travelRevision);
+  assert.deepEqual(places.drainEvents(), []);
+  places.assertInternalConsistency();
+});
