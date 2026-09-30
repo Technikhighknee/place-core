@@ -121,13 +121,17 @@ export class WorldCoreBridge {
   }
 
   dispose() {
-    if (
-      this.#registry?.bridge === this &&
-      (this.#registry.instances?.size ?? 0) > 0
-    ) {
-      throw new Error(
-        "cannot dispose WorldCoreBridge while its PlaceRegistry has materialized places"
-      );
+    if (this.#registry?.bridge === this) {
+      if ((this.#registry.instances?.size ?? 0) > 0) {
+        throw new Error(
+          "cannot dispose WorldCoreBridge while its PlaceRegistry has materialized places"
+        );
+      }
+      if ((this.#registry.activeTravels?.size ?? 0) > 0) {
+        throw new Error(
+          "cannot dispose WorldCoreBridge while its PlaceRegistry has active travel"
+        );
+      }
     }
 
     let removed = false;
