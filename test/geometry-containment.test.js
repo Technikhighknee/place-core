@@ -270,3 +270,30 @@ test("point-to-segment distance survives finite coordinate subtraction overflow"
   );
   assert.equal(squared, 1);
 });
+
+
+test("polygon containment survives finite cross-product overflow", () => {
+  const triangle = {
+    type: "polygon",
+    points: [
+      { x: -1e308, y: -1e308 },
+      { x: 1e308, y: 1e308 },
+      { x: 1e308, y: -1e308 }
+    ]
+  };
+
+  assert.equal(
+    pointInGeometry(
+      { x: 0, y: 1e307 },
+      triangle
+    ),
+    false
+  );
+  assert.equal(
+    pointInGeometry(
+      { x: 0, y: -1e307 },
+      triangle
+    ),
+    true
+  );
+});
