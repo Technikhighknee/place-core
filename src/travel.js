@@ -27,6 +27,9 @@ export {
 };
 
 import {
+  PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN
+} from "./registry/support.js";
+import {
   MinHeap,
   domainPairKey,
   findDomainPortalPath,
@@ -1056,18 +1059,30 @@ function resolveStartCall(registry, a, b, c, d) {
   return { bridge: options.bridge ?? registry.bridge, entityId: a, target: b, options };
 }
 
+function publicTravelState(state) {
+  return state == null
+    ? null
+    : deepFreeze(cloneJson(state));
+}
+
 function fail(registry, bridge, state, reason) {
   bridge.stopLocalJourney(state.entityId);
   state.status = "failed";
   state.failureReason = reason;
-  registry.activeTravels.delete(state.entityId);
+  registry._deleteActiveTravel(
+    PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+    state.entityId
+  );
   registry.emit("travel-failed", { entityId: state.entityId, reason, target: state.target });
   return state;
 }
 
 function complete(registry, state) {
   state.status = "complete";
-  registry.activeTravels.delete(state.entityId);
+  registry._deleteActiveTravel(
+    PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+    state.entityId
+  );
   registry.emit("travel-complete", {
     entityId: state.entityId,
     target: state.target,
@@ -1327,7 +1342,10 @@ export function startTravel(registry, a, b, c, d) {
   );
   if (!plan) return null;
 
-  if (registry.activeTravels.has(entityId)) {
+  if (registry._hasActiveTravel(
+    PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+    entityId
+  )) {
     stopTravel(
       registry,
       bridge,
@@ -1351,13 +1369,24 @@ export function startTravel(registry, a, b, c, d) {
     failureReason: null,
     replans: 0
   };
-  registry.activeTravels.set(entityId, state);
+  registry._setActiveTravel(
+    PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+    entityId,
+    state
+  );
   registry.emit("travel-start", {
     entityId,
     target: state.target,
     estimatedSeconds: plan.estimatedSeconds
   });
-  return advance(registry, bridge, state, capturedOptions);
+  return publicTravelState(
+    advance(
+      registry,
+      bridge,
+      state,
+      capturedOptions
+    )
+  );
 }
 
 function resolveStepCall(registry, a, b, c) {
@@ -1378,7 +1407,10 @@ export function stepTravel(registry, a, b, c) {
     throw new Error("stepTravel requires a WorldCoreBridge");
   }
 
-  const state = registry.activeTravels.get(entityId);
+  const state = registry._getActiveTravel(
+    PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+    entityId
+  );
   if (!state) return null;
 
   const effectiveOptions = normalizeEffectiveStepOptions(
@@ -1389,27 +1421,49 @@ export function stepTravel(registry, a, b, c) {
   if (worldChangePolicy === "eager" &&
       state.travelRevision !== registry.travelRevision) {
     const next = replan(registry, bridge, state, effectiveOptions);
-    if (next.status !== "active") return next;
+    if (next.status !== "active") {
+      return publicTravelState(next);
+    }
   }
 
   const step = state.plan.steps[state.stepIndex];
   if (step?.type === "local-journey" && state.localStarted) {
     const entity = bridge.getEntity(entityId);
-    if (!entity) return fail(registry, bridge, state, "entity-missing");
+    if (!entity) {
+      return publicTravelState(
+        fail(
+          registry,
+          bridge,
+          state,
+          "entity-missing"
+        )
+      );
+    }
 
     registry.updateEntityOccupancy(entity);
-    if (entity.journey != null) return state;
+    if (entity.journey != null) {
+      return publicTravelState(state);
+    }
 
     if (entity.lastJourneyFailure?.destinationNodeId === step.destinationNodeId) {
       const next = replan(registry, bridge, state, effectiveOptions);
-      if (next.status !== "active") return next;
+      if (next.status !== "active") {
+        return publicTravelState(next);
+      }
     } else {
       state.stepIndex += 1;
       state.localStarted = false;
     }
   }
 
-  return advance(registry, bridge, state, effectiveOptions);
+  return publicTravelState(
+    advance(
+      registry,
+      bridge,
+      state,
+      effectiveOptions
+    )
+  );
 }
 
 export function stepPlaceSimulation(
@@ -1443,7 +1497,9 @@ export function stepPlaceSimulation(
     );
   }
 
-  const ids = [...registry.activeTravels.keys()];
+  const ids = registry._activeTravelIds(
+    PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN
+  );
   for (const entityId of ids) {
     stepTravel(
       registry,
@@ -1452,7 +1508,9 @@ export function stepPlaceSimulation(
       options
     );
   }
-  return registry.activeTravels.size;
+  return registry._activeTravelCount(
+    PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN
+  );
 }
 
 export function stopTravel(registry, a, b, c = {}) {
@@ -1472,11 +1530,17 @@ export function stopTravel(registry, a, b, c = {}) {
     bridge = options.bridge ?? registry.bridge;
   }
 
-  const state = registry.activeTravels.get(entityId);
+  const state = registry._getActiveTravel(
+    PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+    entityId
+  );
   if (!state) return false;
 
   bridge?.stopLocalJourney?.(entityId);
-  registry.activeTravels.delete(entityId);
+  registry._deleteActiveTravel(
+    PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+    entityId
+  );
   state.status = "cancelled";
   registry.emit("travel-cancelled", {
     entityId,

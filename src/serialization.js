@@ -1,4 +1,7 @@
 import { PlaceRegistry } from "./place-registry.js";
+import {
+  PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN
+} from "./registry/support.js";
 import { compilePlace } from "./definition.js";
 import {
   canonicalStringify,
@@ -307,7 +310,10 @@ export function deserializePlaceCore(snapshot, options = {}) {
             : String(restartError)
       };
     }
-    registry.pendingTravels.push(pending);
+    registry._pushPendingTravel(
+      PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+      pending
+    );
   };
 
   if (bridge && resumeWorldCoreState) {
@@ -331,7 +337,11 @@ export function deserializePlaceCore(snapshot, options = {}) {
         deepFreeze(state.plan);
       }
       state.travelRevision = registry.travelRevision;
-      registry.activeTravels.set(state.entityId, state);
+      registry._setActiveTravel(
+        PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+        state.entityId,
+        state
+      );
     }
   } else if (bridge && restartTravels) {
     for (const saved of active) {
@@ -364,7 +374,10 @@ export function deserializePlaceCore(snapshot, options = {}) {
         }
       } catch (error) {
         let cleanupError = null;
-        if (registry.activeTravels.has(saved.entityId)) {
+        if (registry._hasActiveTravel(
+          PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+          saved.entityId
+        )) {
           try {
             stopTravel(
               registry,
@@ -374,7 +387,8 @@ export function deserializePlaceCore(snapshot, options = {}) {
             );
           } catch (failure) {
             cleanupError = failure;
-            registry.activeTravels.delete(
+            registry._deleteActiveTravel(
+              PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
               saved.entityId
             );
           }
@@ -396,7 +410,10 @@ export function deserializePlaceCore(snapshot, options = {}) {
   }
 
   for (const pending of snapshot.pendingTravels ?? []) {
-    registry.pendingTravels.push(cloneJson(pending));
+    registry._pushPendingTravel(
+      PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+      pending
+    );
   }
 
   registry.drainEvents();

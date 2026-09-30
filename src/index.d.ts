@@ -398,8 +398,13 @@ export class PlaceRegistry {
       layerId: string;
     }>
   >;
-  readonly activeTravels: Map<EntityId, TravelState>;
-  readonly pendingTravels: Array<Record<string, unknown>>;
+  readonly activeTravels: ReadonlyMap<
+    EntityId,
+    Readonly<TravelState>
+  >;
+  readonly pendingTravels: readonly Readonly<
+    Record<string, unknown>
+  >[];
   readonly stateRevision: number;
   readonly travelRevision: number;
   readonly bridge: WorldCoreBridge | null;
@@ -712,19 +717,19 @@ export interface RetainedTravelOptions {
 }
 
 export interface TravelState {
-  entityId: EntityId;
-  target: TravelTarget;
-  plan: TravelPlan;
-  options: Readonly<RetainedTravelOptions>;
-  stepIndex: number;
-  localStarted: boolean;
-  portalEntered: boolean;
-  portalTransitionRemaining: number;
-  travelRevision: number;
-  worldChangePolicy: "encounter" | "eager";
-  status: "active" | "complete" | "failed" | "cancelled";
-  failureReason: string | null;
-  replans: number;
+  readonly entityId: EntityId;
+  readonly target: TravelTarget;
+  readonly plan: TravelPlan;
+  readonly options: Readonly<RetainedTravelOptions>;
+  readonly stepIndex: number;
+  readonly localStarted: boolean;
+  readonly portalEntered: boolean;
+  readonly portalTransitionRemaining: number;
+  readonly travelRevision: number;
+  readonly worldChangePolicy: "encounter" | "eager";
+  readonly status: "active" | "complete" | "failed" | "cancelled";
+  readonly failureReason: string | null;
+  readonly replans: number;
 }
 
 export interface DomainPathOptions {

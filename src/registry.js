@@ -29,6 +29,7 @@ import {
   PORTAL_STATE_KEYS,
   PLACE_INSTANCE_MUTATION_TOKEN,
   PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN,
+  PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
   ReadonlyMapView,
   assertPlainObject,
   assertPatchKeys,
@@ -71,6 +72,7 @@ export class PlaceRegistry {
   #instancePortalKeys = new Map();
   #occupancyIndex;
   #activeTravels = new Map();
+  #activeTravelsView;
   #pendingTravels = [];
   #events;
   #captureEvents;
@@ -101,6 +103,12 @@ export class PlaceRegistry {
       new ReadonlyMapView(this.#instances);
     this.#domainBindingsView =
       new ReadonlyMapView(this.#domainBindings);
+    this.#activeTravelsView =
+      new ReadonlyMapView(
+        this.#activeTravels,
+        (state) =>
+          deepFreeze(cloneJson(state))
+      );
 
     this.#captureEvents = normalizeBoolean(
       options.captureEvents,
@@ -123,11 +131,62 @@ export class PlaceRegistry {
   get instances() { return this.#instancesView; }
   get domainBindings() { return this.#domainBindingsView; }
   get activeTravels() {
-    return this.#activeTravels;
+    return this.#activeTravelsView;
   }
 
   get pendingTravels() {
-    return this.#pendingTravels;
+    return Object.freeze(
+      this.#pendingTravels.map((pending) =>
+        deepFreeze(cloneJson(pending))
+      )
+    );
+  }
+
+  #assertTravelMutationToken(token) {
+    if (token !== PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN) {
+      throw new Error(
+        "travel state mutation is internal to place-core"
+      );
+    }
+  }
+
+  _getActiveTravel(token, entityId) {
+    this.#assertTravelMutationToken(token);
+    return this.#activeTravels.get(entityId) ?? null;
+  }
+
+  _hasActiveTravel(token, entityId) {
+    this.#assertTravelMutationToken(token);
+    return this.#activeTravels.has(entityId);
+  }
+
+  _setActiveTravel(token, entityId, state) {
+    this.#assertTravelMutationToken(token);
+    this.#activeTravels.set(entityId, state);
+    return state;
+  }
+
+  _deleteActiveTravel(token, entityId) {
+    this.#assertTravelMutationToken(token);
+    return this.#activeTravels.delete(entityId);
+  }
+
+  _activeTravelIds(token) {
+    this.#assertTravelMutationToken(token);
+    return [...this.#activeTravels.keys()];
+  }
+
+  _activeTravelCount(token) {
+    this.#assertTravelMutationToken(token);
+    return this.#activeTravels.size;
+  }
+
+  _pushPendingTravel(token, pending) {
+    this.#assertTravelMutationToken(token);
+    const stored =
+      deepFreeze(cloneJson(pending));
+    this.#pendingTravels.push(stored);
+    return stored;
   }
   get stateRevision() { return this.#stateRevision; }
   get travelRevision() { return this.#travelRevision; }

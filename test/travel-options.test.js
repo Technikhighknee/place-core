@@ -747,7 +747,7 @@ test("failed replacement travel leaves the existing travel untouched", () => {
   );
 
   assert.equal(replacement, null);
-  assert.equal(
+  assert.deepEqual(
     places.activeTravels.get("hans"),
     existing
   );
@@ -767,7 +767,7 @@ test("failed replacement travel leaves the existing travel untouched", () => {
     ),
     /unknown target place/
   );
-  assert.equal(
+  assert.deepEqual(
     places.activeTravels.get("hans"),
     existing
   );

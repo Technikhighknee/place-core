@@ -13,26 +13,53 @@ export const PLACE_INSTANCE_MUTATION_TOKEN =
   Symbol("place-core-instance-mutation");
 export const PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN =
   Symbol("place-core-bridge-attach");
+export const PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN =
+  Symbol("place-core-travel-mutation");
 
 export class ReadonlyMapView {
   #map;
+  #project;
 
-  constructor(map) {
+  constructor(map, project = (value) => value) {
     this.#map = map;
+    this.#project = project;
     Object.freeze(this);
   }
 
   get size() { return this.#map.size; }
-  get(key) { return this.#map.get(key); }
+  get(key) {
+    const value = this.#map.get(key);
+    return value === undefined
+      ? undefined
+      : this.#project(value);
+  }
   has(key) { return this.#map.has(key); }
   keys() { return this.#map.keys(); }
-  values() { return this.#map.values(); }
-  entries() { return this.#map.entries(); }
-  [Symbol.iterator]() { return this.#map[Symbol.iterator](); }
+
+  *values() {
+    for (const value of this.#map.values()) {
+      yield this.#project(value);
+    }
+  }
+
+  *entries() {
+    for (const [key, value] of this.#map) {
+      yield [key, this.#project(value)];
+    }
+  }
+
+  [Symbol.iterator]() {
+    return this.entries();
+  }
 
   forEach(callback, thisArg = undefined) {
     for (const [key, value] of this.#map) {
-      callback.call(thisArg, value, key, this);
+      callback.call(
+        thisArg,
+        this.#project(value),
+        key,
+        this
+      );
     }
   }
 }
