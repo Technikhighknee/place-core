@@ -390,3 +390,84 @@ test("failed dynamic portal removal restores its world-core delay and registry r
   assert.deepEqual(places.drainEvents(), []);
   places.assertInternalConsistency();
 });
+
+
+test("failed placement reindex rolls back placement and exterior indexes", () => {
+  const places = new PlaceRegistry({
+    captureEvents: true
+  });
+  places.registerDefinition({
+    id: "placed-footprint",
+    footprint: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 10,
+      maxY: 10
+    },
+    layers: [{ id: "inside" }]
+  });
+  places.createPlace({
+    id: "place",
+    definitionId: "placed-footprint",
+    placement: {
+      domainId: "street-a",
+      transform: {
+        x: 0,
+        y: 0,
+        scale: 1
+      },
+      containment: "footprint"
+    }
+  });
+  places.drainEvents();
+
+  const beforePlacement =
+    structuredClone(
+      places.getPlace("place").placement
+    );
+  const before = revisions(places);
+
+  assert.equal(
+    places
+      .placesAt(
+        "street-a",
+        { x: 5, y: 5 }
+      )
+      .some((place) => place.id === "place"),
+    true
+  );
+
+  assert.throws(
+    () => places.setPlacement(
+      "place",
+      {
+        domainId: "street-a",
+        transform: {
+          x: Number.MAX_VALUE,
+          y: 0,
+          scale: Number.MAX_VALUE
+        },
+        containment: "footprint"
+      }
+    ),
+    /finite bounds/
+  );
+
+  assert.deepEqual(
+    places.getPlace("place").placement,
+    beforePlacement
+  );
+  assert.equal(
+    places
+      .placesAt(
+        "street-a",
+        { x: 5, y: 5 }
+      )
+      .some((place) => place.id === "place"),
+    true
+  );
+  assertRevisions(places, before);
+  assert.deepEqual(places.drainEvents(), []);
+  places.assertInternalConsistency();
+});
