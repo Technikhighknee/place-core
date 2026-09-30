@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   compilePlace,
+  composeTransforms,
   geometryBounds,
   geometryContainsGeometry,
   inverseTransformPoint,
@@ -325,5 +326,46 @@ test("transform helpers survive finite intermediate overflow when the result is 
       transform
     ),
     { x: 2, y: 0 }
+  );
+});
+
+
+test("composeTransforms survives finite rotation-sum overflow", () => {
+  const parent = {
+    x: 0,
+    y: 0,
+    rotation: 1e308,
+    scale: 1
+  };
+  const child = {
+    x: 0,
+    y: 0,
+    rotation: 1e308,
+    scale: 1
+  };
+
+  const composed =
+    composeTransforms(parent, child);
+
+  assert.equal(
+    Number.isFinite(composed.rotation),
+    true
+  );
+
+  const point = { x: 1, y: 0 };
+  const sequential = transformPoint(
+    transformPoint(point, child),
+    parent
+  );
+  const direct = transformPoint(
+    point,
+    composed
+  );
+
+  assert.ok(
+    Math.abs(direct.x - sequential.x) <= 1e-12
+  );
+  assert.ok(
+    Math.abs(direct.y - sequential.y) <= 1e-12
   );
 });
