@@ -91,12 +91,43 @@ function assertTravelOptions(options, label) {
 }
 
 function assertTravelPlan(plan, entityId) {
-  assertObject(plan, "active travel plan");
+  assertOnlyKeys(
+    plan,
+    [
+      "entityId",
+      "target",
+      "resolvedTarget",
+      "startDomainId",
+      "domainPath",
+      "steps",
+      "legs",
+      "estimatedSeconds",
+      "rejectedDomainPairs"
+    ],
+    "active travel plan"
+  );
   if (plan.entityId !== entityId) {
     throw new Error("active travel plan entityId mismatch");
   }
   assertTravelTarget(plan.target, "active travel plan.target");
-  assertObject(plan.resolvedTarget, "active travel plan.resolvedTarget");
+  assertOnlyKeys(
+    plan.resolvedTarget,
+    [
+      "placeId",
+      "anchorId",
+      "spaceId",
+      "layerId",
+      "domainId",
+      "position",
+      "nodeId"
+    ],
+    "active travel plan.resolvedTarget"
+  );
+  assertOnlyKeys(
+    plan.resolvedTarget.position,
+    ["x", "y"],
+    "active travel plan.resolvedTarget.position"
+  );
   assertStringId(
     plan.resolvedTarget.domainId,
     "active travel plan.resolvedTarget.domainId"
@@ -141,6 +172,22 @@ function assertTravelPlan(plan, entityId) {
     assertObject(step, `active travel plan.steps[${i}]`);
 
     if (step.type === "local-journey") {
+      assertOnlyKeys(
+        step,
+        [
+          "type",
+          "domainId",
+          "destinationNodeId",
+          "destinationPosition",
+          "estimatedSeconds"
+        ],
+        `active travel plan.steps[${i}]`
+      );
+      assertOnlyKeys(
+        step.destinationPosition,
+        ["x", "y"],
+        `active travel plan.steps[${i}].destinationPosition`
+      );
       assertStringId(
         step.domainId,
         `active travel plan.steps[${i}].domainId`
@@ -162,6 +209,25 @@ function assertTravelPlan(plan, entityId) {
     }
 
     if (step.type === "traverse-portal") {
+      assertOnlyKeys(
+        step,
+        [
+          "type",
+          "portalKey",
+          "placeId",
+          "portalId",
+          "fromDomainId",
+          "toDomainId",
+          "destinationPosition",
+          "transitionCost"
+        ],
+        `active travel plan.steps[${i}]`
+      );
+      assertOnlyKeys(
+        step.destinationPosition,
+        ["x", "y"],
+        `active travel plan.steps[${i}].destinationPosition`
+      );
       assertStringId(
         step.portalKey,
         `active travel plan.steps[${i}].portalKey`
@@ -196,6 +262,17 @@ function assertTravelPlan(plan, entityId) {
 
     throw new Error(
       `unknown active travel plan step type: ${String(step.type)}`
+    );
+  }
+
+  assertArray(
+    plan.legs,
+    "active travel plan.legs"
+  );
+  if (canonicalStringify(plan.legs) !==
+      canonicalStringify(plan.steps)) {
+    throw new Error(
+      "active travel plan legs/steps mismatch"
     );
   }
 
@@ -539,7 +616,23 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
 }
 
 export function validatePlaceCoreSnapshot(snapshot, options = {}) {
-  assertObject(snapshot, "place-core snapshot");
+  assertOnlyKeys(
+    options,
+    ["expectedVersion"],
+    "snapshot validation options"
+  );
+  assertOnlyKeys(
+    snapshot,
+    [
+      "format",
+      "version",
+      "definitions",
+      "instances",
+      "activeTravels",
+      "pendingTravels"
+    ],
+    "place-core snapshot"
+  );
   if (snapshot.format !== "place-core") {
     throw new Error(
       `invalid place-core snapshot format: ${snapshot.format}`
@@ -557,7 +650,11 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   const definitions = new Map();
   for (let i = 0; i < snapshot.definitions.length; i += 1) {
     const ref = snapshot.definitions[i];
-    assertObject(ref, `snapshot.definitions[${i}]`);
+    assertOnlyKeys(
+      ref,
+      ["id", "revision", "contentHash", "blueprint"],
+      `snapshot.definitions[${i}]`
+    );
     if (typeof ref.id !== "string" || !ref.id) {
       throw new TypeError(
         "definition id must be a non-empty string"
@@ -593,8 +690,26 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   const domains = new Set();
   for (let i = 0; i < snapshot.instances.length; i += 1) {
     const item = snapshot.instances[i];
-    assertObject(item, `snapshot.instances[${i}]`);
-    assertId(item.id, `snapshot.instances[${i}].id`);
+    const itemLabel = `snapshot.instances[${i}]`;
+    assertOnlyKeys(
+      item,
+      [
+        "id",
+        "definitionId",
+        "parentId",
+        "memberships",
+        "layerDomains",
+        "attachments",
+        "placement",
+        "metadata",
+        "portalOverrides",
+        "boundaryOverrides",
+        "spaceOverrides",
+        "dynamicPortals"
+      ],
+      itemLabel
+    );
+    assertId(item.id, `${itemLabel}.id`);
     assertStringId(
       item.definitionId,
       `snapshot.instances[${i}].definitionId`
@@ -992,7 +1107,24 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
   const travelEntities = new Set();
   for (const travel of snapshot.activeTravels ?? []) {
-    assertObject(travel, "active travel");
+    assertOnlyKeys(
+      travel,
+      [
+        "entityId",
+        "target",
+        "plan",
+        "options",
+        "stepIndex",
+        "localStarted",
+        "portalEntered",
+        "portalTransitionRemaining",
+        "worldChangePolicy",
+        "status",
+        "failureReason",
+        "replans"
+      ],
+      "active travel"
+    );
     assertId(travel.entityId, "active travel.entityId");
 
     const key = idKey(travel.entityId);
@@ -1023,9 +1155,10 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     if (!Number.isInteger(travel.replans) || travel.replans < 0) {
       throw new Error("invalid active travel replans");
     }
-    if (travel.failureReason != null &&
-        typeof travel.failureReason !== "string") {
-      throw new Error("invalid active travel failureReason");
+    if (travel.failureReason !== null) {
+      throw new Error(
+        "active travel failureReason must be null"
+      );
     }
 
     if (travel.worldChangePolicy !== "encounter" &&
@@ -1048,15 +1181,66 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         canonicalStringify(travel.target)) {
       throw new Error("active travel plan target mismatch");
     }
-    if (travel.stepIndex > travel.plan.steps.length) {
-      throw new Error("active travel stepIndex exceeds plan");
+    if (travel.stepIndex >= travel.plan.steps.length) {
+      throw new Error(
+        "active travel stepIndex must reference an executable plan step"
+      );
+    }
+
+    const currentStep =
+      travel.plan.steps[travel.stepIndex];
+    if (travel.localStarted &&
+        currentStep.type !== "local-journey") {
+      throw new Error(
+        "active travel localStarted requires a local-journey step"
+      );
+    }
+    if (travel.portalEntered &&
+        currentStep.type !== "traverse-portal") {
+      throw new Error(
+        "active travel portalEntered requires a traverse-portal step"
+      );
+    }
+    if (travel.portalTransitionRemaining > 0 &&
+        (!travel.portalEntered ||
+         currentStep.type !== "traverse-portal")) {
+      throw new Error(
+        "active travel portalTransitionRemaining requires an entered portal step"
+      );
     }
   }
 
   for (let i = 0; i < (snapshot.pendingTravels ?? []).length; i += 1) {
     const pending = snapshot.pendingTravels[i];
-    assertObject(pending, `snapshot.pendingTravels[${i}]`);
-    assertJsonSafe(pending, `snapshot.pendingTravels[${i}]`);
+    const pendingLabel =
+      `snapshot.pendingTravels[${i}]`;
+    assertOnlyKeys(
+      pending,
+      [
+        "entityId",
+        "target",
+        "savedState",
+        "restartError"
+      ],
+      pendingLabel
+    );
+    assertJsonSafe(pending, pendingLabel);
+    if (pending.restartError != null) {
+      assertOnlyKeys(
+        pending.restartError,
+        ["name", "message"],
+        `${pendingLabel}.restartError`
+      );
+      assertStringId(
+        pending.restartError.name,
+        `${pendingLabel}.restartError.name`
+      );
+      if (typeof pending.restartError.message !== "string") {
+        throw new TypeError(
+          `${pendingLabel}.restartError.message must be a string`
+        );
+      }
+    }
     if (pending.entityId != null) {
       assertId(
         pending.entityId,

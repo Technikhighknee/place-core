@@ -26,6 +26,38 @@ export {
   validatePlaceCoreSnapshot
 };
 
+function assertDeserializeOptions(options) {
+  if (!options ||
+      typeof options !== "object" ||
+      Array.isArray(options)) {
+    throw new TypeError(
+      "deserialize options must be a plain object"
+    );
+  }
+  const prototype = Object.getPrototypeOf(options);
+  if (prototype !== Object.prototype &&
+      prototype !== null) {
+    throw new TypeError(
+      "deserialize options must be a plain object"
+    );
+  }
+  const allowed = new Set([
+    "bridge",
+    "captureEvents",
+    "eventQueueLimit",
+    "eventOverflowPolicy",
+    "resumeWorldCoreState",
+    "restartTravels"
+  ]);
+  for (const key of Object.keys(options)) {
+    if (!allowed.has(key)) {
+      throw new Error(
+        `deserialize options contains unknown field ${key}`
+      );
+    }
+  }
+}
+
 function canonicalClone(value) {
   if (value === undefined) return undefined;
   return JSON.parse(canonicalStringify(value));
@@ -141,6 +173,7 @@ export function serializePlaceCore(registry) {
 
 
 export function deserializePlaceCore(snapshot, options = {}) {
+  assertDeserializeOptions(options);
   validatePlaceCoreSnapshot(snapshot);
 
   const bridge = options.bridge ?? null;

@@ -646,3 +646,120 @@ test("snapshot validation rejects unknown nested runtime fields before restore",
     /dynamic portal contains unknown field bidirectionl/
   );
 });
+
+
+test("versioned snapshots reject unknown envelope fields instead of dropping them", () => {
+  const top = snapshotFixture();
+  top.formatt = "place-core";
+  assert.throws(
+    () => validatePlaceCoreSnapshot(top),
+    /place-core snapshot contains unknown field formatt/
+  );
+
+  const definition = snapshotFixture();
+  definition.definitions[0].contnetHash =
+    definition.definitions[0].contentHash;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(definition),
+    /snapshot\.definitions\[0\] contains unknown field contnetHash/
+  );
+
+  const instance = snapshotFixture();
+  instance.instances[0].attachements = {};
+  assert.throws(
+    () => validatePlaceCoreSnapshot(instance),
+    /snapshot\.instances\[0\] contains unknown field attachements/
+  );
+});
+
+test("active travel snapshots reject ignored or contradictory plan state", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "strict-travel-snapshot",
+    layers: [{ id: "inside" }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      position: { x: 5, y: 0 },
+      nodeId: "target"
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "strict-travel-snapshot"
+  });
+  const entity = {
+    id: "hans",
+    domainId: place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() { return entity; },
+    planLocalRoute() {
+      return { estimatedSeconds: 5 };
+    },
+    startLocalJourney() {
+      entity.journey = { active: true };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+  assert.ok(startTravel(
+    places,
+    bridge,
+    "hans",
+    { placeId: "house", anchorId: "target" }
+  ));
+
+  const extra = serializePlaceCore(places);
+  extra.activeTravels[0].mystery = true;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(extra),
+    /active travel contains unknown field mystery/
+  );
+
+  const planExtra = serializePlaceCore(places);
+  planExtra.activeTravels[0].plan.debug = true;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(planExtra),
+    /active travel plan contains unknown field debug/
+  );
+
+  const conflictingAlias = serializePlaceCore(places);
+  conflictingAlias.activeTravels[0].plan.legs = [];
+  assert.throws(
+    () => validatePlaceCoreSnapshot(conflictingAlias),
+    /legs\/steps mismatch/
+  );
+
+  const exhausted = serializePlaceCore(places);
+  exhausted.activeTravels[0].stepIndex =
+    exhausted.activeTravels[0].plan.steps.length;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(exhausted),
+    /stepIndex must reference an executable plan step/
+  );
+
+  const failedButActive = serializePlaceCore(places);
+  failedButActive.activeTravels[0].failureReason =
+    "should-not-exist";
+  assert.throws(
+    () => validatePlaceCoreSnapshot(failedButActive),
+    /failureReason must be null/
+  );
+});
+
+test("deserialize options reject unknown fields", () => {
+  assert.throws(
+    () => deserializePlaceCore(
+      snapshotFixture(),
+      { restartTrvels: false }
+    ),
+    /deserialize options contains unknown field restartTrvels/
+  );
+});

@@ -681,8 +681,7 @@ function planNearestTaggedAnchor(registry, bridge, entity, target, options = {})
     steps,
     legs: steps,
     estimatedSeconds: bestGoal.cost,
-    rejectedDomainPairs: Object.freeze([]),
-    searchExpansions: expansions
+    rejectedDomainPairs: Object.freeze([])
   });
 }
 
@@ -906,8 +905,7 @@ function planConcreteDetour(
     rejectedDomainPairs:
       Object.freeze([
         ...excludedPairs
-      ]),
-    searchExpansions: expansions
+      ])
   });
 }
 
