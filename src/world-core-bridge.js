@@ -378,12 +378,36 @@ export class WorldCoreBridge {
   }
 
   materializePlace(instance, definition) {
+    const newTopologyIds = [
+      ...new Set(
+        definition.layers
+          .map((layer) => layer.topologyId)
+          .filter((topologyId) =>
+            topologyId != null &&
+            !this.navigation.topologies?.has?.(
+              topologyId
+            )
+          )
+      )
+    ];
+
+    if (
+      newTopologyIds.length > 0 &&
+      typeof this.navigation.removeTopology !==
+        "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.removeTopology is required for transactional topology materialization"
+      );
+    }
+
     const receipt = {
       domains: definition.layers.map((layer) =>
         this.#captureDomainMaterializationState(
           instance.layerDomains.get(layer.id)
         )
-      )
+      ),
+      newTopologyIds
     };
 
     // Preflight ownership and existing bindings before mutating either core.
@@ -502,6 +526,25 @@ export class WorldCoreBridge {
 
         if (!state.existed && this.world.getDomain?.(state.domainId)) {
           this.world.removeDomain?.(state.domainId);
+        }
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+
+    for (
+      const topologyId of
+      [...(receipt.newTopologyIds ?? [])].reverse()
+    ) {
+      try {
+        if (
+          this.navigation.topologies?.has?.(
+            topologyId
+          )
+        ) {
+          this.navigation.removeTopology(
+            topologyId
+          );
         }
       } catch (error) {
         errors.push(error);
