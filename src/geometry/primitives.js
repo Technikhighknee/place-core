@@ -370,13 +370,14 @@ export function pointOnSegment(point, a, b) {
 
 function validateSimplePolygon(points) {
   const count = points.length;
-  const scale = Math.max(
-    1,
-    ...points.flatMap((point) => [
+  let scale = 1;
+  for (const point of points) {
+    scale = Math.max(
+      scale,
       Math.abs(point.x),
       Math.abs(point.y)
-    ])
-  );
+    );
+  }
 
   let signedArea2 = 0;
   for (let i = 0; i < count; i += 1) {
