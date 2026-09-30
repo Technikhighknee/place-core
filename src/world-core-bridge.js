@@ -418,6 +418,15 @@ export class WorldCoreBridge {
 
     for (const state of [...receipt.domains].reverse()) {
       try {
+        if (
+          state.existed &&
+          !this.world.getDomain?.(state.domainId)
+        ) {
+          this.world.addDomain?.({
+            id: state.domainId
+          });
+        }
+
         this.navigation.clearDomainOverrides?.(state.domainId);
 
         const currentBinding =
@@ -598,34 +607,72 @@ export class WorldCoreBridge {
   }
 
   unmaterializePlace(instance, definition) {
-    const domains = [...instance.layerDomains.values()];
+    const domains =
+      [...instance.layerDomains.values()];
     for (const domainId of domains) {
-      const domain = this.world.getDomain?.(domainId);
+      const domain =
+        this.world.getDomain?.(domainId);
       if (domain?.entityCount > 0) {
-        throw new Error(`cannot remove occupied world-core domain ${domainId}`);
+        throw new Error(
+          `cannot remove occupied world-core domain ${domainId}`
+        );
       }
     }
 
+    const receipt = {
+      domains: domains.map((domainId) =>
+        this.#captureDomainMaterializationState(
+          domainId
+        )
+      )
+    };
+
     try {
       for (const portal of definition.portals) {
-        this.clearPortalEffects(instance, portal);
+        this.clearPortalEffects(
+          instance,
+          portal
+        );
       }
-      for (const dynamicPortal of instance.dynamicPortals?.values?.() ?? []) {
-        this.clearPortalEffects(instance, dynamicPortal);
+      for (
+        const dynamicPortal of
+        instance.dynamicPortals?.values?.() ??
+        []
+      ) {
+        this.clearPortalEffects(
+          instance,
+          dynamicPortal
+        );
       }
-      for (const boundary of definition.boundaries) {
-        this.clearBoundaryEffects(instance, boundary);
+      for (
+        const boundary of
+        definition.boundaries
+      ) {
+        this.clearBoundaryEffects(
+          instance,
+          boundary
+        );
       }
 
-      for (const domainId of [...domains].reverse()) {
-        this.navigation.clearDomainOverrides?.(domainId);
-        this.navigation.unbindDomain?.(domainId);
-        this.world.removeDomain?.(domainId);
+      for (
+        const domainId of
+        [...domains].reverse()
+      ) {
+        this.navigation
+          .clearDomainOverrides?.(domainId);
+        this.navigation
+          .unbindDomain?.(domainId);
+        this.world
+          .removeDomain?.(domainId);
       }
     } catch (error) {
       let rollbackError = null;
       try {
-        this.#restorePlaceMaterialization(instance, definition);
+        this.rollbackMaterializePlace(
+          instance,
+          definition,
+          receipt
+        );
       } catch (restoreError) {
         rollbackError = restoreError;
       }
@@ -637,40 +684,6 @@ export class WorldCoreBridge {
         );
       }
       throw error;
-    }
-  }
-
-  #restorePlaceMaterialization(instance, definition) {
-    for (const layer of definition.layers) {
-      this.ensureLayerTopology(definition, layer);
-      const domainId = instance.layerDomains.get(layer.id);
-      if (!this.world.getDomain?.(domainId)) {
-        this.world.addDomain({ id: domainId });
-      }
-      if (layer.topologyId != null) {
-        this.navigation.bindDomain?.(domainId, layer.topologyId);
-      }
-    }
-
-    for (const boundary of definition.boundaries) {
-      const resolved =
-        this.#registry?.resolveBoundary?.(instance.id, boundary.id) ??
-        boundary;
-      this.syncBoundaryState(instance, resolved);
-    }
-
-    for (const portal of definition.portals) {
-      const resolved =
-        this.#registry?.resolvePortal?.(instance.id, portal.id) ??
-        portal;
-      this.syncPortalState(instance, portal, resolved);
-    }
-
-    for (const dynamicPortal of instance.dynamicPortals?.values?.() ?? []) {
-      const resolved =
-        this.#registry?.resolvePortal?.(instance.id, dynamicPortal.id) ??
-        dynamicPortal;
-      this.syncDynamicPortal(instance, dynamicPortal, resolved);
     }
   }
 
