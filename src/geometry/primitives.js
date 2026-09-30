@@ -477,6 +477,50 @@ export function composeTransforms(parent, child) {
   });
 }
 
+function stableForwardCoordinate(
+  translation,
+  rotatedNormalized,
+  pointScale,
+  transformScale
+) {
+  if (transformScale >= 1) {
+    const normalized =
+      translation /
+        transformScale /
+        pointScale +
+      rotatedNormalized;
+    return (
+      normalized *
+      transformScale *
+      pointScale
+    );
+  }
+
+  const normalized =
+    translation / pointScale +
+    rotatedNormalized * transformScale;
+  return normalized * pointScale;
+}
+
+function stableInverseCoordinate(
+  rotatedNormalized,
+  coordinateScale,
+  transformScale
+) {
+  if (transformScale >= 1) {
+    return (
+      rotatedNormalized *
+      (coordinateScale / transformScale)
+    );
+  }
+
+  return (
+    rotatedNormalized /
+    transformScale *
+    coordinateScale
+  );
+}
+
 export function transformPoint(point, transform) {
   assertVec2(point, "point");
   const t = normalizeTransform(transform);
@@ -484,10 +528,45 @@ export function transformPoint(point, transform) {
   const s = Math.sin(t.rotation);
   const sx = point.x * t.scale;
   const sy = point.y * t.scale;
-  const result = {
+  let result = {
     x: t.x + sx * c - sy * s,
     y: t.y + sx * s + sy * c
   };
+
+  if (!Number.isFinite(result.x) ||
+      !Number.isFinite(result.y)) {
+    const pointScale = Math.max(
+      1,
+      Math.abs(point.x),
+      Math.abs(point.y)
+    );
+    const normalizedX =
+      point.x / pointScale;
+    const normalizedY =
+      point.y / pointScale;
+    const rotatedX =
+      normalizedX * c -
+      normalizedY * s;
+    const rotatedY =
+      normalizedX * s +
+      normalizedY * c;
+
+    result = {
+      x: stableForwardCoordinate(
+        t.x,
+        rotatedX,
+        pointScale,
+        t.scale
+      ),
+      y: stableForwardCoordinate(
+        t.y,
+        rotatedY,
+        pointScale,
+        t.scale
+      )
+    };
+  }
+
   if (!Number.isFinite(result.x) ||
       !Number.isFinite(result.y)) {
     throw new RangeError(
@@ -504,10 +583,47 @@ export function inverseTransformPoint(point, transform) {
   const dy = point.y - t.y;
   const c = Math.cos(-t.rotation);
   const s = Math.sin(-t.rotation);
-  const result = {
+  let result = {
     x: (dx * c - dy * s) / t.scale,
     y: (dx * s + dy * c) / t.scale
   };
+
+  if (!Number.isFinite(result.x) ||
+      !Number.isFinite(result.y)) {
+    const coordinateScale = Math.max(
+      1,
+      Math.abs(point.x),
+      Math.abs(point.y),
+      Math.abs(t.x),
+      Math.abs(t.y)
+    );
+    const normalizedDx =
+      point.x / coordinateScale -
+      t.x / coordinateScale;
+    const normalizedDy =
+      point.y / coordinateScale -
+      t.y / coordinateScale;
+    const rotatedX =
+      normalizedDx * c -
+      normalizedDy * s;
+    const rotatedY =
+      normalizedDx * s +
+      normalizedDy * c;
+
+    result = {
+      x: stableInverseCoordinate(
+        rotatedX,
+        coordinateScale,
+        t.scale
+      ),
+      y: stableInverseCoordinate(
+        rotatedY,
+        coordinateScale,
+        t.scale
+      )
+    };
+  }
+
   if (!Number.isFinite(result.x) ||
       !Number.isFinite(result.y)) {
     throw new RangeError(
