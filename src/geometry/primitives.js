@@ -376,8 +376,11 @@ export function normalizeTransform(transform = {}) {
 export function composeTransforms(parent, child) {
   const a = normalizeTransform(parent);
   const b = normalizeTransform(child);
-  const origin = transformPoint({ x: b.x, y: b.y }, a);
-  return Object.freeze({
+  const origin = transformPoint(
+    { x: b.x, y: b.y },
+    a
+  );
+  return normalizeTransform({
     x: origin.x,
     y: origin.y,
     rotation: a.rotation + b.rotation,
@@ -386,27 +389,43 @@ export function composeTransforms(parent, child) {
 }
 
 export function transformPoint(point, transform) {
+  assertVec2(point, "point");
   const t = normalizeTransform(transform);
   const c = Math.cos(t.rotation);
   const s = Math.sin(t.rotation);
   const sx = point.x * t.scale;
   const sy = point.y * t.scale;
-  return {
+  const result = {
     x: t.x + sx * c - sy * s,
     y: t.y + sx * s + sy * c
   };
+  if (!Number.isFinite(result.x) ||
+      !Number.isFinite(result.y)) {
+    throw new RangeError(
+      "transform result must be a finite Vec2"
+    );
+  }
+  return result;
 }
 
 export function inverseTransformPoint(point, transform) {
+  assertVec2(point, "point");
   const t = normalizeTransform(transform);
   const dx = point.x - t.x;
   const dy = point.y - t.y;
   const c = Math.cos(-t.rotation);
   const s = Math.sin(-t.rotation);
-  return {
+  const result = {
     x: (dx * c - dy * s) / t.scale,
     y: (dx * s + dy * c) / t.scale
   };
+  if (!Number.isFinite(result.x) ||
+      !Number.isFinite(result.y)) {
+    throw new RangeError(
+      "inverse transform result must be a finite Vec2"
+    );
+  }
+  return result;
 }
 
 export function transformBounds(bounds, transform) {
