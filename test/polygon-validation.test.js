@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   compilePlace,
+  composeTransforms,
   pointInGeometry,
-  squaredDistancePointToSegment
+  squaredDistancePointToSegment,
+  transformPoint
 } from "../src/index.js";
 
 function compileWithPolygon(id, points) {
@@ -139,5 +141,32 @@ test("short non-degenerate segments keep their line geometry", () => {
   assert.ok(
     Math.abs(distanceSq - 1e-12) < 1e-20,
     `expected 1e-12, got ${distanceSq}`
+  );
+});
+
+
+test("transform helpers reject non-finite composed results", () => {
+  assert.throws(
+    () => composeTransforms(
+      { scale: 1e308 },
+      { scale: 2 }
+    ),
+    /scale.*finite/i
+  );
+
+  assert.throws(
+    () => composeTransforms(
+      { scale: 1e-300 },
+      { scale: 1e-300 }
+    ),
+    /scale.*> 0/i
+  );
+
+  assert.throws(
+    () => transformPoint(
+      { x: 1e308, y: 0 },
+      { scale: 2 }
+    ),
+    /result.*finite Vec2/i
   );
 });
