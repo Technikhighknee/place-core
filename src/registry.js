@@ -5,7 +5,7 @@ import {
   inverseTransformPoint,
   pointInGeometry,
   squaredDistance,
-  squaredDistancePointToSegment,
+  distancePointToSegment,
   segmentIntersectsBounds,
   transformBounds
 } from "./geometry.js";
@@ -711,16 +711,30 @@ export class PlaceRegistry {
     assertStringId(domainId, "findNearestBoundary.domainId");
     assertVec2(position, "findNearestBoundary.position");
     let best = null;
-    let bestDistanceSq = Infinity;
+    let bestDistance = Infinity;
     for (const boundary of this.getBoundariesForDomain(domainId, options)) {
-      const distanceSq = squaredDistancePointToSegment(position, boundary.a, boundary.b);
-      if (distanceSq < bestDistanceSq ||
-          (distanceSq === bestDistanceSq && compareStrings(boundary.id, best?.id ?? "") < 0)) {
+      const distance = distancePointToSegment(
+        position,
+        boundary.a,
+        boundary.b
+      );
+      if (
+        distance < bestDistance ||
+        (
+          distance === bestDistance &&
+          compareStrings(
+            boundary.id,
+            best?.id ?? ""
+          ) < 0
+        )
+      ) {
         best = boundary;
-        bestDistanceSq = distanceSq;
+        bestDistance = distance;
       }
     }
-    return best ? { boundary: best, distance: Math.sqrt(bestDistanceSq) } : null;
+    return best
+      ? { boundary: best, distance: bestDistance }
+      : null;
   }
 
   placesInBounds(domainId, bounds) {

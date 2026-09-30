@@ -473,7 +473,7 @@ export function segmentBounds(a, b) {
   };
 }
 
-function distancePointToSegment(point, a, b) {
+export function distancePointToSegment(point, a, b) {
   assertVec2(point);
   assertVec2(a, "segment.a");
   assertVec2(b, "segment.b");
