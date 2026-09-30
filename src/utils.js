@@ -150,6 +150,7 @@ export function normalizeStringList(
     seen.add(item);
     result.push(item);
   }
+  result.sort(compareStrings);
   return Object.freeze(result);
 }
 

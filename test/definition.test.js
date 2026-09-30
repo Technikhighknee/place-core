@@ -899,3 +899,59 @@ test("static road bindings require a topology-backed layer", () => {
     })
   );
 });
+
+
+test("set-like definition fields are canonical across input order", () => {
+  const make = ({
+    placeTags,
+    layerTags,
+    roadTags,
+    allowedProfiles,
+    blockedProfiles
+  }) => compilePlace({
+    id: "canonical-set-order",
+    tags: placeTags,
+    layers: [{
+      id: "inside",
+      tags: layerTags,
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 }
+        ],
+        roads: [{
+          id: "road",
+          from: "a",
+          to: "b",
+          tags: roadTags,
+          allowedProfiles,
+          blockedProfiles
+        }]
+      }
+    }]
+  });
+
+  const forward = make({
+    placeTags: ["zeta", "alpha"],
+    layerTags: ["upper", "inside"],
+    roadTags: ["threshold", "interior"],
+    allowedProfiles: ["pedestrian", "guard"],
+    blockedProfiles: ["cart", "horse"]
+  });
+  const reverse = make({
+    placeTags: ["alpha", "zeta"],
+    layerTags: ["inside", "upper"],
+    roadTags: ["interior", "threshold"],
+    allowedProfiles: ["guard", "pedestrian"],
+    blockedProfiles: ["horse", "cart"]
+  });
+
+  assert.equal(
+    forward.contentHash,
+    reverse.contentHash
+  );
+  assert.deepEqual(
+    forward.getBlueprint(),
+    reverse.getBlueprint()
+  );
+});

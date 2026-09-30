@@ -2,6 +2,7 @@ import {
   assertId,
   assertStringId,
   cloneJson,
+  compareStrings,
   normalizeBoolean
 } from "../utils.js";
 
@@ -161,6 +162,7 @@ function normalizeStringIterable(value, label) {
     }
     index += 1;
   }
+  result.sort(compareStrings);
   return Object.freeze(result);
 }
 

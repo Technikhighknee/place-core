@@ -793,3 +793,62 @@ test("domain pair keys cannot collide on embedded separators", () => {
     /toDomainId/
   );
 });
+
+
+test("set-like travel exclusions are retained canonically across iterable order", () => {
+  const one = twoLayerRuntime();
+  const two = twoLayerRuntime();
+
+  const first = startTravel(
+    one.places,
+    one.bridge,
+    "hans",
+    {
+      placeId: "house",
+      anchorId: "target"
+    },
+    {
+      excludedPortalKeys:
+        new Set(["z-unused", "a-unused"]),
+      excludedDomainPairs:
+        new Set(["z-unused", "a-unused"])
+    }
+  );
+  const second = startTravel(
+    two.places,
+    two.bridge,
+    "hans",
+    {
+      placeId: "house",
+      anchorId: "target"
+    },
+    {
+      excludedPortalKeys:
+        new Set(["a-unused", "z-unused"]),
+      excludedDomainPairs:
+        new Set(["a-unused", "z-unused"])
+    }
+  );
+
+  assert.ok(first);
+  assert.ok(second);
+
+  const firstSaved =
+    serializePlaceCore(one.places)
+      .activeTravels[0]
+      .options;
+  const secondSaved =
+    serializePlaceCore(two.places)
+      .activeTravels[0]
+      .options;
+
+  assert.deepEqual(firstSaved, secondSaved);
+  assert.deepEqual(
+    firstSaved.excludedPortalKeys,
+    ["a-unused", "z-unused"]
+  );
+  assert.deepEqual(
+    firstSaved.excludedDomainPairs,
+    ["a-unused", "z-unused"]
+  );
+});
