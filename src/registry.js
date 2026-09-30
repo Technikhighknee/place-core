@@ -99,6 +99,64 @@ function nearestAnchorResult(candidates, position) {
   };
 }
 
+function nearestBoundaryResult(boundaries, position) {
+  if (boundaries.length === 0) return null;
+
+  let scale = Math.max(
+    1,
+    Math.abs(position.x),
+    Math.abs(position.y)
+  );
+  for (const boundary of boundaries) {
+    scale = Math.max(
+      scale,
+      Math.abs(boundary.a.x),
+      Math.abs(boundary.a.y),
+      Math.abs(boundary.b.x),
+      Math.abs(boundary.b.y)
+    );
+  }
+
+  const scaledPosition = {
+    x: position.x / scale,
+    y: position.y / scale
+  };
+  let best = null;
+  let bestScaledDistance = Infinity;
+
+  for (const boundary of boundaries) {
+    const scaledDistance =
+      distancePointToSegment(
+        scaledPosition,
+        {
+          x: boundary.a.x / scale,
+          y: boundary.a.y / scale
+        },
+        {
+          x: boundary.b.x / scale,
+          y: boundary.b.y / scale
+        }
+      );
+
+    if (
+      best === null ||
+      scaledDistance < bestScaledDistance ||
+      (
+        scaledDistance === bestScaledDistance &&
+        compareStrings(boundary.id, best.id) < 0
+      )
+    ) {
+      best = boundary;
+      bestScaledDistance = scaledDistance;
+    }
+  }
+
+  return {
+    boundary: best,
+    distance: bestScaledDistance * scale
+  };
+}
+
 export class PlaceRegistry {
   #definitions = new Map();
   #instances = new Map();
@@ -743,31 +801,13 @@ export class PlaceRegistry {
   findNearestBoundary(domainId, position, options = {}) {
     assertStringId(domainId, "findNearestBoundary.domainId");
     assertVec2(position, "findNearestBoundary.position");
-    let best = null;
-    let bestDistance = Infinity;
-    for (const boundary of this.getBoundariesForDomain(domainId, options)) {
-      const distance = distancePointToSegment(
-        position,
-        boundary.a,
-        boundary.b
-      );
-      if (
-        distance < bestDistance ||
-        (
-          distance === bestDistance &&
-          compareStrings(
-            boundary.id,
-            best?.id ?? ""
-          ) < 0
-        )
-      ) {
-        best = boundary;
-        bestDistance = distance;
-      }
-    }
-    return best
-      ? { boundary: best, distance: bestDistance }
-      : null;
+    return nearestBoundaryResult(
+      this.getBoundariesForDomain(
+        domainId,
+        options
+      ),
+      position
+    );
   }
 
   placesInBounds(domainId, bounds) {
