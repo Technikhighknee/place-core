@@ -45,71 +45,330 @@ function defineOwnJsonProperty(target, key, value) {
   });
 }
 
-function cloneJsonValue(value, path, ancestors) {
-  if (value === null) return null;
+function jsonPathChild(parent, segment) {
+  return { parent, segment };
+}
+
+function formatJsonPath(path) {
+  const segments = [];
+  let cursor = path;
+  while (cursor?.parent != null) {
+    segments.push(cursor.segment);
+    cursor = cursor.parent;
+  }
+  segments.reverse();
+  return "value" + segments.join("");
+}
+
+function inspectJsonValue(value, path, mode) {
+  if (value === null) {
+    return { container: false, value: null };
+  }
 
   switch (typeof value) {
     case "string":
     case "boolean":
-      return value;
+      return { container: false, value };
     case "number":
       if (!Number.isFinite(value)) {
-        throw new TypeError(`${path} contains a non-finite number`);
+        throw new TypeError(
+          mode === "canonical"
+            ? "non-finite number cannot be canonicalized"
+            : `${formatJsonPath(path)} contains a non-finite number`
+        );
       }
-      return value;
+      return { container: false, value };
     case "undefined":
-      throw new TypeError(`${path} contains undefined, which is not JSON-safe`);
+      throw new TypeError(
+        mode === "canonical"
+          ? "undefined array entry cannot be canonicalized"
+          : `${formatJsonPath(path)} contains undefined, which is not JSON-safe`
+      );
     case "bigint":
     case "function":
     case "symbol":
-      throw new TypeError(`${path} contains non-JSON value of type ${typeof value}`);
+      throw new TypeError(
+        mode === "canonical"
+          ? `non-JSON value of type ${typeof value} cannot be canonicalized`
+          : `${formatJsonPath(path)} contains non-JSON value of type ${typeof value}`
+      );
     case "object":
       break;
     default:
-      throw new TypeError(`${path} contains unsupported value`);
-  }
-
-  if (ancestors.has(value)) {
-    throw new TypeError(`${path} contains a circular JSON structure`);
-  }
-
-  if (Array.isArray(value)) {
-    ancestors.add(value);
-    try {
-      return value.map((item, index) =>
-        cloneJsonValue(item, `${path}[${index}]`, ancestors)
+      throw new TypeError(
+        mode === "canonical"
+          ? "unsupported value cannot be canonicalized"
+          : `${formatJsonPath(path)} contains unsupported value`
       );
-    } finally {
-      ancestors.delete(value);
-    }
   }
 
-  if (!isPlainObject(value)) {
-    const typeName = value?.constructor?.name ?? "object";
+  if (!Array.isArray(value) && !isPlainObject(value)) {
+    const typeName =
+      value?.constructor?.name ?? "object";
     throw new TypeError(
-      `${path} contains non-JSON object ${typeName}`
+      mode === "canonical"
+        ? `non-JSON object ${typeName} cannot be canonicalized`
+        : `${formatJsonPath(path)} contains non-JSON object ${typeName}`
     );
   }
 
-  const result = {};
-  ancestors.add(value);
-  try {
-    for (const [key, item] of Object.entries(value)) {
-      if (item === undefined) {
+  return {
+    container: true,
+    array: Array.isArray(value)
+  };
+}
+
+function copyJsonIterative(value, mode) {
+  if (value === undefined) return undefined;
+
+  const rootPath = {
+    parent: null,
+    segment: ""
+  };
+  const rootInfo =
+    inspectJsonValue(value, rootPath, mode);
+  if (!rootInfo.container) {
+    return rootInfo.value;
+  }
+
+  const root = rootInfo.array
+    ? new Array(value.length)
+    : {};
+  const active = new Set([value]);
+  const stack = [{
+    source: value,
+    target: root,
+    path: rootPath,
+    array: rootInfo.array,
+    index: 0,
+    keys: rootInfo.array
+      ? null
+      : (
+          mode === "canonical"
+            ? Object.keys(value).sort(compareStrings)
+            : Object.keys(value)
+        )
+  }];
+
+  while (stack.length > 0) {
+    const frame = stack[stack.length - 1];
+
+    if (frame.array) {
+      if (frame.index >= frame.source.length) {
+        active.delete(frame.source);
+        stack.pop();
+        continue;
+      }
+
+      const index = frame.index;
+      frame.index += 1;
+
+      // Preserve sparse array holes. JSON serialization
+      // later represents them as null, matching JSON.stringify.
+      if (!(index in frame.source)) continue;
+
+      const item = frame.source[index];
+      const path = jsonPathChild(
+        frame.path,
+        `[${index}]`
+      );
+      const info = inspectJsonValue(
+        item,
+        path,
+        mode
+      );
+
+      if (!info.container) {
+        frame.target[index] = info.value;
+        continue;
+      }
+
+      if (active.has(item)) {
         throw new TypeError(
-          `${path}.${key} contains undefined, which is not JSON-safe`
+          mode === "canonical"
+            ? "circular JSON structure cannot be canonicalized"
+            : `${formatJsonPath(path)} contains a circular JSON structure`
         );
       }
+
+      const child = info.array
+        ? new Array(item.length)
+        : {};
+      frame.target[index] = child;
+      active.add(item);
+      stack.push({
+        source: item,
+        target: child,
+        path,
+        array: info.array,
+        index: 0,
+        keys: info.array
+          ? null
+          : (
+              mode === "canonical"
+                ? Object.keys(item).sort(compareStrings)
+                : Object.keys(item)
+            )
+      });
+      continue;
+    }
+
+    if (frame.index >= frame.keys.length) {
+      active.delete(frame.source);
+      stack.pop();
+      continue;
+    }
+
+    const key = frame.keys[frame.index];
+    frame.index += 1;
+    const item = frame.source[key];
+
+    if (item === undefined && mode === "canonical") {
+      continue;
+    }
+
+    const path = jsonPathChild(
+      frame.path,
+      `.${key}`
+    );
+    const info = inspectJsonValue(
+      item,
+      path,
+      mode
+    );
+
+    if (!info.container) {
       defineOwnJsonProperty(
-        result,
+        frame.target,
         key,
-        cloneJsonValue(item, `${path}.${key}`, ancestors)
+        info.value
+      );
+      continue;
+    }
+
+    if (active.has(item)) {
+      throw new TypeError(
+        mode === "canonical"
+          ? "circular JSON structure cannot be canonicalized"
+          : `${formatJsonPath(path)} contains a circular JSON structure`
       );
     }
-  } finally {
-    ancestors.delete(value);
+
+    const child = info.array
+      ? new Array(item.length)
+      : {};
+    defineOwnJsonProperty(
+      frame.target,
+      key,
+      child
+    );
+    active.add(item);
+    stack.push({
+      source: item,
+      target: child,
+      path,
+      array: info.array,
+      index: 0,
+      keys: info.array
+        ? null
+        : (
+            mode === "canonical"
+              ? Object.keys(item).sort(compareStrings)
+              : Object.keys(item)
+          )
+    });
   }
-  return result;
+
+  return root;
+}
+
+function stringifyJsonIterative(value) {
+  const scalar = (item) => {
+    if (item === null) return "null";
+    switch (typeof item) {
+      case "string":
+      case "boolean":
+      case "number":
+        return JSON.stringify(item);
+      default:
+        return null;
+    }
+  };
+
+  const direct = scalar(value);
+  if (direct != null) return direct;
+
+  const chunks = [];
+  const stack = [];
+
+  const pushContainer = (container) => {
+    const array = Array.isArray(container);
+    chunks.push(array ? "[" : "{");
+    stack.push({
+      value: container,
+      array,
+      index: 0,
+      keys: array
+        ? null
+        : Object.keys(container)
+    });
+  };
+
+  pushContainer(value);
+
+  while (stack.length > 0) {
+    const frame = stack[stack.length - 1];
+
+    if (frame.array) {
+      if (frame.index >= frame.value.length) {
+        chunks.push("]");
+        stack.pop();
+        continue;
+      }
+
+      if (frame.index > 0) chunks.push(",");
+      const index = frame.index;
+      frame.index += 1;
+
+      if (!(index in frame.value)) {
+        chunks.push("null");
+        continue;
+      }
+
+      const item = frame.value[index];
+      const serialized = scalar(item);
+      if (serialized != null) {
+        chunks.push(serialized);
+      } else {
+        pushContainer(item);
+      }
+      continue;
+    }
+
+    if (frame.index >= frame.keys.length) {
+      chunks.push("}");
+      stack.pop();
+      continue;
+    }
+
+    if (frame.index > 0) chunks.push(",");
+    const key = frame.keys[frame.index];
+    frame.index += 1;
+    chunks.push(
+      JSON.stringify(key),
+      ":"
+    );
+
+    const item = frame.value[key];
+    const serialized = scalar(item);
+    if (serialized != null) {
+      chunks.push(serialized);
+    } else {
+      pushContainer(item);
+    }
+  }
+
+  return chunks.join("");
 }
 
 export function normalizeBoolean(
@@ -155,106 +414,99 @@ export function normalizeStringList(
 }
 
 export function cloneJson(value) {
-  if (value === undefined) return undefined;
-  return cloneJsonValue(value, "value", new Set());
+  return copyJsonIterative(
+    value,
+    "clone"
+  );
 }
 
 export function deepFreeze(value, seen = new Set()) {
-  if (!value || typeof value !== "object" || seen.has(value)) return value;
-  seen.add(value);
-  if (Array.isArray(value)) {
-    for (const item of value) deepFreeze(item, seen);
-  } else {
-    for (const key of Object.keys(value)) deepFreeze(value[key], seen);
+  if (!value || typeof value !== "object") {
+    return value;
   }
-  return Object.freeze(value);
+
+  const stack = [{
+    value,
+    expanded: false
+  }];
+
+  while (stack.length > 0) {
+    const frame = stack.pop();
+    const current = frame.value;
+
+    if (!current ||
+        typeof current !== "object") {
+      continue;
+    }
+
+    if (frame.expanded) {
+      Object.freeze(current);
+      continue;
+    }
+
+    if (seen.has(current)) continue;
+    seen.add(current);
+
+    stack.push({
+      value: current,
+      expanded: true
+    });
+
+    if (Array.isArray(current)) {
+      for (
+        let i = current.length - 1;
+        i >= 0;
+        i -= 1
+      ) {
+        if (i in current) {
+          stack.push({
+            value: current[i],
+            expanded: false
+          });
+        }
+      }
+    } else {
+      const keys = Object.keys(current);
+      for (
+        let i = keys.length - 1;
+        i >= 0;
+        i -= 1
+      ) {
+        stack.push({
+          value: current[keys[i]],
+          expanded: false
+        });
+      }
+    }
+  }
+
+  return value;
 }
 
-export function canonicalize(value, ancestors = new Set()) {
-  if (value === null) return null;
-
-  switch (typeof value) {
-    case "string":
-    case "boolean":
-      return value;
-    case "number":
-      if (!Number.isFinite(value)) {
-        throw new TypeError("non-finite number cannot be canonicalized");
-      }
-      return value;
-    case "undefined":
-      return undefined;
-    case "bigint":
-    case "function":
-    case "symbol":
-      throw new TypeError(
-        `non-JSON value of type ${typeof value} cannot be canonicalized`
-      );
-    case "object":
-      break;
-    default:
-      throw new TypeError("unsupported value cannot be canonicalized");
-  }
-
-  if (ancestors.has(value)) {
-    throw new TypeError("circular JSON structure cannot be canonicalized");
-  }
-
-  if (Array.isArray(value)) {
-    ancestors.add(value);
-    try {
-      return value.map((item, index) => {
-        if (item === undefined) {
-          throw new TypeError(
-            `undefined array entry at index ${index} cannot be canonicalized`
-          );
-        }
-        return canonicalize(item, ancestors);
-      });
-    } finally {
-      ancestors.delete(value);
-    }
-  }
-
-  if (!isPlainObject(value)) {
-    const typeName = value?.constructor?.name ?? "object";
-    throw new TypeError(
-      `non-JSON object ${typeName} cannot be canonicalized`
-    );
-  }
-
-  const result = {};
-  ancestors.add(value);
-  try {
-    for (const key of Object.keys(value).sort()) {
-      const item = value[key];
-      if (item === undefined) continue;
-      defineOwnJsonProperty(
-        result,
-        key,
-        canonicalize(item, ancestors)
-      );
-    }
-  } finally {
-    ancestors.delete(value);
-  }
-  return result;
+export function canonicalize(value) {
+  return copyJsonIterative(
+    value,
+    "canonical"
+  );
 }
 
 export function canonicalStringify(value) {
   const canonical = canonicalize(value);
-  const serialized = JSON.stringify(canonical);
-  if (serialized === undefined) {
-    throw new TypeError("value cannot be serialized canonically");
+  if (canonical === undefined) {
+    throw new TypeError(
+      "value cannot be serialized canonically"
+    );
   }
-  return serialized;
+  return stringifyJsonIterative(canonical);
 }
 
 export function sha256(value) {
   const serialized = typeof value === "string"
     ? value
     : canonicalStringify(value);
-  return createHash("sha256").update(serialized).digest("hex");
+  return createHash("sha256")
+    .update(serialized)
+    .digest("hex");
 }
 
 export class BoundedEventQueue {

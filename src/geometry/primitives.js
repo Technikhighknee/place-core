@@ -30,12 +30,18 @@ export function geometryBounds(geometry) {
       assertVec2(geometry.center, "geometry.center");
       assertFiniteNumber(geometry.radius, "geometry.radius");
       if (geometry.radius < 0) throw new RangeError("geometry.radius must be >= 0");
-      return {
+      const bounds = {
         minX: geometry.center.x - geometry.radius,
         minY: geometry.center.y - geometry.radius,
         maxX: geometry.center.x + geometry.radius,
         maxY: geometry.center.y + geometry.radius
       };
+      if (!Object.values(bounds).every(Number.isFinite)) {
+        throw new RangeError(
+          "circle geometry bounds must be finite"
+        );
+      }
+      return bounds;
     }
     case "polygon": {
       if (!Array.isArray(geometry.points) || geometry.points.length < 3) {
