@@ -852,3 +852,81 @@ test("set-like travel exclusions are retained canonically across iterable order"
     ["a-unused", "z-unused"]
   );
 });
+
+
+test("public travel state surfaces cannot mutate registry internals", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  const started = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "house",
+      anchorId: "target"
+    },
+    {
+      journeyOptions: {
+        custom: {
+          avoid: "mud"
+        }
+      }
+    }
+  );
+  assert.ok(started);
+
+  assert.equal(
+    typeof places.activeTravels.set,
+    "undefined"
+  );
+  assert.equal(
+    typeof places.activeTravels.delete,
+    "undefined"
+  );
+
+  const viewed =
+    places.activeTravels.get("hans");
+  assert.ok(viewed);
+
+  for (const value of [
+    started,
+    started.plan,
+    started.options,
+    started.options.journeyOptions,
+    started.options.journeyOptions.custom,
+    viewed,
+    viewed.plan,
+    viewed.options,
+    viewed.options.journeyOptions,
+    viewed.options.journeyOptions.custom
+  ]) {
+    assert.equal(
+      Object.isFrozen(value),
+      true,
+      "public travel state must be deeply immutable"
+    );
+  }
+
+  const pendingRegistry =
+    deserializePlaceCore(
+      serializePlaceCore(places)
+    );
+  const pending =
+    pendingRegistry.pendingTravels;
+
+  assert.equal(
+    Object.isFrozen(pending),
+    true
+  );
+  assert.equal(
+    Object.isFrozen(pending[0]),
+    true
+  );
+  assert.throws(
+    () => pending.push({}),
+    TypeError
+  );
+});
