@@ -441,6 +441,7 @@ export class DynamicPointIndex {
   #rows = new Map();
   #sortedRows = null;
   #sortedColumns = new Map();
+  #fallbackIds = new Set();
   #cellCount = 0;
 
   constructor(cellSize = 64) {
@@ -456,6 +457,20 @@ export class DynamicPointIndex {
 
     const x = Math.floor(point.x / this.#cellSize);
     const y = Math.floor(point.y / this.#cellSize);
+
+    if (
+      !Number.isSafeInteger(x) ||
+      !Number.isSafeInteger(y)
+    ) {
+      this.#fallbackIds.add(id);
+      this.#points.set(id, {
+        x: point.x,
+        y: point.y,
+        cellX: null,
+        cellY: null
+      });
+      return this;
+    }
 
     let row = this.#rows.get(y);
     if (!row) {
@@ -485,6 +500,15 @@ export class DynamicPointIndex {
   delete(id) {
     const record = this.#points.get(id);
     if (!record) return false;
+
+    if (
+      record.cellX == null ||
+      record.cellY == null
+    ) {
+      this.#fallbackIds.delete(id);
+      this.#points.delete(id);
+      return true;
+    }
 
     const row = this.#rows.get(record.cellY);
     const bucket = row?.get(record.cellX);
@@ -555,6 +579,27 @@ export class DynamicPointIndex {
       }
     }
 
+    for (const id of this.#fallbackIds) {
+      const record = this.#points.get(id);
+      if (!record) continue;
+      if (predicate && !predicate(id, record)) continue;
+
+      const distance = Math.hypot(
+        record.x - point.x,
+        record.y - point.y
+      );
+      if (distance <= radius) {
+        result.push({
+          id,
+          point: {
+            x: record.x,
+            y: record.y
+          },
+          distance
+        });
+      }
+    }
+
     return result;
   }
 
@@ -575,6 +620,56 @@ export class DynamicPointIndex {
     let best = null;
     let bestDistance = maxDistance;
     const overflowCandidates = [];
+
+    const consider = (id, record) => {
+      if (!record) return;
+      if (predicate && !predicate(id, record)) return;
+
+      const exactX = record.x - point.x;
+      const exactY = record.y - point.y;
+      const distance = Math.hypot(
+        exactX,
+        exactY
+      );
+
+      if (
+        distance === Infinity &&
+        bestDistance === Infinity
+      ) {
+        overflowCandidates.push({
+          id,
+          record
+        });
+      }
+      if (distance > bestDistance) return;
+
+      const winsTie =
+        best != null &&
+        distance === bestDistance &&
+        compareIds != null &&
+        compareIds(id, best.id) < 0;
+
+      if (
+        best == null ||
+        distance < bestDistance ||
+        winsTie
+      ) {
+        best = {
+          id,
+          point: {
+            x: record.x,
+            y: record.y
+          },
+          distance
+        };
+        bestDistance = distance;
+      }
+    };
+
+    for (const id of this.#fallbackIds) {
+      consider(id, this.#points.get(id));
+    }
+
     const rows = this.#rowCoordinates();
 
     for (const rowCandidate of coordinatesByDistance(
@@ -601,41 +696,7 @@ export class DynamicPointIndex {
         if (!bucket) continue;
 
         for (const id of bucket) {
-          const record = this.#points.get(id);
-          if (!record) continue;
-          if (predicate && !predicate(id, record)) continue;
-
-          const exactX = record.x - point.x;
-          const exactY = record.y - point.y;
-          const distance = Math.hypot(
-            exactX,
-            exactY
-          );
-          if (distance === Infinity &&
-              bestDistance === Infinity) {
-            overflowCandidates.push({
-              id,
-              record
-            });
-          }
-          if (distance > bestDistance) continue;
-
-          const winsTie =
-            best != null &&
-            distance === bestDistance &&
-            compareIds != null &&
-            compareIds(id, best.id) < 0;
-
-          if (best == null ||
-              distance < bestDistance ||
-              winsTie) {
-            best = {
-              id,
-              point: { x: record.x, y: record.y },
-              distance
-            };
-            bestDistance = distance;
-          }
+          consider(id, this.#points.get(id));
         }
       }
     }
