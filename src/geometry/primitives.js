@@ -480,18 +480,82 @@ export function distancePointToSegment(point, a, b) {
 
   const abX = b.x - a.x;
   const abY = b.y - a.y;
+  const pointX = point.x - a.x;
+  const pointY = point.y - a.y;
+
+  if (
+    !Number.isFinite(abX) ||
+    !Number.isFinite(abY) ||
+    !Number.isFinite(pointX) ||
+    !Number.isFinite(pointY)
+  ) {
+    const scale = Math.max(
+      1,
+      Math.abs(point.x),
+      Math.abs(point.y),
+      Math.abs(a.x),
+      Math.abs(a.y),
+      Math.abs(b.x),
+      Math.abs(b.y)
+    );
+    const ax = a.x / scale;
+    const ay = a.y / scale;
+    const bx = b.x / scale;
+    const by = b.y / scale;
+    const px = point.x / scale;
+    const py = point.y / scale;
+    const scaledAbX = bx - ax;
+    const scaledAbY = by - ay;
+    const scaledPointX = px - ax;
+    const scaledPointY = py - ay;
+    const scaledLength = Math.hypot(
+      scaledAbX,
+      scaledAbY
+    );
+
+    if (scaledLength === 0) {
+      return Math.hypot(
+        scaledPointX,
+        scaledPointY
+      ) * scale;
+    }
+
+    const unitX = scaledAbX / scaledLength;
+    const unitY = scaledAbY / scaledLength;
+    const projection =
+      scaledPointX * unitX +
+      scaledPointY * unitY;
+
+    if (projection <= 0) {
+      return Math.hypot(
+        scaledPointX,
+        scaledPointY
+      ) * scale;
+    }
+    if (projection >= scaledLength) {
+      return Math.hypot(
+        px - bx,
+        py - by
+      ) * scale;
+    }
+
+    const closestX =
+      ax + unitX * projection;
+    const closestY =
+      ay + unitY * projection;
+    return Math.hypot(
+      px - closestX,
+      py - closestY
+    ) * scale;
+  }
+
   const length = Math.hypot(abX, abY);
   if (length <= EPSILON) {
-    return Math.hypot(
-      point.x - a.x,
-      point.y - a.y
-    );
+    return Math.hypot(pointX, pointY);
   }
 
   const unitX = abX / length;
   const unitY = abY / length;
-  const pointX = point.x - a.x;
-  const pointY = point.y - a.y;
   const projection =
     pointX * unitX +
     pointY * unitY;
