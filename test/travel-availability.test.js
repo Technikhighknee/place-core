@@ -146,11 +146,22 @@ test("eager travel fails immediately when its semantic target becomes unavailabl
   assert.ok(travel);
   assert.equal(travel.status, "active");
 
-  places.setSpaceState("house", "private-room", { enabled: false });
-  stepTravel(places, bridge, "hans");
+  places.setSpaceState(
+    "house",
+    "private-room",
+    { enabled: false }
+  );
+  const failed = stepTravel(
+    places,
+    bridge,
+    "hans"
+  );
 
-  assert.equal(travel.status, "failed");
-  assert.equal(travel.failureReason, "target-unavailable-after-world-change");
+  assert.equal(failed.status, "failed");
+  assert.equal(
+    failed.failureReason,
+    "target-unavailable-after-world-change"
+  );
   assert.equal(places.activeTravels.has("hans"), false);
 });
 
@@ -169,17 +180,28 @@ test("encounter travel discovers target unavailability only after reaching it", 
 
   places.setSpaceState("house", "private-room", { enabled: false });
 
-  stepTravel(places, bridge, "hans");
-  assert.equal(travel.status, "active");
-  assert.equal(travel.replans, 0);
+  const stillActive = stepTravel(
+    places,
+    bridge,
+    "hans"
+  );
+  assert.equal(stillActive.status, "active");
+  assert.equal(stillActive.replans, 0);
 
   entity.position = { x: 9, y: 2 };
   entity.journey = null;
-  stepTravel(places, bridge, "hans");
+  const failed = stepTravel(
+    places,
+    bridge,
+    "hans"
+  );
 
-  assert.equal(travel.status, "failed");
-  assert.equal(travel.failureReason, "target-unavailable-after-world-change");
-  assert.equal(travel.replans, 1);
+  assert.equal(failed.status, "failed");
+  assert.equal(
+    failed.failureReason,
+    "target-unavailable-after-world-change"
+  );
+  assert.equal(failed.replans, 1);
 
   const events = places.drainEvents();
   assert.ok(events.some((event) => event.type === "travel-target-unavailable"));

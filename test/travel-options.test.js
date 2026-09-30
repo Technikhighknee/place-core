@@ -223,12 +223,26 @@ test("anchor predicates survive eager replanning", () => {
   assert.ok(travel);
   assert.equal(travel.plan.resolvedTarget.placeId, "open-shop");
 
-  places.setPortalState("trigger-shop", "door", { locked: true });
-  stepTravel(places, bridge, "hans");
+  places.setPortalState(
+    "trigger-shop",
+    "door",
+    { locked: true }
+  );
+  const current = stepTravel(
+    places,
+    bridge,
+    "hans"
+  );
 
-  assert.equal(travel.replans, 1);
-  assert.equal(travel.plan.resolvedTarget.placeId, "open-shop");
-  assert.equal(travel.options.anchorPredicate, predicate);
+  assert.equal(current.replans, 1);
+  assert.equal(
+    current.plan.resolvedTarget.placeId,
+    "open-shop"
+  );
+  assert.equal(
+    current.options.anchorPredicate,
+    predicate
+  );
 });
 
 test("serializable retained travel options survive snapshot restart", () => {
