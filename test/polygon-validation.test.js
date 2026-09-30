@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   compilePlace,
-  pointInGeometry
+  pointInGeometry,
+  squaredDistancePointToSegment
 } from "../src/index.js";
 
 function compileWithPolygon(id, points) {
@@ -105,5 +106,38 @@ test("degenerate polygon edges do not contain arbitrary points", () => {
       geometry
     ),
     false
+  );
+});
+
+
+test("pointInGeometry rejects invalid circle radii", () => {
+  assert.throws(
+    () => pointInGeometry(
+      { x: 0, y: 0 },
+      {
+        type: "circle",
+        center: { x: 0, y: 0 },
+        radius: -2
+      }
+    ),
+    /radius must be >= 0/
+  );
+});
+
+test("short non-degenerate segments keep their line geometry", () => {
+  const a = { x: 0, y: 0 };
+  const b = { x: 1e-5, y: 0 };
+  const point = { x: 1e-5, y: 1e-6 };
+
+  const distanceSq =
+    squaredDistancePointToSegment(
+      point,
+      a,
+      b
+    );
+
+  assert.ok(
+    Math.abs(distanceSq - 1e-12) < 1e-20,
+    `expected 1e-12, got ${distanceSq}`
   );
 });
