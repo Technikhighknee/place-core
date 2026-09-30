@@ -170,3 +170,26 @@ test("transform helpers reject non-finite composed results", () => {
     /result.*finite Vec2/i
   );
 });
+
+
+test("collinear huge finite polygon cannot bypass zero-area validation", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "huge-collinear-polygon",
+      layers: [{ id: "inside" }],
+      spaces: [{
+        id: "line",
+        layerId: "inside",
+        geometry: {
+          type: "polygon",
+          points: [
+            { x: -1e308, y: -1e308 },
+            { x: 0, y: 0 },
+            { x: 1e308, y: 1e308 }
+          ]
+        }
+      }]
+    }),
+    /non-zero area|zero-length|polygon/i
+  );
+});
