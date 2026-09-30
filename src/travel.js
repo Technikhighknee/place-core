@@ -237,6 +237,30 @@ function resolvePlanCall(registry, a, b, c, d) {
   };
 }
 
+function assertRouteCost(value, label) {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new RangeError(
+      `${label} must be a finite number >= 0`
+    );
+  }
+  return value;
+}
+
+function routeEstimatedSeconds(plan, label) {
+  const value =
+    plan?.estimatedSeconds ??
+    plan?.route?.estimatedSeconds;
+  if (value == null) {
+    throw new TypeError(
+      `${label} estimatedSeconds must be a finite number >= 0`
+    );
+  }
+  return assertRouteCost(
+    value,
+    `${label} estimatedSeconds`
+  );
+}
+
 function localRoute(bridge, mobility, from, destination, options, cache, cachePrefix) {
   if (from.domainId !== destination.domainId) return null;
   if (squaredDistance(from.position, destination.position) <= POSITION_EPSILON_SQ) {
@@ -259,7 +283,14 @@ function localRoute(bridge, mobility, from, destination, options, cache, cachePr
     options: options.journeyOptions
   });
   const result = plan
-    ? { estimatedSeconds: plan.estimatedSeconds ?? plan.route?.estimatedSeconds ?? 0, plan }
+    ? {
+        estimatedSeconds:
+          routeEstimatedSeconds(
+            plan,
+            "local route"
+          ),
+        plan
+      }
     : null;
   cache.set(key, result);
   return result;
@@ -282,13 +313,32 @@ function localRouteCostsToMany(
   if (!ids.length) return new Map();
 
   if (typeof bridge.planLocalRouteCostsToMany === "function") {
-    return bridge.planLocalRouteCostsToMany({
-      domainId,
-      position,
-      destinationNodeIds: ids,
-      mobility,
-      options
-    });
+    const raw =
+      bridge.planLocalRouteCostsToMany({
+        domainId,
+        position,
+        destinationNodeIds: ids,
+        mobility,
+        options
+      });
+    if (!(raw instanceof Map)) {
+      throw new TypeError(
+        "planLocalRouteCostsToMany must return a Map"
+      );
+    }
+
+    const result = new Map();
+    for (const destinationNodeId of ids) {
+      if (!raw.has(destinationNodeId)) continue;
+      result.set(
+        destinationNodeId,
+        assertRouteCost(
+          raw.get(destinationNodeId),
+          `route cost for ${destinationNodeId}`
+        )
+      );
+    }
+    return result;
   }
 
   const result = new Map();
@@ -300,7 +350,15 @@ function localRouteCostsToMany(
       mobility,
       options
     });
-    if (planned) result.set(destinationNodeId, planned.estimatedSeconds);
+    if (planned) {
+      result.set(
+        destinationNodeId,
+        routeEstimatedSeconds(
+          planned,
+          `route cost for ${destinationNodeId}`
+        )
+      );
+    }
   }
   return result;
 }

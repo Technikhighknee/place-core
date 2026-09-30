@@ -847,9 +847,7 @@ test("default concrete-state search does not silently discard the globally cheap
       if (domainId === "B") {
         return {
           estimatedSeconds:
-            index === 128
-              ? 0
-              : 1_000
+            Math.abs(position.x - 128) * 10
         };
       }
 
