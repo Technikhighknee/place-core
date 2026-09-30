@@ -56,13 +56,26 @@ export function pairKey(a, b) {
   return tupleKey(a, b);
 }
 
-function legacyPairKey(a, b) {
-  return `${a}\u0000${b}`;
+export function domainPairKey(
+  fromDomainId,
+  toDomainId
+) {
+  assertStringId(
+    fromDomainId,
+    "fromDomainId"
+  );
+  assertStringId(
+    toDomainId,
+    "toDomainId"
+  );
+  return pairKey(
+    fromDomainId,
+    toDomainId
+  );
 }
 
 function pairIsExcluded(excludedPairs, a, b) {
-  return excludedPairs.has(pairKey(a, b)) ||
-    excludedPairs.has(legacyPairKey(a, b));
+  return excludedPairs.has(pairKey(a, b));
 }
 
 export function transitionKey(edge) {

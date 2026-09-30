@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   PlaceRegistry,
   deserializePlaceCore,
+  domainPairKey,
   findDomainPortalPath,
   planTravel,
   serializePlaceCore,
@@ -601,7 +602,7 @@ test("domain path API has its own strict exclusion-only option contract", () => 
       b,
       {
         excludedDomainPairs: new Set([
-          `${a}\u0000${b}`
+          domainPairKey(a, b)
         ])
       }
     ),
@@ -773,5 +774,22 @@ test("failed replacement travel leaves the existing travel untouched", () => {
   assert.deepEqual(
     entity.journey,
     existingJourney
+  );
+});
+
+
+test("domain pair keys cannot collide on embedded separators", () => {
+  assert.notEqual(
+    domainPairKey("a\u0000b", "c"),
+    domainPairKey("a", "b\u0000c")
+  );
+
+  assert.throws(
+    () => domainPairKey("", "b"),
+    /fromDomainId/
+  );
+  assert.throws(
+    () => domainPairKey("a", ""),
+    /toDomainId/
   );
 });

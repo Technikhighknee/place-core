@@ -760,6 +760,11 @@ export interface StopTravelOptions {
   reason?: string;
 }
 
+export function domainPairKey(
+  fromDomainId: string,
+  toDomainId: string
+): string;
+
 export function findDomainPortalPath(
   registry: PlaceRegistry,
   startDomainId: string,

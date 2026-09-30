@@ -14,6 +14,7 @@ export {
 export { WorldCoreBridge } from "./world-core-bridge.js";
 
 export {
+  domainPairKey,
   findDomainPortalPath,
   resolveTravelTarget,
   planTravel,

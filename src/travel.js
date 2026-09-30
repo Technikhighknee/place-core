@@ -28,6 +28,7 @@ export {
 
 import {
   MinHeap,
+  domainPairKey,
   findDomainPortalPath,
   findDomainPortalPathInternal,
   pairKey,
@@ -35,7 +36,10 @@ import {
   transitionsFrom
 } from "./travel/domain-graph.js";
 
-export { findDomainPortalPath };
+export {
+  domainPairKey,
+  findDomainPortalPath
+};
 
 const POSITION_EPSILON_SQ = 1e-8;
 
