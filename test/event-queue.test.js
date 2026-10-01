@@ -106,3 +106,23 @@ test("zero-sized event queue records drops without affecting simulation", () => 
   assert.equal(places.peekEvents().length, 0);
   assert.equal(places.getEventQueueStats().dropped, 1);
 });
+
+
+test("public emit cannot spoof reserved event envelope fields", () => {
+  const places = new PlaceRegistry({
+    captureEvents: true
+  });
+
+  const event = places.emit(
+    "expected",
+    {
+      type: "spoofed",
+      sequence: 999,
+      payload: "ok"
+    }
+  );
+
+  assert.equal(event.type, "expected");
+  assert.equal(event.sequence, 1);
+  assert.equal(event.payload, "ok");
+});
