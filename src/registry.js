@@ -474,10 +474,23 @@ export class PlaceRegistry {
   }
 
   removeDefinition(definitionId) {
+    const definition =
+      this.#definitions.get(
+        definitionId
+      );
+    if (!definition) return false;
+
     for (const instance of this.#instances.values()) {
       if (instance.definitionId === definitionId) return false;
     }
-    return this.#definitions.delete(definitionId);
+
+    this.#bridge
+      ?.releaseDefinitionTopologies
+      ?.(definition);
+
+    return this.#definitions.delete(
+      definitionId
+    );
   }
 
   getDefinition(id) { return this.#definitions.get(id) ?? null; }

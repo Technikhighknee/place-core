@@ -502,3 +502,179 @@ test("missing external topology does not require topology rollback capability", 
     undefined
   );
 });
+
+
+test("removing a definition releases its bridge-owned topology for replacement", () => {
+  const {
+    navigation,
+    places
+  } = setup();
+
+  const first =
+    makeDefinition("replaceable");
+  places.registerDefinition(first);
+  places.createPlace({
+    id: "first-place",
+    definitionId: "replaceable"
+  });
+
+  assert.equal(
+    places.removePlace("first-place"),
+    true
+  );
+  assert.ok(
+    navigation.topologies.has(
+      "shared-interior-topology"
+    )
+  );
+  assert.equal(
+    places.removeDefinition(
+      "replaceable"
+    ),
+    true
+  );
+  assert.equal(
+    navigation.topologies.has(
+      "shared-interior-topology"
+    ),
+    false
+  );
+
+  const replacement =
+    makeDefinition(
+      "replaceable",
+      {
+        road: {
+          width: 3
+        }
+      }
+    );
+  places.registerDefinition(
+    replacement
+  );
+
+  assert.doesNotThrow(
+    () =>
+      places.createPlace({
+        id: "second-place",
+        definitionId: "replaceable"
+      })
+  );
+  assert.equal(
+    navigation.topologies
+      .get("shared-interior-topology")
+      .roads.get("road").width,
+    3
+  );
+});
+
+
+test("definition removal never deletes an externally registered topology", () => {
+  const world = new World();
+  const navigation =
+    new NavigationRegistry();
+  const external = new Navigation();
+
+  external.addNode({
+    id: "a",
+    x: 0,
+    y: 0
+  });
+  external.addNode({
+    id: "b",
+    x: 1,
+    y: 0
+  });
+  external.addRoad({
+    id: "road",
+    from: "a",
+    to: "b"
+  });
+  navigation.registerTopology(
+    "external-owned",
+    external
+  );
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+  const places = new PlaceRegistry({
+    bridge
+  });
+
+  places.registerDefinition({
+    id: "external-ref",
+    layers: [{
+      id: "inside",
+      topologyId: "external-owned"
+    }]
+  });
+  places.createPlace({
+    id: "house",
+    definitionId: "external-ref"
+  });
+
+  assert.equal(
+    places.removePlace("house"),
+    true
+  );
+  assert.equal(
+    places.removeDefinition(
+      "external-ref"
+    ),
+    true
+  );
+  assert.equal(
+    navigation.topologies.get(
+      "external-owned"
+    ),
+    external
+  );
+});
+
+
+test("owned shared topology survives until the last referencing definition is removed", () => {
+  const {
+    navigation,
+    places
+  } = setup();
+
+  places.registerDefinition(
+    makeDefinition("house")
+  );
+  places.registerDefinition(
+    makeDefinition("shop")
+  );
+  places.createPlace({
+    id: "house-1",
+    definitionId: "house"
+  });
+
+  assert.equal(
+    places.removePlace("house-1"),
+    true
+  );
+  assert.equal(
+    places.removeDefinition("house"),
+    true
+  );
+  assert.ok(
+    navigation.topologies.has(
+      "shared-interior-topology"
+    )
+  );
+
+  assert.equal(
+    places.removeDefinition("shop"),
+    true
+  );
+  assert.equal(
+    navigation.topologies.has(
+      "shared-interior-topology"
+    ),
+    false
+  );
+});
