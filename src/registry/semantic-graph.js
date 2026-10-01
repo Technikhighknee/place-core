@@ -131,22 +131,24 @@ export class SemanticGraphIndex {
     parentId,
     message = "place semantic membership cycle"
   ) {
-    const targetKey = typedIdKey(instanceId);
-    const stack = [parentId];
+    const parentKey = typedIdKey(parentId);
+    const queue = [instanceId];
     const visited = new Set();
 
-    while (stack.length) {
-      const currentId = stack.pop();
+    for (let i = 0; i < queue.length; i += 1) {
+      const currentId = queue[i];
       const currentKey = typedIdKey(currentId);
-      if (currentKey === targetKey) {
+
+      if (currentKey === parentKey) {
         throw new Error(message);
       }
-      if (visited.has(currentKey)) continue;
+      if (visited.has(currentKey)) {
+        continue;
+      }
       visited.add(currentKey);
 
-      const parents = this.parentIds(currentId);
-      for (let i = parents.length - 1; i >= 0; i -= 1) {
-        stack.push(parents[i]);
+      for (const childId of this.childrenOf(currentId)) {
+        queue.push(childId);
       }
     }
   }
