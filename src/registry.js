@@ -173,6 +173,7 @@ export class PlaceRegistry {
   #domainBindingsView;
   #exteriorIndexes = new Map();
   #indexedExteriorDomains = new Map();
+  #spaceEnabledCache = new Map();
   #placementGraph = new PlacementGraphIndex(this.#instances);
   #semanticGraph = new SemanticGraphIndex(this.#instances);
   #portalRecords = new Map();
@@ -1139,6 +1140,7 @@ export class PlaceRegistry {
     this.#placementGraph.unregister(instance);
     this.#removeInstancePortals(instance.id);
     this.#semanticGraph.deleteCached(instance.id);
+    this.#spaceEnabledCache.delete(instance.id);
     this.#instances.delete(instance.id);
     if (touchRevision) this.#touchState({ travel: true });
     if (emitEvent) {
@@ -1296,6 +1298,7 @@ export class PlaceRegistry {
       enabled === baseEnabled ? null : { enabled },
       PLACE_INSTANCE_MUTATION_TOKEN
     );
+    this.#spaceEnabledCache.delete(instanceId);
     this.#touchState({ travel: true });
     this.#occupancyIndex.refresh(affectedEntities);
     this.emit("space-state-changed", { placeId: instanceId, spaceId, enabled });
@@ -2475,6 +2478,29 @@ export class PlaceRegistry {
   }
 
   assertInternalConsistency() {
+    for (const [instanceId, cache] of
+      this.#spaceEnabledCache) {
+      const instance =
+        this.#instances.get(instanceId);
+      if (!instance) {
+        throw new Error(
+          `space enabled cache references missing instance ${String(instanceId)}`
+        );
+      }
+      const definition =
+        this.#definitions.get(
+          instance.definitionId
+        );
+      for (const [spaceId, enabled] of cache) {
+        if (!definition?.getSpace(spaceId) ||
+            typeof enabled !== "boolean") {
+          throw new Error(
+            `space enabled cache drift for ${String(instanceId)}:${spaceId}`
+          );
+        }
+      }
+    }
+
     for (const [domainId, binding] of this.#domainBindings) {
       const instance = this.#instances.get(binding.instanceId);
       if (!instance) throw new Error(`domain ${domainId} references missing instance`);
@@ -2561,12 +2587,64 @@ export class PlaceRegistry {
   }
 
   #spaceEnabled(instance, definition, space) {
-    let current = space;
-    while (current) {
-      if (instance.getSpaceOverride(current.id)?.enabled === false) return false;
-      current = current.parentSpaceId == null ? null : definition.getSpace(current.parentSpaceId);
+    if (instance.spaceOverrides.size === 0) {
+      return true;
     }
-    return true;
+
+    let cache =
+      this.#spaceEnabledCache.get(instance.id);
+    if (!cache) {
+      cache = new Map();
+      this.#spaceEnabledCache.set(
+        instance.id,
+        cache
+      );
+    }
+
+    if (cache.has(space.id)) {
+      return cache.get(space.id);
+    }
+
+    const path = [];
+    let current = space;
+    let enabled = true;
+
+    while (current) {
+      if (cache.has(current.id)) {
+        enabled = cache.get(current.id);
+        break;
+      }
+
+      path.push(current);
+      if (
+        instance.getSpaceOverride(current.id)
+          ?.enabled === false
+      ) {
+        enabled = false;
+        break;
+      }
+
+      current =
+        current.parentSpaceId == null
+          ? null
+          : definition.getSpace(
+              current.parentSpaceId
+            );
+    }
+
+    while (path.length) {
+      const candidate = path.pop();
+      if (
+        instance.getSpaceOverride(
+          candidate.id
+        )?.enabled === false
+      ) {
+        enabled = false;
+      }
+      cache.set(candidate.id, enabled);
+    }
+
+    return cache.get(space.id) ?? enabled;
   }
 
   #indexExterior(instance, definition) {
