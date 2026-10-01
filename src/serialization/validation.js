@@ -1406,22 +1406,10 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
     const currentStep =
       travel.plan.steps[travel.stepIndex];
-    if (currentStep.type === "local-journey" &&
-        !travel.localStarted) {
-      throw new Error(
-        "active travel on a local-journey step must have localStarted true"
-      );
-    }
     if (travel.localStarted &&
         currentStep.type !== "local-journey") {
       throw new Error(
         "active travel localStarted requires a local-journey step"
-      );
-    }
-    if (currentStep.type === "traverse-portal" &&
-        !travel.portalEntered) {
-      throw new Error(
-        "active travel on a traverse-portal step must have portalEntered true"
       );
     }
     if (travel.portalEntered &&
