@@ -578,6 +578,189 @@ export class WorldCoreBridge {
       }
     }
 
+    const resolveThresholdEndpoint = (
+      endpoint
+    ) => {
+      if (endpoint.kind === "local") {
+        const domainId =
+          instance.layerDomains.get(
+            endpoint.layerId
+          );
+        if (!domainId) return null;
+        return {
+          domainId,
+          position: endpoint.position,
+          nodeId: endpoint.nodeId,
+          spaceId:
+            endpoint.spaceId ?? null
+        };
+      }
+
+      if (endpoint.kind === "external") {
+        return (
+          instance.attachments?.get?.(
+            endpoint.slot
+          ) ??
+          null
+        );
+      }
+
+      if (endpoint.kind === "resolved") {
+        return endpoint;
+      }
+
+      return null;
+    };
+
+    const thresholdPortals = [
+      ...definition.portals.map(
+        (portal) => ({
+          label: `portal ${portal.id}`,
+          portal: {
+            ...portal,
+            a: resolveThresholdEndpoint(
+              portal.a
+            ),
+            b: resolveThresholdEndpoint(
+              portal.b
+            )
+          }
+        })
+      ),
+      ...[
+        ...(
+          instance.dynamicPortals
+            ?.values?.() ??
+          []
+        )
+      ].map(
+        (portal) => ({
+          label:
+            `dynamic portal ${portal.id}`,
+          portal
+        })
+      )
+    ];
+
+    for (
+      const {
+        label,
+        portal
+      } of thresholdPortals
+    ) {
+      if (
+        !portal?.a ||
+        !portal?.b ||
+        portal.a.domainId !==
+          portal.b.domainId
+      ) {
+        continue;
+      }
+
+      const domainId =
+        portal.a.domainId;
+      const bindings =
+        (portal.roadBindings ?? [])
+          .filter((binding) =>
+            instance.layerDomains.get(
+              binding.layerId
+            ) === domainId
+          );
+
+      if (!bindings.length) {
+        continue;
+      }
+
+      const layer =
+        definition.getLayer(
+          bindings[0].layerId
+        );
+      if (
+        !layer ||
+        layer.navigation != null
+      ) {
+        continue;
+      }
+
+      if (
+        portal.a.nodeId == null ||
+        portal.b.nodeId == null
+      ) {
+        throw new Error(
+          `${label} with a same-domain threshold road binding requires nodeId on both endpoints`
+        );
+      }
+
+      const topology =
+        this.navigation.topologies
+          ?.get?.(layer.topologyId) ??
+        null;
+      if (!topology) {
+        continue;
+      }
+
+      let allowsForward = false;
+      let allowsReverse = false;
+
+      for (const binding of bindings) {
+        const road =
+          topology.roads?.get?.(
+            binding.roadId
+          );
+        if (!road) {
+          continue;
+        }
+
+        const forward =
+          road.from === portal.a.nodeId &&
+          road.to === portal.b.nodeId;
+        const reverse =
+          road.from === portal.b.nodeId &&
+          road.to === portal.a.nodeId;
+
+        if (!forward && !reverse) {
+          throw new Error(
+            `${label} road binding ${binding.roadId} does not connect its endpoint nodes`
+          );
+        }
+
+        allowsForward ||=
+          forward ||
+          (
+            reverse &&
+            road.bidirectional
+          );
+        allowsReverse ||=
+          reverse ||
+          (
+            forward &&
+            road.bidirectional
+          );
+      }
+
+      if (!allowsForward) {
+        throw new Error(
+          `${label} threshold roads do not allow traversal from endpoint a to b`
+        );
+      }
+      if (
+        portal.bidirectional !== false &&
+        !allowsReverse
+      ) {
+        throw new Error(
+          `${label} is bidirectional but its threshold roads do not allow traversal from endpoint b to a`
+        );
+      }
+      if (
+        portal.bidirectional === false &&
+        allowsReverse
+      ) {
+        throw new Error(
+          `${label} is unidirectional but its threshold roads allow reverse traversal`
+        );
+      }
+    }
+
     // Preflight ownership and existing bindings before mutating either core.
     for (const layer of definition.layers) {
       const domainId = instance.layerDomains.get(layer.id);
