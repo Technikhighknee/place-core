@@ -944,3 +944,40 @@ test("public travel state surfaces cannot mutate registry internals", () => {
     TypeError
   );
 });
+
+
+test("startTravel does not leak active state when initial journey start throws", () => {
+  const {
+    places,
+    bridge,
+    entity
+  } = twoLayerRuntime();
+
+  bridge.startLocalJourney = () => {
+    throw new Error(
+      "synthetic journey start failure"
+    );
+  };
+
+  assert.throws(
+    () => startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    ),
+    /synthetic journey start failure/
+  );
+
+  assert.equal(
+    places.activeTravels.size,
+    0
+  );
+  assert.equal(
+    entity.journey,
+    null
+  );
+});
