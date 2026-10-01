@@ -424,12 +424,72 @@ export class WorldCoreBridge {
       newTopologyIds
     };
 
+    const domainStateById = new Map(
+      receipt.domains.map((state) => [
+        state.domainId,
+        state
+      ])
+    );
+
+    if (
+      receipt.domains.some(
+        (state) => !state.existed
+      ) &&
+      typeof this.world.removeDomain !==
+        "function"
+    ) {
+      throw new Error(
+        "world-core World.removeDomain is required for transactional domain materialization rollback"
+      );
+    }
+
+    const hasRoadBindings =
+      definition.boundaries.some(
+        (boundary) =>
+          boundary.roadBindings?.length
+      ) ||
+      definition.portals.some(
+        (portal) =>
+          portal.roadBindings?.length
+      ) ||
+      [...(
+        instance.dynamicPortals?.values?.() ??
+        []
+      )].some(
+        (portal) =>
+          portal.roadBindings?.length
+      );
+
+    if (
+      hasRoadBindings &&
+      typeof this.navigation
+        .clearDomainOverrides !==
+        "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.clearDomainOverrides is required for transactional road-effect rollback"
+      );
+    }
+
+    if (
+      receipt.domains.some(
+        (state) =>
+          state.roadEffects.length > 0
+      ) &&
+      typeof this.navigation
+        .setDomainRoadEffect !==
+        "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.setDomainRoadEffect is required to restore adopted domain road effects"
+      );
+    }
+
     // Preflight ownership and existing bindings before mutating either core.
     for (const layer of definition.layers) {
       const domainId = instance.layerDomains.get(layer.id);
-      const domainState = receipt.domains.find(
-        (state) => state.domainId === domainId
-      );
+      const domainState =
+        domainStateById.get(domainId);
 
       if (domainState.existed &&
           this.existingDomainPolicy !== "adopt") {
@@ -452,6 +512,16 @@ export class WorldCoreBridge {
         if (typeof this.navigation.bindDomain !== "function") {
           throw new Error(
             "world-core NavigationRegistry is required for topology-bound place layers"
+          );
+        }
+
+        if (
+          domainState.previousBinding == null &&
+          typeof this.navigation.unbindDomain !==
+            "function"
+        ) {
+          throw new Error(
+            "world-core NavigationRegistry.unbindDomain is required for transactional topology binding rollback"
           );
         }
 
