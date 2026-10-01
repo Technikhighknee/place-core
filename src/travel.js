@@ -1353,6 +1353,9 @@ function liveTravelEntity(
     bridge.getEntity(state.entityId);
 
   if (!entity) {
+    registry.removeEntityOccupancy(
+      state.entityId
+    );
     return {
       entity: null,
       failure: fail(
@@ -1370,6 +1373,9 @@ function liveTravelEntity(
       state.entityId
     );
   } catch {
+    registry.removeEntityOccupancy(
+      state.entityId
+    );
     return {
       entity: null,
       failure: fail(
