@@ -1490,6 +1490,21 @@ test("fresh travel snapshots require every portal step to still resolve", () => 
     )
   );
 
+  const blocked =
+    serializePlaceCore(places);
+  blocked.instances[0]
+    .portalOverrides.door = {
+      locked: true
+    };
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        blocked
+      ),
+    /fresh plan step.*non-traversable portal door/
+  );
+
   const fresh =
     serializePlaceCore(places);
   const portalStep =

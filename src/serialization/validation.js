@@ -14,6 +14,9 @@ import {
   validateTravelTarget
 } from "../travel/input.js";
 import {
+  portalTraversableState
+} from "../registry/support.js";
+import {
   PLACE_CORE_SNAPSHOT_VERSION,
   idKey
 } from "./support.js";
@@ -1677,6 +1680,17 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
           from: b,
           to: a
         });
+      }
+
+      if (
+        !portalTraversableState({
+          ...portal,
+          connected: true
+        })
+      ) {
+        throw new Error(
+          `${label} fresh plan step ${i} references non-traversable portal ${step.portalId}`
+        );
       }
 
       const matches =
