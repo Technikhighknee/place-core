@@ -655,3 +655,30 @@ test("semantic closure cache invalidates transitively for descendant places", ()
   );
   places.assertInternalConsistency();
 });
+
+
+test("getSemanticAncestors validates its options strictly", () => {
+  const places = registry();
+  add(places, "root");
+  add(places, "child", {
+    parentId: "root"
+  });
+
+  assert.throws(
+    () =>
+      places.getSemanticAncestors(
+        "child",
+        { includeSelf: "false" }
+      ),
+    /includeSelf must be a boolean/
+  );
+
+  assert.throws(
+    () =>
+      places.getSemanticAncestors(
+        "child",
+        { includeSlef: true }
+      ),
+    /contains unknown field includeSlef/
+  );
+});
