@@ -1372,3 +1372,175 @@ test("stepPlaceSimulation continues later travels after one travel throws", () =
     false
   );
 });
+
+
+test("active travel cannot be stepped through a different runtime bridge", () => {
+  const {
+    places,
+    bridge,
+    entity
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+
+  const before =
+    places.activeTravels.get("hans");
+  const originalJourney =
+    structuredClone(entity.journey);
+
+  const foreignBridge = {
+    getEntity() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    planLocalRoute() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    startLocalJourney() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    stopLocalJourney() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    transferEntity() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    }
+  };
+
+  assert.throws(
+    () =>
+      stepTravel(
+        places,
+        foreignBridge,
+        "hans"
+      ),
+    /WorldCoreBridge that owns the active travel/
+  );
+
+  assert.deepEqual(
+    places.activeTravels.get("hans"),
+    before
+  );
+  assert.deepEqual(
+    entity.journey,
+    originalJourney
+  );
+});
+
+
+test("stopTravel without an explicit bridge cleans up through the active travel owner", () => {
+  const {
+    places,
+    bridge,
+    entity
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+  assert.notEqual(
+    entity.journey,
+    null
+  );
+
+  assert.equal(
+    stopTravel(
+      places,
+      "hans"
+    ),
+    true
+  );
+
+  assert.equal(
+    entity.journey,
+    null
+  );
+  assert.equal(
+    places.activeTravels.has("hans"),
+    false
+  );
+});
+
+
+test("attached registry bridge cannot be bypassed by an explicit travel bridge", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  places.attachWorldCoreBridge(bridge);
+
+  const foreignBridge = {
+    getEntity() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    planLocalRoute() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    startLocalJourney() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    stopLocalJourney() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    transferEntity() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    }
+  };
+
+  assert.throws(
+    () =>
+      startTravel(
+        places,
+        foreignBridge,
+        "hans",
+        {
+          placeId: "house",
+          anchorId: "target"
+        }
+      ),
+    /different from the one attached to the PlaceRegistry/
+  );
+
+  assert.equal(
+    places.activeTravels.size,
+    0
+  );
+});
