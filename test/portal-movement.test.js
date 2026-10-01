@@ -526,3 +526,45 @@ test("portal entry tolerance survives squared-distance overflow", () => {
     )
   );
 });
+
+
+test("portal travel fails cleanly when transfer returns a non-finite position", () => {
+  const runtime = transferFailureRuntime(
+    (entity, endpoint) => {
+      entity.domainId = endpoint.domainId;
+      entity.position = {
+        x: Number.NaN,
+        y: 0
+      };
+      entity.journey = null;
+      return entity;
+    }
+  );
+
+  const travel =
+    reachPortalAndAttemptTransfer(runtime);
+
+  assert.equal(travel.status, "failed");
+  assert.equal(
+    travel.failureReason,
+    "invalid-position-after-portal-transfer"
+  );
+  assert.equal(
+    runtime.places.activeTravels.has("hans"),
+    false
+  );
+
+  const events = runtime.places.drainEvents();
+  const failed = events.find(
+    (event) =>
+      event.type === "portal-transfer-failed"
+  );
+  assert.ok(failed);
+  assert.equal(failed.actualPosition, null);
+  assert.ok(events.some(
+    (event) =>
+      event.type === "travel-failed" &&
+      event.reason ===
+        "invalid-position-after-portal-transfer"
+  ));
+});
