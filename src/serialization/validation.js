@@ -1271,19 +1271,48 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         stack.pop();
       }
     }
+  }
 
-    const placementVisited = new Set();
+  const placementPermanent = new Set();
+
+  for (const item of semanticRoots) {
+    const rootKey = idKey(item.id);
+    if (placementPermanent.has(rootKey)) {
+      continue;
+    }
+
+    const path = [];
+    const visiting = new Set();
     let cursor = item;
-    while (cursor?.placement?.parentPlaceId != null) {
+
+    while (cursor != null) {
       const key = idKey(cursor.id);
-      if (placementVisited.has(key)) {
+      if (placementPermanent.has(key)) {
+        break;
+      }
+      if (visiting.has(key)) {
         throw new Error(
           `place placement cycle involving ${String(cursor.id)}`
         );
       }
-      placementVisited.add(key);
+
+      visiting.add(key);
+      path.push(cursor);
+
+      const parentId =
+        cursor.placement?.parentPlaceId;
+      if (parentId == null) {
+        break;
+      }
+
       cursor = instances.get(
-        idKey(cursor.placement.parentPlaceId)
+        idKey(parentId)
+      );
+    }
+
+    for (const member of path) {
+      placementPermanent.add(
+        idKey(member.id)
       );
     }
   }
