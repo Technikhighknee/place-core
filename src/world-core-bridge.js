@@ -1709,8 +1709,140 @@ export class WorldCoreBridge {
     }
   }
 
+  #assertResolvedThresholdGeometry(
+    instance,
+    portalDefinition,
+    resolvedPortal
+  ) {
+    if (
+      !portalDefinition?.roadBindings?.length ||
+      !resolvedPortal?.connected ||
+      !resolvedPortal.a ||
+      !resolvedPortal.b ||
+      resolvedPortal.a.domainId !==
+        resolvedPortal.b.domainId
+    ) {
+      return;
+    }
+
+    const domainId =
+      resolvedPortal.a.domainId;
+    const bindings =
+      portalDefinition.roadBindings.filter(
+        (binding) =>
+          instance.layerDomains.get(
+            binding.layerId
+          ) === domainId
+      );
+
+    if (!bindings.length) {
+      return;
+    }
+
+    if (
+      resolvedPortal.a.nodeId == null ||
+      resolvedPortal.b.nodeId == null
+    ) {
+      throw new Error(
+        `portal ${portalDefinition.id} with a same-domain threshold road binding requires nodeId on both endpoints`
+      );
+    }
+
+    const topologyId =
+      this.navigation.domainBindings
+        ?.get?.(domainId) ??
+      null;
+    const topology =
+      topologyId == null
+        ? null
+        : this.navigation.topologies
+            ?.get?.(topologyId) ??
+          null;
+
+    if (!topology) {
+      throw new Error(
+        `world-core domain ${domainId} has no registered navigation topology for portal ${portalDefinition.id}`
+      );
+    }
+
+    let allowsForward = false;
+    let allowsReverse = false;
+
+    for (const binding of bindings) {
+      const road =
+        topology.roads?.get?.(
+          binding.roadId
+        ) ??
+        null;
+
+      if (!road) {
+        throw new Error(
+          `portal ${portalDefinition.id} road binding references unknown road ${binding.roadId} in topology ${topologyId}`
+        );
+      }
+
+      const forward =
+        road.from ===
+          resolvedPortal.a.nodeId &&
+        road.to ===
+          resolvedPortal.b.nodeId;
+      const reverse =
+        road.from ===
+          resolvedPortal.b.nodeId &&
+        road.to ===
+          resolvedPortal.a.nodeId;
+
+      if (!forward && !reverse) {
+        throw new Error(
+          `portal ${portalDefinition.id} road binding ${binding.roadId} does not connect its endpoint nodes`
+        );
+      }
+
+      allowsForward ||=
+        forward ||
+        (
+          reverse &&
+          road.bidirectional
+        );
+      allowsReverse ||=
+        reverse ||
+        (
+          forward &&
+          road.bidirectional
+        );
+    }
+
+    if (!allowsForward) {
+      throw new Error(
+        `portal ${portalDefinition.id} threshold roads do not allow traversal from endpoint a to b`
+      );
+    }
+    if (
+      resolvedPortal.bidirectional !== false &&
+      !allowsReverse
+    ) {
+      throw new Error(
+        `portal ${portalDefinition.id} is bidirectional but its threshold roads do not allow traversal from endpoint b to a`
+      );
+    }
+    if (
+      resolvedPortal.bidirectional === false &&
+      allowsReverse
+    ) {
+      throw new Error(
+        `portal ${portalDefinition.id} is unidirectional but its threshold roads allow reverse traversal`
+      );
+    }
+  }
+
   syncPortalState(instance, portalDefinition, resolvedPortal) {
     if (!portalDefinition?.roadBindings?.length) return;
+
+    this.#assertResolvedThresholdGeometry(
+      instance,
+      portalDefinition,
+      resolvedPortal
+    );
 
     const blocked = !isPortalTraversable(resolvedPortal);
     const sameDomain = Boolean(
