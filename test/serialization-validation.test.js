@@ -840,3 +840,77 @@ test("snapshot validation treats prototype-shadowing layer IDs as own dictionary
     true
   );
 });
+
+
+test("snapshot validation rejects duplicate same-domain threshold road ownership", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(
+    compilePlace({
+      id: "threshold-place",
+      layers: [{
+        id: "ground",
+        navigation: {
+          nodes: [
+            { id: "a", x: 0, y: 0 },
+            { id: "b", x: 1, y: 0 }
+          ],
+          roads: [{
+            id: "door-road",
+            from: "a",
+            to: "b",
+            width: 1
+          }]
+        }
+      }]
+    })
+  );
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "threshold-place"
+  });
+  const domainId =
+    place.layerDomains.get("ground");
+
+  places.addPortal("house", {
+    id: "door-a",
+    transitionCost: 1,
+    a: {
+      domainId,
+      position: { x: 0, y: 0 },
+      nodeId: "a",
+      placeId: "house",
+      layerId: "ground"
+    },
+    b: {
+      domainId,
+      position: { x: 1, y: 0 },
+      nodeId: "b",
+      placeId: "house",
+      layerId: "ground"
+    },
+    roadBindings: [{
+      layerId: "ground",
+      roadId: "door-road"
+    }]
+  });
+
+  const snapshot =
+    structuredClone(
+      serializePlaceCore(places)
+    );
+  const duplicate =
+    structuredClone(
+      snapshot.instances[0]
+        .dynamicPortals[0]
+    );
+  duplicate.id = "door-b";
+  snapshot.instances[0]
+    .dynamicPortals.push(duplicate);
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(snapshot),
+    /threshold|road.*portal|already bound/i
+  );
+});
