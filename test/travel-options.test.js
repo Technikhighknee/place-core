@@ -1289,3 +1289,86 @@ test("stepPlaceSimulation orders active travels deterministically", () => {
     run(["b", "a"])
   );
 });
+
+
+test("stepPlaceSimulation continues later travels after one travel throws", () => {
+  const places = new PlaceRegistry();
+  const entities = new Map(
+    ["a", "b"].map((id) => [
+      id,
+      {
+        id,
+        domainId: "world",
+        position: { x: 0, y: 0 },
+        mobility: { speed: 1 },
+        journey: null
+      }
+    ])
+  );
+  const stepped = [];
+
+  const bridge = {
+    getEntity(id) {
+      if (id === "a" && stepped.length === 0) {
+        throw new Error(
+          "synthetic travel-a step failure"
+        );
+      }
+      stepped.push(id);
+      return entities.get(id) ?? null;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 10 };
+    },
+    startLocalJourney(
+      id,
+      destinationNodeId
+    ) {
+      entities.get(id).journey = {
+        destinationNodeId
+      };
+      return true;
+    },
+    stopLocalJourney(id) {
+      entities.get(id).journey = null;
+    }
+  };
+
+  // Avoid the synthetic step failure during setup.
+  stepped.push("setup");
+  for (const id of ["a", "b"]) {
+    assert.ok(
+      startTravel(
+        places,
+        bridge,
+        id,
+        {
+          domainId: "world",
+          position: { x: 10, y: 0 },
+          nodeId: "target"
+        }
+      )
+    );
+    entities.get(id).journey = null;
+  }
+  stepped.length = 0;
+
+  assert.throws(
+    () =>
+      stepPlaceSimulation(
+        places,
+        bridge,
+        0
+      ),
+    /synthetic travel-a step failure/
+  );
+
+  assert.ok(
+    stepped.includes("b"),
+    "later travels must still be stepped"
+  );
+  assert.equal(
+    places.activeTravels.has("a"),
+    false
+  );
+});
