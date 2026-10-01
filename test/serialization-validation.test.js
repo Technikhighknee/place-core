@@ -1505,6 +1505,33 @@ test("fresh travel snapshots require every portal step to still resolve", () => 
     /fresh plan step.*non-traversable portal door/
   );
 
+  const wrongCost =
+    serializePlaceCore(places);
+  const wrongCostStep =
+    wrongCost.activeTravels[0]
+      .plan.steps.find(
+        (step) =>
+          step.type ===
+          "traverse-portal"
+      );
+  wrongCostStep.transitionCost += 1;
+  wrongCost.activeTravels[0]
+    .plan.estimatedSeconds += 1;
+  wrongCost.activeTravels[0]
+    .plan.legs =
+      structuredClone(
+        wrongCost.activeTravels[0]
+          .plan.steps
+      );
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        wrongCost
+      ),
+    /portal transitionCost no longer matches snapshot state/
+  );
+
   const fresh =
     serializePlaceCore(places);
   const portalStep =

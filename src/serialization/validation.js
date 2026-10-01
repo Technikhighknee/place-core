@@ -1733,6 +1733,15 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         );
       }
 
+      if (
+        step.transitionCost !==
+        (portal.transitionCost ?? 0)
+      ) {
+        throw new Error(
+          `${label} fresh plan step ${i} portal transitionCost no longer matches snapshot state`
+        );
+      }
+
       const matches =
         directions.some(
           ({ from, to }) =>
