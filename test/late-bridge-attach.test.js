@@ -817,3 +817,72 @@ test("disposing a detached-empty registry releases bridge-owned topologies", () 
     3
   );
 });
+
+
+test("failed world-event unsubscribe keeps bridge attached and retryable", () => {
+  let unsubscribeCalls = 0;
+  let activeSubscription = true;
+
+  const world = {
+    subscribeEvents() {
+      activeSubscription = true;
+      return () => {
+        unsubscribeCalls += 1;
+        if (unsubscribeCalls === 1) {
+          throw new Error(
+            "synthetic unsubscribe failure"
+          );
+        }
+        activeSubscription = false;
+        return true;
+      };
+    }
+  };
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation: {},
+    startJourney() {},
+    stopJourney() {}
+  });
+  const places = new PlaceRegistry();
+
+  places.attachWorldCoreBridge(
+    bridge
+  );
+
+  assert.throws(
+    () => bridge.dispose(),
+    /synthetic unsubscribe failure/
+  );
+
+  assert.equal(
+    places.bridge,
+    bridge
+  );
+  assert.equal(
+    activeSubscription,
+    true
+  );
+  assert.equal(
+    unsubscribeCalls,
+    1
+  );
+
+  assert.equal(
+    bridge.dispose(),
+    true
+  );
+  assert.equal(
+    unsubscribeCalls,
+    2
+  );
+  assert.equal(
+    activeSubscription,
+    false
+  );
+  assert.equal(
+    places.bridge,
+    null
+  );
+});

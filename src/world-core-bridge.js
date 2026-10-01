@@ -148,11 +148,13 @@ export class WorldCoreBridge {
     this.#releaseUnboundOwnedTopologies();
 
     let removed = false;
-    let unsubscribeError = null;
-    try {
-      removed = this.#unsubscribeWorldEvents?.() ?? false;
-    } catch (error) {
-      unsubscribeError = error;
+    if (this.#unsubscribeWorldEvents) {
+      // Do not detach or discard the unsubscribe callback when
+      // unsubscription fails. Otherwise a live world-event subscription
+      // can survive disposal and become impossible to remove on retry.
+      removed =
+        this.#unsubscribeWorldEvents() ??
+        false;
     }
 
     const onDispose = this.#onRegistryDispose;
@@ -168,13 +170,6 @@ export class WorldCoreBridge {
       detachError = error;
     }
 
-    if (unsubscribeError && detachError) {
-      throw new AggregateError(
-        [unsubscribeError, detachError],
-        "failed to dispose WorldCoreBridge cleanly"
-      );
-    }
-    if (unsubscribeError) throw unsubscribeError;
     if (detachError) throw detachError;
     return removed;
   }
