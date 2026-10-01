@@ -1704,3 +1704,101 @@ test("fresh semantic travel target must still match its anchor", () => {
     /target anchor no longer matches/
   );
 });
+
+
+test("fresh semantic travel target cannot remain in a disabled ancestor space", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "fresh-space-target",
+    layers: [{ id: "inside" }],
+    spaces: [
+      {
+        id: "floor",
+        layerId: "inside",
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: -1,
+          maxX: 10,
+          maxY: 1
+        }
+      },
+      {
+        id: "room",
+        parentSpaceId: "floor",
+        layerId: "inside",
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: -1,
+          maxX: 10,
+          maxY: 1
+        }
+      }
+    ],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      spaceId: "room",
+      position: { x: 5, y: 0 },
+      nodeId: "target"
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "fresh-space-target"
+  });
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 5 };
+    },
+    startLocalJourney() {
+      entity.journey = {
+        destinationNodeId: "target"
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+  snapshot.instances[0]
+    .spaceOverrides.floor = {
+      enabled: false
+    };
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      ),
+    /target anchor is in a disabled space/
+  );
+});

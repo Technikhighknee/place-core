@@ -1573,6 +1573,37 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         }
       }
 
+      const spaceEnabled = (
+        spaceId
+      ) => {
+        let current =
+          spaceId == null
+            ? null
+            : definition.getSpace(
+                spaceId
+              );
+
+        while (current) {
+          if (
+            ownValue(
+              item.spaceOverrides ?? {},
+              current.id
+            )?.enabled === false
+          ) {
+            return false;
+          }
+
+          current =
+            current.parentSpaceId == null
+              ? null
+              : definition.getSpace(
+                  current.parentSpaceId
+                );
+        }
+
+        return true;
+      };
+
       const anchor =
         target.anchorId == null
           ? null
@@ -1600,6 +1631,15 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       ) {
         throw new Error(
           `${label} fresh plan target anchor no longer matches resolved target`
+        );
+      }
+
+      if (
+        anchor.spaceId != null &&
+        !spaceEnabled(anchor.spaceId)
+      ) {
+        throw new Error(
+          `${label} fresh plan target anchor is in a disabled space`
         );
       }
     }
