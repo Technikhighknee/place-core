@@ -270,3 +270,69 @@ test("failed removal of adopted domains restores foreign road overrides", () => 
   );
   places.assertInternalConsistency();
 });
+
+
+test("adopted removal preflights obstacles before changing any domain identity", () => {
+  const {
+    world,
+    bridge
+  } = runtime("adopt");
+  const compiled = definition(
+    "adopt-obstacle-preflight",
+    ["first", "second"]
+  );
+
+  const first =
+    world.addDomain({
+      id: "place:first"
+    });
+  const second =
+    world.addDomain({
+      id: "place:second"
+    });
+
+  world.addObstacle(
+    {
+      id: "barrel",
+      type: "circle",
+      center: { x: 0, y: 0 },
+      radius: 1
+    },
+    {
+      domainId: "place:first"
+    }
+  );
+
+  const firstHandle = first.handle;
+  const secondHandle = second.handle;
+
+  const places =
+    new PlaceRegistry({ bridge });
+  places.registerDefinition(compiled);
+  places.createPlace({
+    id: "place",
+    definitionId: compiled.id
+  });
+
+  assert.throws(
+    () => places.removePlace("place"),
+    /obstacle/i
+  );
+
+  assert.equal(
+    world.getDomain("place:first")?.handle,
+    firstHandle
+  );
+  assert.equal(
+    world.getDomain("place:second")?.handle,
+    secondHandle
+  );
+  assert.equal(
+    world.getObstacleDomain("barrel"),
+    "place:first"
+  );
+  assert.ok(
+    places.getPlace("place")
+  );
+  places.assertInternalConsistency();
+});
