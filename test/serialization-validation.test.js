@@ -41,6 +41,41 @@ test("self-contained snapshot restores without external definitions", () => {
   );
 });
 
+test("snapshot validation rejects malformed pending travel identity", () => {
+  const missing = snapshotFixture();
+  missing.pendingTravels.push({});
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        missing
+      ),
+    /pendingTravels\[0\].*missing required field entityId/
+  );
+
+  const mismatch = snapshotFixture();
+  mismatch.pendingTravels.push({
+    entityId: "hans",
+    target: {
+      placeId: "inn"
+    },
+    savedState: {
+      entityId: "other",
+      target: {
+        placeId: "inn"
+      }
+    }
+  });
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        mismatch
+      ),
+    /savedState entityId mismatch/
+  );
+});
+
 test("snapshot validation rejects tampered definition content", () => {
   const snapshot = snapshotFixture();
   snapshot.definitions[0].blueprint.kind = "tampered";

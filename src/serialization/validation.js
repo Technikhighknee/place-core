@@ -1456,7 +1456,50 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       ],
       pendingLabel
     );
+    for (const key of [
+      "entityId",
+      "target",
+      "savedState"
+    ]) {
+      if (!Object.hasOwn(pending, key)) {
+        throw new Error(
+          `${pendingLabel} is missing required field ${key}`
+        );
+      }
+    }
     assertJsonSafe(pending, pendingLabel);
+    assertId(
+      pending.entityId,
+      `${pendingLabel}.entityId`
+    );
+    assertTravelTarget(
+      pending.target,
+      `${pendingLabel}.target`
+    );
+    assertObject(
+      pending.savedState,
+      `${pendingLabel}.savedState`
+    );
+    if (
+      pending.savedState.entityId !==
+      pending.entityId
+    ) {
+      throw new Error(
+        `${pendingLabel}.savedState entityId mismatch`
+      );
+    }
+    if (
+      canonicalStringify(
+        pending.savedState.target
+      ) !==
+      canonicalStringify(
+        pending.target
+      )
+    ) {
+      throw new Error(
+        `${pendingLabel}.savedState target mismatch`
+      );
+    }
     if (pending.restartError != null) {
       assertOnlyKeys(
         pending.restartError,
@@ -1472,18 +1515,6 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
           `${pendingLabel}.restartError.message must be a string`
         );
       }
-    }
-    if (pending.entityId != null) {
-      assertId(
-        pending.entityId,
-        `snapshot.pendingTravels[${i}].entityId`
-      );
-    }
-    if (pending.target != null) {
-      assertTravelTarget(
-        pending.target,
-        `snapshot.pendingTravels[${i}].target`
-      );
     }
   }
 
