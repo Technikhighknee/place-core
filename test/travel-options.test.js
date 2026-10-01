@@ -1164,3 +1164,58 @@ test("stepTravel fails cleanly when the live entity identity drifts", () => {
     null
   );
 });
+
+
+test("stepTravel finalizes travel when a replanned local journey start throws", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      },
+      {
+        worldChangePolicy: "eager"
+      }
+    )
+  );
+
+  places.setPortalState(
+    "house",
+    "stairs",
+    { locked: true }
+  );
+  places.setPortalState(
+    "house",
+    "stairs",
+    { locked: false }
+  );
+
+  bridge.startLocalJourney = () => {
+    throw new Error(
+      "synthetic replanned journey start failure"
+    );
+  };
+
+  assert.throws(
+    () =>
+      stepTravel(
+        places,
+        bridge,
+        "hans"
+      ),
+    /synthetic replanned journey start failure/
+  );
+
+  assert.equal(
+    places.activeTravels.has("hans"),
+    false
+  );
+});
