@@ -68,6 +68,16 @@ export class WorldCoreBridge {
     this.existingDomainPolicy = existingDomainPolicy;
   }
 
+  #navigationMethod(name) {
+    const method = this.navigation?.[name];
+    if (typeof method !== "function") {
+      throw new TypeError(
+        `WorldCoreBridge navigation requires ${name} for road-bound place state`
+      );
+    }
+    return method.bind(this.navigation);
+  }
+
   attachRegistry(
     registry,
     onDispose = null,
@@ -811,14 +821,24 @@ export class WorldCoreBridge {
     const effectId = `place-core-boundary:${String(instance.id)}:${boundary.id}`;
     for (const binding of boundary.roadBindings) {
       if (boundary.enabled) {
-        this.navigation.setDomainRoadEffect?.(
+        this.#navigationMethod(
+          "setDomainRoadEffect"
+        )(
           domainId,
           effectId,
           binding.roadId,
           { blocked: true }
         );
       }
-      else this.navigation.removeDomainRoadEffect?.(domainId, effectId, binding.roadId);
+      else {
+        this.#navigationMethod(
+          "removeDomainRoadEffect"
+        )(
+          domainId,
+          effectId,
+          binding.roadId
+        );
+      }
     }
   }
 
@@ -828,7 +848,9 @@ export class WorldCoreBridge {
     if (!domainId) return;
     const effectId = `place-core-boundary:${String(instance.id)}:${boundary.id}`;
     for (const binding of boundary.roadBindings) {
-      this.navigation.removeDomainRoadEffect?.(
+      this.#navigationMethod(
+        "removeDomainRoadEffect"
+      )(
         domainId,
         effectId,
         binding.roadId
@@ -863,7 +885,9 @@ export class WorldCoreBridge {
       if (!domainId) continue;
 
       if (blocked || traversalDelaySeconds > 0) {
-        this.navigation.setDomainRoadEffect?.(
+        this.#navigationMethod(
+          "setDomainRoadEffect"
+        )(
           domainId,
           effectId,
           binding.roadId,
@@ -873,7 +897,9 @@ export class WorldCoreBridge {
           }
         );
       } else {
-        this.navigation.removeDomainRoadEffect?.(
+        this.#navigationMethod(
+          "removeDomainRoadEffect"
+        )(
           domainId,
           effectId,
           binding.roadId
@@ -887,7 +913,15 @@ export class WorldCoreBridge {
     const effectId = `place-core:${String(instance.id)}:${portalDefinition.id}`;
     for (const binding of portalDefinition.roadBindings) {
       const domainId = instance.layerDomains.get(binding.layerId);
-      if (domainId) this.navigation.removeDomainRoadEffect?.(domainId, effectId, binding.roadId);
+      if (domainId) {
+        this.#navigationMethod(
+          "removeDomainRoadEffect"
+        )(
+          domainId,
+          effectId,
+          binding.roadId
+        );
+      }
     }
   }
 
