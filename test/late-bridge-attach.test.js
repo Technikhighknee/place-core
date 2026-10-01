@@ -430,3 +430,69 @@ test("materialization preflights domain rollback capability before mutation", ()
     "preflight must fail before any domain is created"
   );
 });
+
+
+test("unmaterialization preflights domain removal capability before mutation", () => {
+  const domains = new Map([
+    ["house:inside", {
+      id: "house:inside",
+      entityCount: 0
+    }]
+  ]);
+
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain(id) {
+      return domains.get(id);
+    },
+    addDomain({ id }) {
+      const domain = {
+        id,
+        entityCount: 0
+      };
+      domains.set(id, domain);
+      return domain;
+    }
+  };
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation: {},
+    startJourney,
+    stopJourney
+  });
+
+  const instance = {
+    id: "house",
+    layerDomains: new Map([
+      ["inside", "house:inside"]
+    ]),
+    dynamicPortals: new Map()
+  };
+  const placeDefinition = {
+    id: "single-layer-place",
+    layers: [{
+      id: "inside",
+      topologyId: null,
+      navigation: null
+    }],
+    portals: [],
+    boundaries: []
+  };
+
+  assert.throws(
+    () =>
+      bridge.unmaterializePlace(
+        instance,
+        placeDefinition
+      ),
+    /removeDomain.*unmaterial|removeDomain.*rollback|World\.removeDomain/i
+  );
+
+  assert.ok(
+    domains.has("house:inside"),
+    "preflight must fail before the domain can be removed or local cleanup proceeds"
+  );
+});
