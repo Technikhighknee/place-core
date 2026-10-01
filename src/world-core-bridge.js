@@ -579,6 +579,23 @@ export class WorldCoreBridge {
 
     const errors = [];
 
+    const hasRoadBindings =
+      definition.boundaries.some(
+        (boundary) =>
+          boundary.roadBindings?.length
+      ) ||
+      definition.portals.some(
+        (portal) =>
+          portal.roadBindings?.length
+      ) ||
+      [...(
+        instance.dynamicPortals?.values?.() ??
+        []
+      )].some(
+        (portal) =>
+          portal.roadBindings?.length
+      );
+
     for (const state of [...receipt.domains].reverse()) {
       try {
         if (
@@ -598,7 +615,10 @@ export class WorldCoreBridge {
           });
         }
 
-        if (state.roadEffects.length > 0) {
+        if (
+          hasRoadBindings ||
+          state.roadEffects.length > 0
+        ) {
           if (
             typeof this.navigation
               .clearDomainOverrides !==
