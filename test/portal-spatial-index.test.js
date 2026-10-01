@@ -275,3 +275,44 @@ test("nearest portal filters traversal state and supports same-domain endpoints"
   assert.ok(nearest);
   assert.equal(nearest.side, "b");
 });
+
+
+test("getPortalsForDomain is deterministic across dynamic portal insertion order", () => {
+  const make = (order) => {
+    const places = new PlaceRegistry();
+    places.registerDefinition({
+      id: "dynamic-domain-portals",
+      layers: [{ id: "inside" }]
+    });
+
+    const place = places.createPlace({
+      id: "hub",
+      definitionId: "dynamic-domain-portals"
+    });
+    const domainId =
+      place.layerDomains.get("inside");
+
+    for (const id of order) {
+      places.addPortal("hub", {
+        id,
+        a: {
+          domainId,
+          position: { x: 0, y: 0 }
+        },
+        b: {
+          domainId,
+          position: { x: 10, y: 0 }
+        }
+      });
+    }
+
+    return places
+      .getPortalsForDomain(domainId)
+      .map((portal) => portal.id);
+  };
+
+  assert.deepEqual(
+    make(["a", "b"]),
+    make(["b", "a"])
+  );
+});
