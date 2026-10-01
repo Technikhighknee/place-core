@@ -31,6 +31,154 @@ function buildingDefinition() {
   };
 }
 
+function attachmentThresholdDefinition() {
+  return {
+    id: "attachment-thresholds",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "street", x: 0, y: 0 },
+          { id: "door", x: 1, y: 0 }
+        ],
+        roads: [{
+          id: "threshold",
+          from: "street",
+          to: "door",
+          width: 1
+        }]
+      }
+    }],
+    portals: [
+      {
+        id: "door-one",
+        a: {
+          kind: "external",
+          slot: "one"
+        },
+        b: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 1, y: 0 },
+          nodeId: "door"
+        },
+        transitionCost: 1,
+        roadBindings: [{
+          layerId: "inside",
+          roadId: "threshold"
+        }]
+      },
+      {
+        id: "door-two",
+        a: {
+          kind: "external",
+          slot: "two"
+        },
+        b: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 1, y: 0 },
+          nodeId: "door"
+        },
+        transitionCost: 1,
+        roadBindings: [{
+          layerId: "inside",
+          roadId: "threshold"
+        }]
+      }
+    ]
+  };
+}
+
+
+test("attachment-resolved same-domain portals cannot share a threshold road", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(
+    attachmentThresholdDefinition()
+  );
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "attachment-thresholds"
+  });
+  const domainId =
+    place.layerDomains.get("inside");
+
+  places.setAttachment(
+    "house",
+    "one",
+    {
+      domainId,
+      position: { x: 0, y: 0 },
+      nodeId: "street"
+    }
+  );
+
+  assert.throws(
+    () =>
+      places.setAttachment(
+        "house",
+        "two",
+        {
+          domainId,
+          position: { x: 0, y: 0 },
+          nodeId: "street"
+        }
+      ),
+    /already bound as a threshold/
+  );
+
+  assert.equal(
+    place.attachments.has("two"),
+    false
+  );
+  assert.deepEqual(
+    places.getPortalsForRoad(
+      domainId,
+      "threshold"
+    ).map((portal) => portal.id),
+    ["door-one"]
+  );
+  places.assertInternalConsistency();
+});
+
+test("place creation rejects attachment-resolved duplicate threshold ownership", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(
+    attachmentThresholdDefinition()
+  );
+
+  assert.throws(
+    () =>
+      places.createPlace({
+        id: "house",
+        definitionId:
+          "attachment-thresholds",
+        layerDomains: {
+          inside: "shared-inside"
+        },
+        attachments: {
+          one: {
+            domainId: "shared-inside",
+            position: { x: 0, y: 0 },
+            nodeId: "street"
+          },
+          two: {
+            domainId: "shared-inside",
+            position: { x: 0, y: 0 },
+            nodeId: "street"
+          }
+        }
+      }),
+    /already bound as a threshold/
+  );
+
+  assert.equal(
+    places.getPlace("house"),
+    null
+  );
+  places.assertInternalConsistency();
+});
+
 test("places can exist with unbound external portal slots", () => {
   const places = new PlaceRegistry();
   places.registerDefinition(buildingDefinition());

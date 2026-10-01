@@ -1061,17 +1061,12 @@ export class PlaceRegistry {
           })
         );
       }
+      this.#validateInstancePortals(
+        instance,
+        definition
+      );
       this.#indexExterior(instance, definition);
       this.#reindexInstancePortals(instance, definition);
-
-      for (const portal of definition.portals) {
-        validateResolvedPortalRoadBindings(
-          instance,
-          definition,
-          this.resolvePortal(instance.id, portal.id),
-          `portal ${portal.id}`
-        );
-      }
 
       if (this.#bridge?.materializePlace) {
         materializationReceipt =
@@ -1376,6 +1371,89 @@ export class PlaceRegistry {
     };
   }
 
+  #validateInstancePortals(
+    instance,
+    definition,
+    additionalPortals = []
+  ) {
+    const thresholdRoadOwners = new Map();
+
+    const validate = (portal, label) => {
+      validateResolvedPortalRoadBindings(
+        instance,
+        definition,
+        portal,
+        label
+      );
+
+      if (
+        !portal?.connected ||
+        !portal.a ||
+        !portal.b ||
+        portal.a.domainId !== portal.b.domainId
+      ) {
+        return;
+      }
+
+      const domainId = portal.a.domainId;
+      for (const binding of portal.roadBindings ?? []) {
+        if (
+          instance.layerDomains.get(binding.layerId) !==
+          domainId
+        ) {
+          continue;
+        }
+
+        const key = tupleKey(
+          domainId,
+          binding.roadId
+        );
+        const owner = thresholdRoadOwners.get(key);
+        if (
+          owner != null &&
+          owner.portalId !== portal.id
+        ) {
+          throw new Error(
+            `navigation road ${binding.roadId} in domain ${domainId} is already bound as a threshold by portal ${owner.portalId}; ${label} cannot also own it`
+          );
+        }
+
+        thresholdRoadOwners.set(key, {
+          portalId: portal.id,
+          label
+        });
+      }
+    };
+
+    for (const portal of definition.portals) {
+      validate(
+        this.resolvePortal(
+          instance.id,
+          portal.id
+        ),
+        `portal ${portal.id}`
+      );
+    }
+
+    for (const portal of
+      instance.dynamicPortals.values()) {
+      validate(
+        this.resolvePortal(
+          instance.id,
+          portal.id
+        ),
+        `dynamic portal ${portal.id}`
+      );
+    }
+
+    for (const portal of additionalPortals) {
+      validate(
+        portal,
+        `dynamic portal ${portal.id}`
+      );
+    }
+  }
+
   #restorePortalBridgeStates(
     instance,
     portals
@@ -1429,17 +1507,10 @@ export class PlaceRegistry {
       PLACE_INSTANCE_MUTATION_TOKEN
     );
     try {
-      for (const portal of definition.portals) {
-        if (![portal.a, portal.b].some((endpoint) =>
-          endpoint.kind === "external" && endpoint.slot === slot
-        )) continue;
-        validateResolvedPortalRoadBindings(
-          instance,
-          definition,
-          this.resolvePortal(instanceId, portal.id),
-          `portal ${portal.id}`
-        );
-      }
+      this.#validateInstancePortals(
+        instance,
+        definition
+      );
     } catch (error) {
       if (previousAttachment) instance.setAttachment(
         slot,
@@ -1531,6 +1602,20 @@ export class PlaceRegistry {
         slot,
         PLACE_INSTANCE_MUTATION_TOKEN
       );
+    try {
+      this.#validateInstancePortals(
+        instance,
+        definition
+      );
+    } catch (error) {
+      instance.setAttachment(
+        slot,
+        previousAttachment,
+        PLACE_INSTANCE_MUTATION_TOKEN
+      );
+      throw error;
+    }
+
     this.#reindexInstancePortals(instance, definition);
 
     try {
@@ -2262,41 +2347,11 @@ export class PlaceRegistry {
       connected: true,
       traversable: portalTraversableState(portal)
     };
-    validateResolvedPortalRoadBindings(
+    this.#validateInstancePortals(
       instance,
       definition,
-      resolvedPortal,
-      `dynamic portal ${portal.id}`
+      [resolvedPortal]
     );
-
-    if (
-      resolvedPortal.a.domainId ===
-      resolvedPortal.b.domainId
-    ) {
-      const domainId = resolvedPortal.a.domainId;
-      for (const binding of roadBindings) {
-        if (
-          instance.layerDomains.get(binding.layerId) !==
-          domainId
-        ) {
-          continue;
-        }
-
-        const owner = this.getPortalsForRoad(
-          domainId,
-          binding.roadId
-        ).find((existing) =>
-          existing.a?.domainId === domainId &&
-          existing.b?.domainId === domainId
-        );
-
-        if (owner) {
-          throw new Error(
-            `navigation road ${binding.roadId} is already bound as a threshold by portal ${owner.id}`
-          );
-        }
-      }
-    }
 
     instance.addDynamicPortal(
       portal,
@@ -2629,6 +2684,10 @@ export class PlaceRegistry {
       const definition = this.#definitions.get(instance.definitionId);
       if (!definition) throw new Error(`instance ${String(instance.id)} references missing definition`);
       this.#semanticGraph.assertInstanceIndexed(instance);
+      this.#validateInstancePortals(
+        instance,
+        definition
+      );
     }
 
     this.#semanticGraph.assertConsistency();

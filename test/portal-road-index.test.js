@@ -141,3 +141,100 @@ test("dynamic same-domain portals cannot share an existing threshold road", () =
   );
   places.assertInternalConsistency();
 });
+
+
+test("distinct portal thresholds may share the same navigation node", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "shared-threshold-node",
+    layers: [{
+      id: "ground",
+      navigation: {
+        nodes: [
+          { id: "west", x: -1, y: 0 },
+          { id: "street", x: 0, y: 0 },
+          { id: "east", x: 1, y: 0 }
+        ],
+        roads: [
+          {
+            id: "west-threshold",
+            from: "west",
+            to: "street",
+            width: 1
+          },
+          {
+            id: "east-threshold",
+            from: "street",
+            to: "east",
+            width: 1
+          }
+        ]
+      }
+    }],
+    portals: [
+      {
+        id: "west-door",
+        a: {
+          kind: "local",
+          layerId: "ground",
+          position: { x: -1, y: 0 },
+          nodeId: "west"
+        },
+        b: {
+          kind: "local",
+          layerId: "ground",
+          position: { x: 0, y: 0 },
+          nodeId: "street"
+        },
+        transitionCost: 1,
+        roadBindings: [{
+          layerId: "ground",
+          roadId: "west-threshold"
+        }]
+      },
+      {
+        id: "east-door",
+        a: {
+          kind: "local",
+          layerId: "ground",
+          position: { x: 0, y: 0 },
+          nodeId: "street"
+        },
+        b: {
+          kind: "local",
+          layerId: "ground",
+          position: { x: 1, y: 0 },
+          nodeId: "east"
+        },
+        transitionCost: 1,
+        roadBindings: [{
+          layerId: "ground",
+          roadId: "east-threshold"
+        }]
+      }
+    ]
+  });
+
+  const place = places.createPlace({
+    id: "street-place",
+    definitionId: "shared-threshold-node"
+  });
+  const domainId =
+    place.layerDomains.get("ground");
+
+  assert.equal(
+    places.getPortalsForRoad(
+      domainId,
+      "west-threshold"
+    )[0]?.id,
+    "west-door"
+  );
+  assert.equal(
+    places.getPortalsForRoad(
+      domainId,
+      "east-threshold"
+    )[0]?.id,
+    "east-door"
+  );
+  places.assertInternalConsistency();
+});
