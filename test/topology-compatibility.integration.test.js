@@ -1152,3 +1152,125 @@ test("external topology threshold road must connect portal endpoint nodes", () =
     false
   );
 });
+
+
+test("connected portal road binding cannot target an unrelated layer domain", () => {
+  const world = new World({
+    domains: [{ id: "street" }]
+  });
+  const navigation =
+    new NavigationRegistry();
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    Navigation,
+    startJourney,
+    stopJourney
+  });
+  const places = new PlaceRegistry({
+    bridge
+  });
+
+  places.registerDefinition({
+    id: "unrelated-binding-place",
+    layers: [
+      {
+        id: "ground",
+        navigation: {
+          nodes: [
+            {
+              id: "ground-door",
+              x: 0,
+              y: 0
+            },
+            {
+              id: "ground-room",
+              x: 1,
+              y: 0
+            }
+          ],
+          roads: [{
+            id: "ground-road",
+            from: "ground-door",
+            to: "ground-room"
+          }]
+        }
+      },
+      {
+        id: "cellar",
+        navigation: {
+          nodes: [
+            {
+              id: "cellar-a",
+              x: 0,
+              y: 0
+            },
+            {
+              id: "cellar-b",
+              x: 1,
+              y: 0
+            }
+          ],
+          roads: [{
+            id: "cellar-road",
+            from: "cellar-a",
+            to: "cellar-b"
+          }]
+        }
+      }
+    ],
+    portals: [{
+      id: "front-door",
+      a: {
+        kind: "external",
+        slot: "street"
+      },
+      b: {
+        kind: "local",
+        layerId: "ground",
+        position: {
+          x: 0,
+          y: 0
+        },
+        nodeId: "ground-door"
+      },
+      roadBindings: [{
+        layerId: "cellar",
+        roadId: "cellar-road"
+      }]
+    }]
+  });
+
+  assert.throws(
+    () =>
+      places.createPlace({
+        id: "house",
+        definitionId:
+          "unrelated-binding-place",
+        attachments: {
+          street: {
+            domainId: "street",
+            position: {
+              x: 10,
+              y: 0
+            },
+            nodeId: "street-house"
+          }
+        }
+      }),
+    /road binding cellar-road belongs to unrelated domain house:cellar/
+  );
+
+  assert.equal(
+    places.getPlace("house"),
+    null
+  );
+  assert.equal(
+    world.getDomain("house:ground"),
+    undefined
+  );
+  assert.equal(
+    world.getDomain("house:cellar"),
+    undefined
+  );
+});
