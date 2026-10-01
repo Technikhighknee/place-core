@@ -1739,15 +1739,6 @@ export class WorldCoreBridge {
       return;
     }
 
-    if (
-      resolvedPortal.a.nodeId == null ||
-      resolvedPortal.b.nodeId == null
-    ) {
-      throw new Error(
-        `portal ${portalDefinition.id} with a same-domain threshold road binding requires nodeId on both endpoints`
-      );
-    }
-
     const topologyId =
       this.navigation.domainBindings
         ?.get?.(domainId) ??
@@ -1759,9 +1750,20 @@ export class WorldCoreBridge {
             ?.get?.(topologyId) ??
           null;
 
-    if (!topology) {
+    // Low-level bridge adapters may expose only road-effect methods.
+    // Physical geometry validation is available only when an actual
+    // registered topology is present; NavigationRegistry-backed runtime
+    // paths always provide it.
+    if (!topology?.roads?.get) {
+      return;
+    }
+
+    if (
+      resolvedPortal.a.nodeId == null ||
+      resolvedPortal.b.nodeId == null
+    ) {
       throw new Error(
-        `world-core domain ${domainId} has no registered navigation topology for portal ${portalDefinition.id}`
+        `portal ${portalDefinition.id} with a same-domain threshold road binding requires nodeId on both endpoints`
       );
     }
 
