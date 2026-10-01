@@ -1046,3 +1046,104 @@ test("failed world-event unsubscribe detaches logically and remains cleanup-retr
     null
   );
 });
+
+
+test("reattach retries failed owned topology cleanup before binding a new registry", () => {
+  const first = new PlaceRegistry();
+  first.registerDefinition(
+    definition()
+  );
+
+  const {
+    navigation,
+    bridge
+  } = makeBridge();
+
+  first.attachWorldCoreBridge(
+    bridge
+  );
+  const place = first.createPlace({
+    id: "house",
+    definitionId: "late-attach-place"
+  });
+  const topologyId =
+    first.getDefinition(
+      "late-attach-place"
+    ).layers[0].topologyId;
+
+  assert.ok(
+    navigation.topologies.has(
+      topologyId
+    )
+  );
+  assert.equal(
+    first.removePlace(
+      place.id
+    ),
+    true
+  );
+
+  const originalRemoveTopology =
+    navigation.removeTopology.bind(
+      navigation
+    );
+  let removeCalls = 0;
+  navigation.removeTopology = (
+    id
+  ) => {
+    removeCalls += 1;
+    if (removeCalls === 1) {
+      throw new Error(
+        "synthetic topology cleanup failure"
+      );
+    }
+    return originalRemoveTopology(
+      id
+    );
+  };
+
+  assert.throws(
+    () => bridge.dispose(),
+    /synthetic topology cleanup failure/
+  );
+
+  assert.equal(
+    first.bridge,
+    null
+  );
+  assert.equal(
+    navigation.topologies.has(
+      topologyId
+    ),
+    true
+  );
+
+  const second =
+    new PlaceRegistry();
+
+  assert.equal(
+    second.attachWorldCoreBridge(
+      bridge
+    ),
+    second
+  );
+
+  assert.equal(
+    removeCalls,
+    2
+  );
+  assert.equal(
+    navigation.topologies.has(
+      topologyId
+    ),
+    false
+  );
+  assert.equal(
+    second.bridge,
+    bridge
+  );
+
+  navigation.removeTopology =
+    originalRemoveTopology;
+  bridge.dispose();
+});
