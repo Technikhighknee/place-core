@@ -2460,7 +2460,11 @@ export class PlaceRegistry {
 
   emit(type, data = {}) {
     if (!this.#captureEvents) return null;
-    const event = deepFreeze({ sequence: ++this.#sequence, type, ...cloneJson(data) });
+    const event = deepFreeze({
+      ...cloneJson(data),
+      sequence: ++this.#sequence,
+      type
+    });
     this.#events.push(event);
     return event;
   }
