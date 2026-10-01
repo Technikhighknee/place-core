@@ -449,6 +449,17 @@ test("restart mode retains travel intent when route planning throws", () => {
       .restartError?.message,
     "synthetic restart planning failure"
   );
+  assert.ok(
+    restored.getEntityLocation(
+      "hans"
+    )
+  );
+  assert.deepEqual(
+    restored.getEntityLocation(
+      "hans"
+    ).places,
+    ["first"]
+  );
 });
 
 

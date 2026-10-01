@@ -466,10 +466,22 @@ export function deserializePlaceCore(snapshot, options = {}) {
   } else if (bridge && restartTravels) {
     for (const saved of active) {
       try {
-        if (!bridge.getEntity?.(saved.entityId)) {
+        const entity =
+          bridge.getEntity?.(
+            saved.entityId
+          );
+        if (!entity) {
           retainPending(saved);
           continue;
         }
+
+        assertResumableWorldEntity(
+          entity,
+          saved.entityId
+        );
+        registry.updateEntityOccupancy(
+          entity
+        );
 
         const restarted = startTravel(
           registry,
