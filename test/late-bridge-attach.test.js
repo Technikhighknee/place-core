@@ -552,3 +552,80 @@ test("rollbackMaterializePlace does not hide missing cleanup capabilities", () =
     domains.has("leaked-domain")
   );
 });
+
+
+test("road-effect cleanup attempts every binding after individual failures", () => {
+  const removed = [];
+  const navigation = {
+    removeDomainRoadEffect(
+      domainId,
+      effectId,
+      roadId
+    ) {
+      removed.push([domainId, effectId, roadId]);
+      if (roadId === "one") {
+        throw new Error(
+          "synthetic road cleanup failure"
+        );
+      }
+    }
+  };
+  const world = new World({
+    domains: [{ id: "inside-domain" }]
+  });
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+  const instance = {
+    id: "house",
+    layerDomains: new Map([
+      ["inside", "inside-domain"]
+    ])
+  };
+
+  assert.throws(
+    () =>
+      bridge.clearPortalEffects(
+        instance,
+        {
+          id: "door",
+          roadBindings: [
+            { layerId: "inside", roadId: "one" },
+            { layerId: "inside", roadId: "two" }
+          ]
+        }
+      ),
+    /synthetic road cleanup failure/
+  );
+
+  assert.deepEqual(
+    removed.map((entry) => entry[2]),
+    ["one", "two"]
+  );
+
+  removed.length = 0;
+
+  assert.throws(
+    () =>
+      bridge.clearBoundaryEffects(
+        instance,
+        {
+          id: "wall",
+          layerId: "inside",
+          roadBindings: [
+            { roadId: "one" },
+            { roadId: "two" }
+          ]
+        }
+      ),
+    /synthetic road cleanup failure/
+  );
+
+  assert.deepEqual(
+    removed.map((entry) => entry[2]),
+    ["one", "two"]
+  );
+});
