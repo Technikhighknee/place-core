@@ -149,6 +149,46 @@ test("resumeWorldCoreState checks entity coverage before bridge materialization"
   assert.equal(navigation.domainBindings.size, 0);
 });
 
+test("resumeWorldCoreState rejects invalid restored entity state before materialization", () => {
+  const { snapshot } = sourceSnapshot({
+    withTravel: true
+  });
+
+  let materialized = 0;
+  const bridge = {
+    getEntity(id) {
+      if (id !== "hans") return null;
+      return {
+        id: "impostor",
+        domainId: "first:inside",
+        position: { x: 0, y: 0 },
+        mobility: { speed: 1 }
+      };
+    },
+    attachRegistry() {},
+    materializePlace() {
+      materialized += 1;
+      return {};
+    },
+    rollbackMaterializePlace() {}
+  };
+
+  assert.throws(
+    () =>
+      deserializePlaceCore(snapshot, {
+        bridge,
+        resumeWorldCoreState: true
+      }),
+    /restored world entity.*identity|entity.*mismatch/i
+  );
+
+  assert.equal(
+    materialized,
+    0,
+    "resume preflight must reject invalid entities before materialization"
+  );
+});
+
 test("resumeWorldCoreState requires a bridge and restore booleans are strict", () => {
   const { snapshot } = sourceSnapshot({ withTravel: true });
 
