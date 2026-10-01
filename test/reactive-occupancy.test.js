@@ -159,3 +159,45 @@ test("same-location movement still updates the occupancy spatial point", () => {
 
   assert.equal(places.entitiesInPlace("new-house").has("hans"), true);
 });
+
+
+test("reactive occupancy events are deterministic across entity tracking order", () => {
+  const run = (order) => {
+    const places = new PlaceRegistry({
+      captureEvents: true
+    });
+    places.registerDefinition(definition());
+    const place = places.createPlace({
+      id: "house",
+      definitionId: "reactive-place"
+    });
+    const domain =
+      place.layerDomains.get("ground");
+
+    for (const id of order) {
+      places.updateEntityOccupancy({
+        id,
+        domainId: domain,
+        position: { x: 5, y: 5 }
+      });
+    }
+    places.drainEvents();
+
+    places.setSpaceState(
+      "house",
+      "room",
+      { enabled: false }
+    );
+
+    return places.drainEvents()
+      .filter((event) =>
+        event.type === "space-leave"
+      )
+      .map((event) => event.entityId);
+  };
+
+  assert.deepEqual(
+    run(["a", "b"]),
+    run(["b", "a"])
+  );
+});
