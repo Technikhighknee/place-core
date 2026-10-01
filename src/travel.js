@@ -1477,6 +1477,26 @@ function advance(registry, bridge, state, options = {}) {
         });
       };
 
+      if (moved.id !== state.entityId) {
+        registry.removeEntityOccupancy(
+          state.entityId
+        );
+        emitTransferFailed(
+          transferPositionValid
+            ? {
+                x: moved.position.x,
+                y: moved.position.y
+              }
+            : null
+        );
+        return fail(
+          registry,
+          bridge,
+          state,
+          "entity-id-mismatch-after-portal-transfer"
+        );
+      }
+
       if (!transferPositionValid) {
         registry.removeEntityOccupancy(
           state.entityId
