@@ -90,7 +90,11 @@ function assertTravelOptions(options, label) {
   return validatePersistedTravelOptions(options, label);
 }
 
-function assertTravelPlan(plan, entityId) {
+function assertTravelPlan(
+  plan,
+  entityId,
+  expectedTarget = null
+) {
   assertOnlyKeys(
     plan,
     [
@@ -109,7 +113,20 @@ function assertTravelPlan(plan, entityId) {
   if (plan.entityId !== entityId) {
     throw new Error("active travel plan entityId mismatch");
   }
-  assertTravelTarget(plan.target, "active travel plan.target");
+  assertTravelTarget(
+    plan.target,
+    "active travel plan.target"
+  );
+  if (
+    expectedTarget != null &&
+    canonicalStringify(plan.target) !==
+      canonicalStringify(expectedTarget)
+  ) {
+    throw new Error(
+      "active travel plan target mismatch"
+    );
+  }
+
   assertOnlyKeys(
     plan.resolvedTarget,
     [
@@ -1342,11 +1359,11 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       );
     }
 
-    assertTravelPlan(travel.plan, travel.entityId);
-    if (canonicalStringify(travel.plan.target) !==
-        canonicalStringify(travel.target)) {
-      throw new Error("active travel plan target mismatch");
-    }
+    assertTravelPlan(
+      travel.plan,
+      travel.entityId,
+      travel.target
+    );
     if (travel.stepIndex >= travel.plan.steps.length) {
       throw new Error(
         "active travel stepIndex must reference an executable plan step"
