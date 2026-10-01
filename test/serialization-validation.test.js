@@ -1071,4 +1071,31 @@ test("snapshot validation rejects active travel portal identity drift", () => {
     () => validatePlaceCoreSnapshot(snapshot),
     /portal.*key.*mismatch|portalKey.*mismatch/i
   );
+
+  const excessiveRemaining =
+    serializePlaceCore(places);
+  const active =
+    excessiveRemaining.activeTravels[0];
+  const portalIndex =
+    active.plan.steps.findIndex(
+      (step) =>
+        step.type === "traverse-portal"
+    );
+  assert.ok(portalIndex >= 0);
+
+  const portalStepForRemaining =
+    active.plan.steps[portalIndex];
+  active.stepIndex = portalIndex;
+  active.localStarted = false;
+  active.portalEntered = true;
+  active.portalTransitionRemaining =
+    portalStepForRemaining.transitionCost + 1;
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        excessiveRemaining
+      ),
+    /portalTransitionRemaining.*transitionCost|remaining.*transition/i
+  );
 });
