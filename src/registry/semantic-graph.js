@@ -305,20 +305,39 @@ export class SemanticGraphIndex {
       }
     }
 
-    for (const membership of instance.getMemberships()) {
+    const memberships =
+      instance.getMemberships();
+    const expectedByParent = new Map();
+
+    for (const membership of memberships) {
       if (!this.#instances.has(membership.parentPlaceId)) {
         throw new Error(
           `instance ${String(instance.id)} references missing membership parent ${String(membership.parentPlaceId)}`
         );
       }
 
+      const key =
+        typedIdKey(membership.parentPlaceId);
+      const entry =
+        expectedByParent.get(key);
+      if (entry) {
+        entry.count += 1;
+      } else {
+        expectedByParent.set(key, {
+          parentPlaceId:
+            membership.parentPlaceId,
+          count: 1
+        });
+      }
+    }
+
+    for (const {
+      parentPlaceId,
+      count: expectedCount
+    } of expectedByParent.values()) {
       const count = this.#membershipChildren
-        .get(membership.parentPlaceId)
+        .get(parentPlaceId)
         ?.get(instance.id) ?? 0;
-      const expectedCount = instance.getMemberships()
-        .filter((candidate) =>
-          candidate.parentPlaceId === membership.parentPlaceId
-        ).length;
 
       if (count !== expectedCount) {
         throw new Error(
