@@ -14,6 +14,7 @@ import {
   sha256
 } from "./utils.js";
 import {
+  bindTravelRuntimeBridge,
   startTravel,
   stopTravel
 } from "./travel.js";
@@ -414,6 +415,10 @@ export function deserializePlaceCore(snapshot, options = {}) {
         deepFreeze(state.plan);
       }
       state.travelRevision = registry.travelRevision;
+      bindTravelRuntimeBridge(
+        state,
+        bridge
+      );
       registry._setActiveTravel(
         PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
         state.entityId,
