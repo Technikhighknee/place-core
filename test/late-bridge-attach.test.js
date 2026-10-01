@@ -163,6 +163,138 @@ test("late bridge attach rolls every materialized place back on failure", () => 
   places.assertInternalConsistency();
 });
 
+test("failed late attach plus unsubscribe failure stays detached and reattachable", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(definition());
+
+  places.createPlace({
+    id: "first",
+    definitionId: "late-attach-place"
+  });
+  places.createPlace({
+    id: "second",
+    definitionId: "late-attach-place"
+  });
+
+  const {
+    world,
+    bridge
+  } = makeBridge();
+
+  const originalSubscribe =
+    world.subscribeEvents.bind(world);
+  let subscribeCalls = 0;
+  let unsubscribeCalls = 0;
+
+  world.subscribeEvents = (
+    handler,
+    options
+  ) => {
+    subscribeCalls += 1;
+    const unsubscribe =
+      originalSubscribe(
+        handler,
+        options
+      );
+
+    return () => {
+      unsubscribeCalls += 1;
+      if (unsubscribeCalls === 1) {
+        throw new Error(
+          "synthetic rollback unsubscribe failure"
+        );
+      }
+      return unsubscribe();
+    };
+  };
+
+  const originalSyncBoundary =
+    bridge.syncBoundaryState.bind(
+      bridge
+    );
+  let syncCalls = 0;
+  bridge.syncBoundaryState = (
+    ...args
+  ) => {
+    syncCalls += 1;
+    if (syncCalls === 2) {
+      throw new Error(
+        "synthetic late-attach sync failure"
+      );
+    }
+    return originalSyncBoundary(
+      ...args
+    );
+  };
+
+  let failure;
+  try {
+    places.attachWorldCoreBridge(
+      bridge
+    );
+  } catch (error) {
+    failure = error;
+  }
+
+  assert.ok(
+    failure instanceof AggregateError
+  );
+  assert.ok(
+    failure.errors.some(
+      (error) =>
+        /synthetic late-attach sync failure/.test(
+          error.message
+        )
+    )
+  );
+  assert.ok(
+    failure.errors.some(
+      (error) =>
+        /synthetic rollback unsubscribe failure/.test(
+          error.message
+        )
+    )
+  );
+
+  assert.equal(
+    places.bridge,
+    null
+  );
+  assert.equal(
+    subscribeCalls,
+    1
+  );
+  assert.equal(
+    unsubscribeCalls,
+    1
+  );
+
+  bridge.syncBoundaryState =
+    originalSyncBoundary;
+
+  assert.equal(
+    places.attachWorldCoreBridge(
+      bridge
+    ),
+    places
+  );
+
+  assert.equal(
+    unsubscribeCalls,
+    2,
+    "reattach must finish the pending unsubscribe before subscribing again"
+  );
+  assert.equal(
+    subscribeCalls,
+    2
+  );
+  assert.equal(
+    places.bridge,
+    bridge
+  );
+  places.assertInternalConsistency();
+});
+
 test("attaching a different bridge after one is active is rejected", () => {
   const places = new PlaceRegistry();
   const one = makeBridge();
