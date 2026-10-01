@@ -1943,14 +1943,31 @@ export function stepPlaceSimulation(
   const ids = registry._activeTravelIds(
     PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN
   );
+  const errors = [];
+
   for (const entityId of ids) {
-    stepTravel(
-      registry,
-      bridge,
-      entityId,
-      options
+    try {
+      stepTravel(
+        registry,
+        bridge,
+        entityId,
+        options
+      );
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(
+      errors,
+      "multiple travels failed during place simulation step"
     );
   }
+
   return registry._activeTravelCount(
     PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN
   );
