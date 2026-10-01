@@ -1286,6 +1286,49 @@ function finalizeFailedTravel(
   return state;
 }
 
+function liveTravelEntity(
+  registry,
+  bridge,
+  state
+) {
+  const entity =
+    bridge.getEntity(state.entityId);
+
+  if (!entity) {
+    return {
+      entity: null,
+      failure: fail(
+        registry,
+        bridge,
+        state,
+        "entity-missing"
+      )
+    };
+  }
+
+  try {
+    validateTravelEntity(
+      entity,
+      state.entityId
+    );
+  } catch {
+    return {
+      entity: null,
+      failure: fail(
+        registry,
+        bridge,
+        state,
+        "invalid-entity-state"
+      )
+    };
+  }
+
+  return {
+    entity,
+    failure: null
+  };
+}
+
 function fail(registry, bridge, state, reason) {
   let cleanupError = null;
   try {
@@ -1400,8 +1443,16 @@ function advance(registry, bridge, state, options = {}) {
     const step = state.plan.steps[state.stepIndex];
 
     if (step.type === "local-journey") {
-      const entity = bridge.getEntity(state.entityId);
-      if (!entity) return fail(registry, bridge, state, "entity-missing");
+      const live = liveTravelEntity(
+        registry,
+        bridge,
+        state
+      );
+      if (live.failure) {
+        return live.failure;
+      }
+      const entity = live.entity;
+
       if ((entity.domainId ?? "default") !== step.domainId) {
         return replan(registry, bridge, state, options);
       }
@@ -1445,8 +1496,16 @@ function advance(registry, bridge, state, options = {}) {
       const direction = currentPortalDestination(portal, step);
       if (!direction) return replan(registry, bridge, state, options);
 
-      const entity = bridge.getEntity(state.entityId);
-      if (!entity) return fail(registry, bridge, state, "entity-missing");
+      const live = liveTravelEntity(
+        registry,
+        bridge,
+        state
+      );
+      if (live.failure) {
+        return live.failure;
+      }
+      const entity = live.entity;
+
       if ((entity.domainId ?? "default") !== step.fromDomainId) {
         return replan(registry, bridge, state, options);
       }
@@ -1767,17 +1826,17 @@ export function stepTravel(registry, a, b, c) {
 
   const step = state.plan.steps[state.stepIndex];
   if (step?.type === "local-journey" && state.localStarted) {
-    const entity = bridge.getEntity(entityId);
-    if (!entity) {
+    const live = liveTravelEntity(
+      registry,
+      bridge,
+      state
+    );
+    if (live.failure) {
       return publicTravelState(
-        fail(
-          registry,
-          bridge,
-          state,
-          "entity-missing"
-        )
+        live.failure
       );
     }
+    const entity = live.entity;
 
     registry.updateEntityOccupancy(entity);
     if (entity.journey != null) {
