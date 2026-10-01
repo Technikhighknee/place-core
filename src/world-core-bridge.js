@@ -1073,14 +1073,32 @@ export class WorldCoreBridge {
     if (!boundary?.roadBindings?.length) return;
     const domainId = instance.layerDomains.get(boundary.layerId);
     if (!domainId) return;
-    const effectId = `place-core-boundary:${String(instance.id)}:${boundary.id}`;
+
+    const effectId =
+      `place-core-boundary:${String(instance.id)}:${boundary.id}`;
+    const errors = [];
+
     for (const binding of boundary.roadBindings) {
-      this.#navigationMethod(
-        "removeDomainRoadEffect"
-      )(
-        domainId,
-        effectId,
-        binding.roadId
+      try {
+        this.#navigationMethod(
+          "removeDomainRoadEffect"
+        )(
+          domainId,
+          effectId,
+          binding.roadId
+        );
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        `failed to clear boundary effects for ${boundary.id}`
       );
     }
   }
@@ -1137,10 +1155,16 @@ export class WorldCoreBridge {
 
   clearPortalEffects(instance, portalDefinition) {
     if (!portalDefinition?.roadBindings?.length) return;
-    const effectId = `place-core:${String(instance.id)}:${portalDefinition.id}`;
+    const effectId =
+      `place-core:${String(instance.id)}:${portalDefinition.id}`;
+    const errors = [];
+
     for (const binding of portalDefinition.roadBindings) {
-      const domainId = instance.layerDomains.get(binding.layerId);
-      if (domainId) {
+      const domainId =
+        instance.layerDomains.get(binding.layerId);
+      if (!domainId) continue;
+
+      try {
         this.#navigationMethod(
           "removeDomainRoadEffect"
         )(
@@ -1148,7 +1172,19 @@ export class WorldCoreBridge {
           effectId,
           binding.roadId
         );
+      } catch (error) {
+        errors.push(error);
       }
+    }
+
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        `failed to clear portal effects for ${portalDefinition.id}`
+      );
     }
   }
 
