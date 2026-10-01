@@ -2324,7 +2324,16 @@ export class PlaceRegistry {
 
     const exteriorIndex = this.#exteriorIndexes.get(domainId);
     if (exteriorIndex) {
-      for (const instanceId of exteriorIndex.queryPoint(position)) {
+      const exteriorIds =
+        exteriorIndex.queryPoint(position)
+          .sort((a, b) =>
+            compareStrings(
+              typedIdKey(a),
+              typedIdKey(b)
+            )
+          );
+
+      for (const instanceId of exteriorIds) {
         const instance = this.#instances.get(instanceId);
         if (!instance?.placement || instance.placement.containment !== "footprint") continue;
         const definition = this.#definitions.get(instance.definitionId);
