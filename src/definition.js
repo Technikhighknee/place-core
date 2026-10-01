@@ -943,6 +943,11 @@ export function compilePlace(input, options = {}) {
       const anchor = anchorsById.get(space.defaultAnchorId);
       if (!anchor) throw new Error(`space ${space.id} references unknown default anchor ${space.defaultAnchorId}`);
       if (anchor.layerId !== space.layerId) throw new Error(`space ${space.id} default anchor is on another layer`);
+      if (anchor.spaceId !== space.id) {
+        throw new Error(
+          `space ${space.id} default anchor ${anchor.id} must belong to that space`
+        );
+      }
       if (!pointInGeometry(anchor.position, space.geometry)) {
         throw new Error(`space ${space.id} default anchor is outside the space geometry`);
       }
