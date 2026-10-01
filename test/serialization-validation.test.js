@@ -752,6 +752,27 @@ test("active travel snapshots reject ignored or contradictory plan state", () =>
     () => validatePlaceCoreSnapshot(failedButActive),
     /failureReason must be null/
   );
+
+  const wrongDomainPath = serializePlaceCore(places);
+  wrongDomainPath.activeTravels[0].plan.domainPath = [
+    "wrong-domain"
+  ];
+  assert.throws(
+    () => validatePlaceCoreSnapshot(wrongDomainPath),
+    /domainPath.*mismatch|domain path.*mismatch/i
+  );
+
+  const wrongLocalDomain = serializePlaceCore(places);
+  wrongLocalDomain.activeTravels[0].plan.steps[0].domainId =
+    "wrong-domain";
+  wrongLocalDomain.activeTravels[0].plan.legs =
+    structuredClone(
+      wrongLocalDomain.activeTravels[0].plan.steps
+    );
+  assert.throws(
+    () => validatePlaceCoreSnapshot(wrongLocalDomain),
+    /local-journey.*domain|step.*domain.*mismatch/i
+  );
 });
 
 test("deserialize options reject unknown fields", () => {
