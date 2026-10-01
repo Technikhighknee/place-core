@@ -91,6 +91,28 @@ function assertActiveTravelBridge(
   }
 }
 
+function assertRegistryActiveTravelBridge(
+  registry,
+  bridge,
+  operation
+) {
+  for (const entityId of registry._activeTravelIds(
+    PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN
+  )) {
+    const state = registry._getActiveTravel(
+      PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+      entityId
+    );
+    if (state) {
+      assertActiveTravelBridge(
+        state,
+        bridge,
+        operation
+      );
+    }
+  }
+}
+
 function validateTravelEntity(
   entity,
   expectedId = undefined
@@ -1781,6 +1803,11 @@ export function startTravel(registry, a, b, c, d) {
       "startTravel"
     );
   }
+  assertRegistryActiveTravelBridge(
+    registry,
+    bridge,
+    "startTravel"
+  );
 
   const capturedOptions = captureTravelOptions(options);
   const plan = planTravel(
@@ -2037,9 +2064,29 @@ export function stepPlaceSimulation(
     );
   }
 
+  assertRegistryExecutionBridge(
+    registry,
+    bridge,
+    "stepPlaceSimulation"
+  );
+
   const ids = registry._activeTravelIds(
     PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN
   );
+  for (const entityId of ids) {
+    const state = registry._getActiveTravel(
+      PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+      entityId
+    );
+    if (state) {
+      assertActiveTravelBridge(
+        state,
+        bridge,
+        "stepPlaceSimulation"
+      );
+    }
+  }
+
   const errors = [];
 
   for (const entityId of ids) {

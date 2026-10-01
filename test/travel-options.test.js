@@ -1544,3 +1544,133 @@ test("attached registry bridge cannot be bypassed by an explicit travel bridge",
     0
   );
 });
+
+
+test("registry cannot mix active travel runtime bridges", () => {
+  const places = new PlaceRegistry();
+  const entity = {
+    id: "a",
+    domainId: "world",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+
+  const bridge = {
+    getEntity(id) {
+      return id === "a" ? entity : null;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 10 };
+    },
+    startLocalJourney(
+      id,
+      destinationNodeId
+    ) {
+      entity.journey = {
+        destinationNodeId
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    }
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "a",
+      {
+        domainId: "world",
+        position: { x: 10, y: 0 },
+        nodeId: "target"
+      }
+    )
+  );
+
+  const foreignBridge = {
+    getEntity() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    planLocalRoute() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    startLocalJourney() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    stopLocalJourney() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    }
+  };
+
+  assert.throws(
+    () =>
+      startTravel(
+        places,
+        foreignBridge,
+        "b",
+        {
+          domainId: "world",
+          position: { x: 10, y: 0 },
+          nodeId: "target"
+        }
+      ),
+    /WorldCoreBridge that owns the active travel/
+  );
+
+  assert.equal(
+    places.activeTravels.has("a"),
+    true
+  );
+  assert.equal(
+    places.activeTravels.has("b"),
+    false
+  );
+  assert.notEqual(
+    entity.journey,
+    null
+  );
+});
+
+
+test("stepPlaceSimulation rejects a foreign bridge even with no active travels", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  places.attachWorldCoreBridge(bridge);
+
+  const foreignBridge = {
+    getEntity() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    },
+    planLocalRoute() {
+      throw new Error(
+        "foreign bridge must not execute"
+      );
+    }
+  };
+
+  assert.throws(
+    () =>
+      stepPlaceSimulation(
+        places,
+        foreignBridge,
+        0
+      ),
+    /different from the one attached to the PlaceRegistry/
+  );
+});
