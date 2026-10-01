@@ -1645,6 +1645,24 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
       if (travel.target.kind === "nearest") {
         if (
+          travel.target.placeId != null &&
+          target.placeId !==
+            travel.target.placeId
+        ) {
+          throw new Error(
+            `${label} fresh nearest target anchor no longer matches requested place`
+          );
+        }
+        if (
+          travel.target.spaceId != null &&
+          anchor.spaceId !==
+            travel.target.spaceId
+        ) {
+          throw new Error(
+            `${label} fresh nearest target anchor no longer matches requested space ${travel.target.spaceId}`
+          );
+        }
+        if (
           !anchor.tags.includes(
             travel.target.tag
           )
