@@ -1533,14 +1533,44 @@ export function startTravel(registry, a, b, c, d) {
     target: state.target,
     estimatedSeconds: plan.estimatedSeconds
   });
-  return publicTravelState(
-    advance(
-      registry,
-      bridge,
-      state,
-      capturedOptions
-    )
-  );
+
+  try {
+    return publicTravelState(
+      advance(
+        registry,
+        bridge,
+        state,
+        capturedOptions
+      )
+    );
+  } catch (error) {
+    let cleanupError = null;
+    try {
+      bridge.stopLocalJourney?.(entityId);
+    } catch (failure) {
+      cleanupError = failure;
+    }
+
+    state.status = "failed";
+    state.failureReason = "start-error";
+    registry._deleteActiveTravel(
+      PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+      entityId
+    );
+    registry.emit("travel-failed", {
+      entityId,
+      reason: state.failureReason,
+      target: state.target
+    });
+
+    if (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        "travel start failed and local journey cleanup also failed"
+      );
+    }
+    throw error;
+  }
 }
 
 function resolveStepCall(registry, a, b, c) {
