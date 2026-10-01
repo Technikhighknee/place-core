@@ -460,6 +460,31 @@ function assertSnapshotResolvedPortalPhysical(
   label
 ) {
   if (!portal?.a || !portal?.b) return;
+
+  const endpointDomains = new Set([
+    portal.a.domainId,
+    portal.b.domainId
+  ]);
+
+  for (const binding of portal.roadBindings ?? []) {
+    const bindingDomainId =
+      ownValue(
+        item.layerDomains,
+        binding.layerId
+      );
+
+    if (
+      bindingDomainId != null &&
+      !endpointDomains.has(
+        bindingDomainId
+      )
+    ) {
+      throw new Error(
+        `${label} road binding ${binding.roadId} belongs to unrelated domain ${bindingDomainId}`
+      );
+    }
+  }
+
   if (portal.a.domainId !== portal.b.domainId) return;
 
   const domainId = portal.a.domainId;
