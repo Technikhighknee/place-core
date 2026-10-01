@@ -1,5 +1,9 @@
 import { DynamicAabbIndex } from "../geometry.js";
-import { makeSpaceKey } from "./support.js";
+import { compareStrings } from "../utils.js";
+import {
+  makeSpaceKey,
+  typedIdKey
+} from "./support.js";
 
 export class OccupancyIndex {
   #locations = new Map();
@@ -78,14 +82,29 @@ export class OccupancyIndex {
   clearPlace(instanceId) {
     const entityIds = [
       ...(this.#entitiesByPlace.get(instanceId) ?? [])
-    ];
+    ].sort((a, b) =>
+      compareStrings(
+        typedIdKey(a),
+        typedIdKey(b)
+      )
+    );
+
     for (const entityId of entityIds) {
       this.remove(entityId);
     }
   }
 
   refresh(entityIds) {
-    for (const entityId of [...new Set(entityIds)]) {
+    const orderedIds = [
+      ...new Set(entityIds)
+    ].sort((a, b) =>
+      compareStrings(
+        typedIdKey(a),
+        typedIdKey(b)
+      )
+    );
+
+    for (const entityId of orderedIds) {
       const previous = this.#locations.get(entityId);
       if (!previous) continue;
 
