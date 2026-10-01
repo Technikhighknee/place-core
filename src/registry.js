@@ -286,7 +286,13 @@ export class PlaceRegistry {
 
   _activeTravelIds(token) {
     this.#assertTravelMutationToken(token);
-    return [...this.#activeTravels.keys()];
+    return [...this.#activeTravels.keys()]
+      .sort((a, b) =>
+        compareStrings(
+          typedIdKey(a),
+          typedIdKey(b)
+        )
+      );
   }
 
   _activeTravelCount(token) {
