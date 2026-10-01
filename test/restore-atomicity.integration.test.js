@@ -448,3 +448,74 @@ test("restart mode retains travel intent when route planning throws", () => {
     "synthetic restart planning failure"
   );
 });
+
+
+test("restart mode retains travel intent when entity lookup throws", () => {
+  const { snapshot } =
+    sourceSnapshot({
+      withTravel: true
+    });
+
+  const bridge = {
+    registry: null,
+    attachRegistry(
+      registry,
+      onDispose
+    ) {
+      this.registry = registry;
+      this.onDispose = onDispose;
+      return this;
+    },
+    materializePlace() {
+      return {};
+    },
+    syncBoundaryState() {},
+    syncPortalState() {},
+    syncDynamicPortal() {},
+    getEntity() {
+      throw new Error(
+        "synthetic entity lookup failure"
+      );
+    },
+    planLocalRoute() {
+      throw new Error(
+        "planning must not run"
+      );
+    },
+    startLocalJourney() {
+      throw new Error(
+        "journey must not start"
+      );
+    },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const restored =
+    deserializePlaceCore(
+      snapshot,
+      {
+        bridge,
+        restartTravels: true
+      }
+    );
+
+  assert.equal(
+    restored.activeTravels.size,
+    0
+  );
+  assert.equal(
+    restored.pendingTravels.length,
+    1
+  );
+  assert.equal(
+    restored.pendingTravels[0]
+      .restartError?.message,
+    "synthetic entity lookup failure"
+  );
+  assert.equal(
+    bridge.registry,
+    restored
+  );
+  restored.assertInternalConsistency();
+});

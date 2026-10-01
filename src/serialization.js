@@ -427,12 +427,12 @@ export function deserializePlaceCore(snapshot, options = {}) {
     }
   } else if (bridge && restartTravels) {
     for (const saved of active) {
-      if (!bridge.getEntity?.(saved.entityId)) {
-        retainPending(saved);
-        continue;
-      }
-
       try {
+        if (!bridge.getEntity?.(saved.entityId)) {
+          retainPending(saved);
+          continue;
+        }
+
         const restarted = startTravel(
           registry,
           bridge,
