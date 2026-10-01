@@ -138,7 +138,10 @@ function serializeTravelOptions(options = {}) {
   return canonicalClone(options);
 }
 
-function serializeTravelState(state) {
+function serializeTravelState(
+  state,
+  currentTravelRevision
+) {
   return {
     entityId: state.entityId,
     target: canonicalClone(state.target),
@@ -154,7 +157,10 @@ function serializeTravelState(state) {
     worldChangePolicy: state.worldChangePolicy ?? "encounter",
     status: state.status,
     failureReason: state.failureReason ?? null,
-    replans: state.replans ?? 0
+    replans: state.replans ?? 0,
+    planStale:
+      state.travelRevision !==
+      currentTravelRevision
   };
 }
 
@@ -204,7 +210,12 @@ export function serializePlaceCore(registry) {
       .sort((a, b) => compareStrings(idKey(a.id), idKey(b.id))),
     activeTravels: [...registry.activeTravels.values()]
       .filter((state) => state.status === "active")
-      .map(serializeTravelState)
+      .map((state) =>
+        serializeTravelState(
+          state,
+          registry.travelRevision
+        )
+      )
       .sort((a, b) => compareStrings(idKey(a.entityId), idKey(b.entityId))),
     pendingTravels: registry.pendingTravels.map(canonicalClone)
   };
@@ -397,6 +408,9 @@ export function deserializePlaceCore(snapshot, options = {}) {
   if (bridge && resumeWorldCoreState) {
     for (const saved of active) {
       const state = cloneJson(saved);
+      const planWasStale =
+        state.planStale === true;
+      delete state.planStale;
       state.worldChangePolicy ??= "encounter";
       state.options = Object.freeze({
         ...(state.options ?? {}),
@@ -414,7 +428,14 @@ export function deserializePlaceCore(snapshot, options = {}) {
         state.plan.legs = state.plan.steps;
         deepFreeze(state.plan);
       }
-      state.travelRevision = registry.travelRevision;
+      state.travelRevision =
+        planWasStale
+          ? (
+              registry.travelRevision === 0
+                ? 1
+                : registry.travelRevision - 1
+            )
+          : registry.travelRevision;
       bindTravelRuntimeBridge(
         state,
         bridge

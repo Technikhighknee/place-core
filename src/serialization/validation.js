@@ -803,7 +803,8 @@ function assertPersistedActiveTravelState(
       "worldChangePolicy",
       "status",
       "failureReason",
-      "replans"
+      "replans",
+      "planStale"
     ],
     label
   );
@@ -855,6 +856,14 @@ function assertPersistedActiveTravelState(
   ) {
     throw new Error(
       `${label}.replans must be a non-negative safe integer`
+    );
+  }
+  if (
+    travel.planStale !== undefined &&
+    typeof travel.planStale !== "boolean"
+  ) {
+    throw new TypeError(
+      `${label}.planStale must be a boolean`
     );
   }
   if (travel.failureReason !== null) {

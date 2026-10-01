@@ -15,7 +15,8 @@ import {
   compilePlace,
   deserializePlaceCore,
   serializePlaceCore,
-  startTravel
+  startTravel,
+  stepTravel
 } from "../src/index.js";
 
 function definition() {
@@ -518,4 +519,163 @@ test("restart mode retains travel intent when entity lookup throws", () => {
     restored
   );
   restored.assertInternalConsistency();
+});
+
+
+test("resume preserves eager stale-plan semantics across snapshots", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "stale-resume-place",
+    layers: [{ id: "inside" }],
+    spaces: [{
+      id: "room",
+      layerId: "inside",
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: -1,
+        maxX: 6,
+        maxY: 1
+      }
+    }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      spaceId: "room",
+      position: { x: 5, y: 0 },
+      nodeId: "target"
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "stale-resume-place"
+  });
+
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+
+  const sourceBridge = {
+    getEntity(id) {
+      return id === "hans"
+        ? entity
+        : null;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 5 };
+    },
+    startLocalJourney() {
+      entity.journey = {
+        destinationNodeId: "target"
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      sourceBridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      },
+      {
+        worldChangePolicy: "eager"
+      }
+    )
+  );
+
+  places.setSpaceState(
+    "house",
+    "room",
+    { enabled: false }
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+  assert.equal(
+    snapshot.activeTravels[0]
+      .planStale,
+    true
+  );
+
+  const restoredEntity = {
+    ...entity,
+    journey: null
+  };
+  const restoreBridge = {
+    registry: null,
+    attachRegistry(registry) {
+      this.registry = registry;
+      return this;
+    },
+    materializePlace() {
+      return {};
+    },
+    syncBoundaryState() {},
+    syncPortalState() {},
+    syncDynamicPortal() {},
+    getEntity(id) {
+      return id === "hans"
+        ? restoredEntity
+        : null;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 5 };
+    },
+    startLocalJourney() {
+      restoredEntity.journey = {
+        destinationNodeId: "target"
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      restoredEntity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  const restored =
+    deserializePlaceCore(
+      snapshot,
+      {
+        bridge: restoreBridge,
+        resumeWorldCoreState: true
+      }
+    );
+
+  const resumed =
+    restored.activeTravels.get(
+      "hans"
+    );
+  assert.notEqual(
+    resumed.travelRevision,
+    restored.travelRevision
+  );
+
+  const result = stepTravel(
+    restored,
+    restoreBridge,
+    "hans"
+  );
+  assert.equal(
+    result.status,
+    "failed"
+  );
+  assert.equal(
+    result.failureReason,
+    "target-unavailable-after-world-change"
+  );
 });
