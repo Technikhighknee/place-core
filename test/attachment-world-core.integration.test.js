@@ -107,3 +107,122 @@ test("unbound external portal blocks its world-core road until attached", () => 
   assert.equal(nav.findRoute("room", "door", mobility), null);
   assert.equal(places.resolvePortal("house", "front-door").connected, false);
 });
+
+
+test("same-domain external attachment rejects threshold geometry drift transactionally", () => {
+  const world = new World();
+  const navigation =
+    new NavigationRegistry();
+  const external = new Navigation();
+
+  external.addNode({
+    id: "a",
+    x: 0,
+    y: 0
+  });
+  external.addNode({
+    id: "b",
+    x: 1,
+    y: 0
+  });
+  external.addNode({
+    id: "c",
+    x: 2,
+    y: 0
+  });
+  external.addRoad({
+    id: "threshold",
+    from: "a",
+    to: "b"
+  });
+  navigation.registerTopology(
+    "external-attachment-threshold",
+    external
+  );
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+  const places = new PlaceRegistry({
+    bridge
+  });
+
+  places.registerDefinition({
+    id: "external-attachment-place",
+    layers: [{
+      id: "inside",
+      topologyId:
+        "external-attachment-threshold"
+    }],
+    portals: [{
+      id: "door",
+      a: {
+        kind: "external",
+        slot: "outside"
+      },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 1, y: 0 },
+        nodeId: "b"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "threshold"
+      }]
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "external-attachment-place"
+  });
+  const domainId =
+    place.layerDomains.get("inside");
+
+  assert.equal(
+    places.resolvePortal(
+      "house",
+      "door"
+    ).connected,
+    false
+  );
+
+  assert.throws(
+    () =>
+      places.setAttachment(
+        "house",
+        "outside",
+        {
+          domainId,
+          position: { x: 2, y: 0 },
+          nodeId: "c"
+        }
+      ),
+    /portal door road binding threshold does not connect its endpoint nodes/
+  );
+
+  assert.equal(
+    places.getPlace("house")
+      .attachments.has("outside"),
+    false
+  );
+  assert.equal(
+    places.resolvePortal(
+      "house",
+      "door"
+    ).connected,
+    false
+  );
+  assert.equal(
+    navigation
+      .navigationForDomain(domainId)
+      .findRoute("a", "b", mobility),
+    null
+  );
+  places.assertInternalConsistency();
+});
