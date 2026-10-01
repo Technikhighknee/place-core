@@ -2283,7 +2283,12 @@ export class PlaceRegistry {
   getPortalsForDomain(domainId) {
     const keys = this.#portalsByDomain.get(domainId);
     if (!keys) return [];
-    return [...keys].map((key) => this.#portalRecords.get(key)).filter(Boolean);
+    return [...keys]
+      .sort(compareStrings)
+      .map((key) =>
+        this.#portalRecords.get(key)
+      )
+      .filter(Boolean);
   }
 
   getPortalsForRoad(domainId, roadId) {
