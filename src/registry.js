@@ -1291,7 +1291,17 @@ export class PlaceRegistry {
       `space(${spaceId}).enabled`,
       { defaultValue: currentEnabled }
     );
-    if (enabled === currentEnabled) return { ...space, enabled };
+    if (enabled === currentEnabled) {
+      return {
+        ...space,
+        enabled:
+          this.#spaceEnabled(
+            instance,
+            definition,
+            space
+          )
+      };
+    }
 
     instance.setSpaceOverride(
       spaceId,
@@ -1301,8 +1311,20 @@ export class PlaceRegistry {
     this.#spaceEnabledCache.delete(instanceId);
     this.#touchState({ travel: true });
     this.#occupancyIndex.refresh(affectedEntities);
-    this.emit("space-state-changed", { placeId: instanceId, spaceId, enabled });
-    return { ...space, enabled };
+    this.emit("space-state-changed", {
+      placeId: instanceId,
+      spaceId,
+      enabled
+    });
+    return {
+      ...space,
+      enabled:
+        this.#spaceEnabled(
+          instance,
+          definition,
+          space
+        )
+    };
   }
 
   setAttachment(instanceId, slot, value) {
