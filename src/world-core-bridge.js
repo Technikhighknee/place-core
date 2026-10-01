@@ -502,6 +502,82 @@ export class WorldCoreBridge {
       );
     }
 
+    const roadBoundSources = [
+      ...definition.boundaries.map(
+        (boundary) => ({
+          label:
+            `boundary ${boundary.id}`,
+          roadBindings:
+            boundary.roadBindings ?? []
+        })
+      ),
+      ...definition.portals.map(
+        (portal) => ({
+          label:
+            `portal ${portal.id}`,
+          roadBindings:
+            portal.roadBindings ?? []
+        })
+      ),
+      ...[
+        ...(
+          instance.dynamicPortals
+            ?.values?.() ??
+          []
+        )
+      ].map(
+        (portal) => ({
+          label:
+            `dynamic portal ${portal.id}`,
+          roadBindings:
+            portal.roadBindings ?? []
+        })
+      )
+    ];
+
+    // External topology references have no embedded navigation blueprint
+    // to validate against. Validate their road bindings against the actual
+    // registered topology before mutating any domain state.
+    for (const layer of definition.layers) {
+      if (
+        layer.topologyId == null ||
+        layer.navigation != null
+      ) {
+        continue;
+      }
+
+      const topology =
+        this.navigation.topologies
+          ?.get?.(layer.topologyId) ??
+        null;
+      if (!topology) {
+        throw new Error(
+          `navigation topology ${layer.topologyId} referenced by place layer ${definition.id}:${layer.id} is not registered`
+        );
+      }
+
+      for (const source of roadBoundSources) {
+        for (
+          const binding of
+          source.roadBindings
+        ) {
+          if (
+            binding.layerId !== layer.id
+          ) {
+            continue;
+          }
+          if (
+            !topology.roads
+              ?.has?.(binding.roadId)
+          ) {
+            throw new Error(
+              `${source.label} road binding references unknown road ${binding.roadId} in external topology ${layer.topologyId}`
+            );
+          }
+        }
+      }
+    }
+
     // Preflight ownership and existing bindings before mutating either core.
     for (const layer of definition.layers) {
       const domainId = instance.layerDomains.get(layer.id);

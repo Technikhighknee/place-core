@@ -967,3 +967,96 @@ test("materialization rollback never deletes a foreign replacement topology", ()
     undefined
   );
 });
+
+
+test("external topology road bindings are validated before domain mutation", () => {
+  const world = new World();
+  const navigation =
+    new NavigationRegistry();
+  const external = new Navigation();
+
+  external.addNode({
+    id: "a",
+    x: 0,
+    y: 0
+  });
+  external.addNode({
+    id: "b",
+    x: 1,
+    y: 0
+  });
+  external.addRoad({
+    id: "real-road",
+    from: "a",
+    to: "b"
+  });
+  navigation.registerTopology(
+    "external-road-topology",
+    external
+  );
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+  const places = new PlaceRegistry({
+    bridge
+  });
+
+  places.registerDefinition({
+    id: "external-road-binding-place",
+    layers: [{
+      id: "inside",
+      topologyId:
+        "external-road-topology"
+    }],
+    portals: [{
+      id: "door",
+      a: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        nodeId: "a"
+      },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 1, y: 0 },
+        nodeId: "b"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "missing-road"
+      }]
+    }]
+  });
+
+  assert.throws(
+    () =>
+      places.createPlace({
+        id: "house",
+        definitionId:
+          "external-road-binding-place"
+      }),
+    /portal door road binding references unknown road missing-road in external topology external-road-topology/
+  );
+
+  assert.equal(
+    world.getDomain("house:inside"),
+    undefined
+  );
+  assert.equal(
+    navigation.domainBindings.has(
+      "house:inside"
+    ),
+    false
+  );
+  assert.equal(
+    navigation.topologies.get(
+      "external-road-topology"
+    ),
+    external
+  );
+});
