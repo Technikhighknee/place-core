@@ -125,3 +125,38 @@ test("deep relative placement remains iterative across consistency and snapshot 
     true
   );
 });
+
+
+test("high-degree semantic memberships keep consistency checks linear", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "high-degree-semantic-node",
+    layers: [{ id: "inside" }]
+  });
+
+  places.createPlace({
+    id: "parent",
+    definitionId: "high-degree-semantic-node"
+  });
+
+  const memberships = Array.from(
+    { length: 8_000 },
+    (_, index) => ({
+      parentPlaceId: "parent",
+      kind: `relation-${index}`
+    })
+  );
+
+  places.createPlace({
+    id: "child",
+    definitionId: "high-degree-semantic-node",
+    memberships
+  });
+
+  places.assertInternalConsistency();
+
+  assert.equal(
+    places.getPlace("child").getMemberships().length,
+    memberships.length
+  );
+});
