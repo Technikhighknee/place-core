@@ -159,6 +159,50 @@ function assertTravelPlan(plan, entityId) {
     "active travel plan.resolvedTarget.layerId"
   );
 
+  const target = plan.target;
+  const resolvedTarget = plan.resolvedTarget;
+
+  const assertResolvedField = (
+    field,
+    label = field
+  ) => {
+    if (
+      target[field] != null &&
+      resolvedTarget[field] !== target[field]
+    ) {
+      throw new Error(
+        `active travel plan resolvedTarget.${label} does not match target`
+      );
+    }
+  };
+
+  if (target.domainId != null) {
+    assertResolvedField("domainId");
+    assertResolvedField("nodeId");
+    assertResolvedField("placeId");
+    assertResolvedField("anchorId");
+    assertResolvedField("spaceId");
+    assertResolvedField("layerId");
+
+    if (
+      resolvedTarget.position.x !==
+        target.position.x ||
+      resolvedTarget.position.y !==
+        target.position.y
+    ) {
+      throw new Error(
+        "active travel plan resolvedTarget.position does not match target"
+      );
+    }
+  } else if (target.kind === "nearest") {
+    assertResolvedField("placeId");
+    assertResolvedField("spaceId");
+  } else {
+    assertResolvedField("placeId");
+    assertResolvedField("anchorId");
+    assertResolvedField("spaceId");
+  }
+
   assertStringId(plan.startDomainId, "active travel plan.startDomainId");
   assertArray(plan.domainPath, "active travel plan.domainPath");
   normalizeStringList(
