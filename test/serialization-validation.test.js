@@ -1391,3 +1391,157 @@ test("fresh travel snapshots cannot reference a missing target place", () => {
       )
   );
 });
+
+
+test("fresh travel snapshots require every portal step to still resolve", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "fresh-portal-plan",
+    layers: [
+      { id: "a" },
+      { id: "b" }
+    ],
+    portals: [{
+      id: "door",
+      a: {
+        kind: "local",
+        layerId: "a",
+        position: { x: 1, y: 0 },
+        nodeId: "a-door"
+      },
+      b: {
+        kind: "local",
+        layerId: "b",
+        position: { x: 0, y: 0 },
+        nodeId: "b-door"
+      }
+    }],
+    anchors: [{
+      id: "target",
+      layerId: "b",
+      position: { x: 5, y: 0 },
+      nodeId: "target"
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "fresh-portal-plan"
+  });
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("a"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const positions = new Map([
+    ["a-door", { x: 1, y: 0 }],
+    ["b-door", { x: 0, y: 0 }],
+    ["target", { x: 5, y: 0 }]
+  ]);
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute({
+      position,
+      destinationNodeId
+    }) {
+      const target =
+        positions.get(
+          destinationNodeId
+        );
+      if (!target) return null;
+      return {
+        estimatedSeconds:
+          Math.abs(
+            target.x - position.x
+          ) +
+          Math.abs(
+            target.y - position.y
+          )
+      };
+    },
+    startLocalJourney(
+      id,
+      destinationNodeId
+    ) {
+      entity.journey = {
+        destinationNodeId
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+
+  const fresh =
+    serializePlaceCore(places);
+  const portalStep =
+    fresh.activeTravels[0]
+      .plan.steps.find(
+        (step) =>
+          step.type ===
+          "traverse-portal"
+      );
+  assert.ok(portalStep);
+  portalStep.placeId = "missing-house";
+  portalStep.portalKey =
+    "string:missing-house\u001fdoor";
+  fresh.activeTravels[0].plan.legs =
+    structuredClone(
+      fresh.activeTravels[0]
+        .plan.steps
+    );
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        fresh
+      ),
+    /fresh plan step.*missing portal place/
+  );
+
+  const stale =
+    serializePlaceCore(places);
+  const stalePortal =
+    stale.activeTravels[0]
+      .plan.steps.find(
+        (step) =>
+          step.type ===
+          "traverse-portal"
+      );
+  stale.activeTravels[0].planStale =
+    true;
+  stalePortal.placeId =
+    "missing-house";
+  stalePortal.portalKey =
+    "string:missing-house\u001fdoor";
+  stale.activeTravels[0].plan.legs =
+    structuredClone(
+      stale.activeTravels[0]
+        .plan.steps
+    );
+
+  assert.doesNotThrow(
+    () =>
+      validatePlaceCoreSnapshot(
+        stale
+      )
+  );
+});

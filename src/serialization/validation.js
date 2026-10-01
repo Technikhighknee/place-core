@@ -1498,7 +1498,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     }
   }
 
-  const assertFreshTravelTargetReference = (
+  const assertFreshTravelReferences = (
     travel,
     label
   ) => {
@@ -1506,15 +1506,113 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       return;
     }
 
-    const placeId =
+    const targetPlaceId =
       travel.plan.resolvedTarget.placeId;
     if (
-      placeId != null &&
-      !instances.has(idKey(placeId))
+      targetPlaceId != null &&
+      !instances.has(idKey(targetPlaceId))
     ) {
       throw new Error(
-        `${label} fresh plan references missing target place ${String(placeId)}`
+        `${label} fresh plan references missing target place ${String(targetPlaceId)}`
       );
+    }
+
+    for (
+      let i = 0;
+      i < travel.plan.steps.length;
+      i += 1
+    ) {
+      const step = travel.plan.steps[i];
+      if (step.type !== "traverse-portal") {
+        continue;
+      }
+
+      const item =
+        instances.get(idKey(step.placeId));
+      if (!item) {
+        throw new Error(
+          `${label} fresh plan step ${i} references missing portal place ${String(step.placeId)}`
+        );
+      }
+
+      const definition =
+        definitions.get(item.definitionId);
+      const dynamic =
+        (item.dynamicPortals ?? [])
+          .find((portal) =>
+            portal.id === step.portalId
+          ) ??
+        null;
+      const base =
+        dynamic == null
+          ? definition?.getPortal(
+              step.portalId
+            ) ?? null
+          : null;
+      const source = dynamic ?? base;
+
+      if (!source) {
+        throw new Error(
+          `${label} fresh plan step ${i} references missing portal ${step.portalId} on place ${String(step.placeId)}`
+        );
+      }
+
+      const override =
+        dynamic == null
+          ? ownValue(
+              item.portalOverrides ?? {},
+              step.portalId
+            ) ?? {}
+          : {};
+      const portal = {
+        ...source,
+        ...override
+      };
+      const a =
+        resolveSnapshotPortalEndpoint(
+          portal.a,
+          item
+        );
+      const b =
+        resolveSnapshotPortalEndpoint(
+          portal.b,
+          item
+        );
+
+      if (!a || !b) {
+        throw new Error(
+          `${label} fresh plan step ${i} references disconnected portal ${step.portalId}`
+        );
+      }
+
+      const directions = [
+        { from: a, to: b }
+      ];
+      if (portal.bidirectional !== false) {
+        directions.push({
+          from: b,
+          to: a
+        });
+      }
+
+      const matches =
+        directions.some(
+          ({ from, to }) =>
+            from.domainId ===
+              step.fromDomainId &&
+            to.domainId ===
+              step.toDomainId &&
+            to.position.x ===
+              step.destinationPosition.x &&
+            to.position.y ===
+              step.destinationPosition.y
+        );
+
+      if (!matches) {
+        throw new Error(
+          `${label} fresh plan step ${i} portal route no longer matches snapshot state`
+        );
+      }
     }
   };
 
@@ -1524,7 +1622,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       travel,
       "active travel"
     );
-    assertFreshTravelTargetReference(
+    assertFreshTravelReferences(
       travel,
       "active travel"
     );
@@ -1600,7 +1698,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       pending.savedState,
       `${pendingLabel}.savedState`
     );
-    assertFreshTravelTargetReference(
+    assertFreshTravelReferences(
       pending.savedState,
       `${pendingLabel}.savedState`
     );
