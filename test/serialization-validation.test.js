@@ -773,6 +773,13 @@ test("active travel snapshots reject ignored or contradictory plan state", () =>
     () => validatePlaceCoreSnapshot(wrongLocalDomain),
     /local-journey.*domain|step.*domain.*mismatch/i
   );
+
+  const wrongEstimate = serializePlaceCore(places);
+  wrongEstimate.activeTravels[0].plan.estimatedSeconds += 1;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(wrongEstimate),
+    /estimatedSeconds.*mismatch|estimated.*step.*sum/i
+  );
 });
 
 test("deserialize options reject unknown fields", () => {
