@@ -1045,27 +1045,44 @@ export class WorldCoreBridge {
     if (!boundary?.roadBindings?.length) return;
     const domainId = instance.layerDomains.get(boundary.layerId);
     if (!domainId) return;
-    const effectId = `place-core-boundary:${String(instance.id)}:${boundary.id}`;
+
+    const effectId =
+      `place-core-boundary:${String(instance.id)}:${boundary.id}`;
+    const errors = [];
+
     for (const binding of boundary.roadBindings) {
-      if (boundary.enabled) {
-        this.#navigationMethod(
-          "setDomainRoadEffect"
-        )(
-          domainId,
-          effectId,
-          binding.roadId,
-          { blocked: true }
-        );
+      try {
+        if (boundary.enabled) {
+          this.#navigationMethod(
+            "setDomainRoadEffect"
+          )(
+            domainId,
+            effectId,
+            binding.roadId,
+            { blocked: true }
+          );
+        } else {
+          this.#navigationMethod(
+            "removeDomainRoadEffect"
+          )(
+            domainId,
+            effectId,
+            binding.roadId
+          );
+        }
+      } catch (error) {
+        errors.push(error);
       }
-      else {
-        this.#navigationMethod(
-          "removeDomainRoadEffect"
-        )(
-          domainId,
-          effectId,
-          binding.roadId
-        );
-      }
+    }
+
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        `failed to sync boundary effects for ${boundary.id}`
+      );
     }
   }
 
@@ -1125,31 +1142,47 @@ export class WorldCoreBridge {
     const effectId =
       `place-core:${String(instance.id)}:${portalDefinition.id}`;
 
+    const errors = [];
+
     for (const binding of portalDefinition.roadBindings) {
       const domainId = instance.layerDomains.get(binding.layerId);
       if (!domainId) continue;
 
-      if (blocked || traversalDelaySeconds > 0) {
-        this.#navigationMethod(
-          "setDomainRoadEffect"
-        )(
-          domainId,
-          effectId,
-          binding.roadId,
-          {
-            blocked,
-            traversalDelaySeconds
-          }
-        );
-      } else {
-        this.#navigationMethod(
-          "removeDomainRoadEffect"
-        )(
-          domainId,
-          effectId,
-          binding.roadId
-        );
+      try {
+        if (blocked || traversalDelaySeconds > 0) {
+          this.#navigationMethod(
+            "setDomainRoadEffect"
+          )(
+            domainId,
+            effectId,
+            binding.roadId,
+            {
+              blocked,
+              traversalDelaySeconds
+            }
+          );
+        } else {
+          this.#navigationMethod(
+            "removeDomainRoadEffect"
+          )(
+            domainId,
+            effectId,
+            binding.roadId
+          );
+        }
+      } catch (error) {
+        errors.push(error);
       }
+    }
+
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        `failed to sync portal effects for ${portalDefinition.id}`
+      );
     }
   }
 
