@@ -59,6 +59,38 @@ function makeDefinition(id, patch = {}) {
   };
 }
 
+function placesDefinitionForRollback() {
+  return {
+    id: "rollback-ownership",
+    layers: [{
+      id: "inside",
+      topologyId:
+        "rollback-owned-topology",
+      navigation: {
+        nodes: [
+          {
+            id: "a",
+            x: 0,
+            y: 0
+          },
+          {
+            id: "b",
+            x: 1,
+            y: 0
+          }
+        ],
+        roads: [{
+          id: "road",
+          from: "a",
+          to: "b"
+        }]
+      }
+    }],
+    boundaries: [],
+    portals: []
+  };
+}
+
 function setup() {
   const world = new World();
   const navigation = new NavigationRegistry();
@@ -798,5 +830,149 @@ test("definition topology release rolls back partial removal failures", () => {
       "release-second"
     ),
     false
+  );
+});
+
+
+test("definition cleanup never deletes a foreign replacement under an owned topology id", () => {
+  const {
+    navigation,
+    places
+  } = setup();
+
+  places.registerDefinition(
+    makeDefinition("replace-owner")
+  );
+  places.createPlace({
+    id: "house",
+    definitionId: "replace-owner"
+  });
+
+  assert.equal(
+    places.removePlace("house"),
+    true
+  );
+
+  const topologyId =
+    "shared-interior-topology";
+  const owned =
+    navigation.topologies.get(
+      topologyId
+    );
+  assert.ok(owned);
+
+  assert.equal(
+    navigation.removeTopology(
+      topologyId
+    ),
+    true
+  );
+
+  const foreign = new Navigation();
+  foreign.addNode({
+    id: "x",
+    x: 0,
+    y: 0
+  });
+  navigation.registerTopology(
+    topologyId,
+    foreign
+  );
+
+  assert.equal(
+    places.removeDefinition(
+      "replace-owner"
+    ),
+    true
+  );
+  assert.equal(
+    navigation.topologies.get(
+      topologyId
+    ),
+    foreign
+  );
+});
+
+
+test("materialization rollback never deletes a foreign replacement topology", () => {
+  const {
+    world,
+    navigation,
+    bridge
+  } = setup();
+
+  const compiled =
+    placesDefinitionForRollback();
+
+  const layer =
+    compiled.layers[0];
+  const instance = {
+    id: "house",
+    layerDomains: new Map([
+      [layer.id, "house:inside"]
+    ]),
+    dynamicPortals: new Map()
+  };
+
+  const originalBindDomain =
+    navigation.bindDomain.bind(
+      navigation
+    );
+  let replaced = false;
+
+  navigation.bindDomain = (
+    domainId,
+    topologyId
+  ) => {
+    const owned =
+      navigation.topologies.get(
+        topologyId
+      );
+    if (!replaced && owned) {
+      replaced = true;
+      navigation.topologies.delete(
+        topologyId
+      );
+      const foreign = new Navigation();
+      foreign.addNode({
+        id: "foreign",
+        x: 0,
+        y: 0
+      });
+      navigation.topologies.set(
+        topologyId,
+        foreign
+      );
+    }
+    throw new Error(
+      "synthetic bind failure after replacement"
+    );
+  };
+
+  assert.throws(
+    () =>
+      bridge.materializePlace(
+        instance,
+        compiled
+      ),
+    /synthetic bind failure after replacement/
+  );
+
+  navigation.bindDomain =
+    originalBindDomain;
+
+  const remaining =
+    navigation.topologies.get(
+      layer.topologyId
+    );
+  assert.ok(remaining);
+  assert.ok(
+    remaining.nodes.has("foreign")
+  );
+  assert.equal(
+    world.getDomain(
+      "house:inside"
+    ),
+    undefined
   );
 });

@@ -35,7 +35,7 @@ export class WorldCoreBridge {
   #unsubscribeWorldEvents = null;
   #sameDomainPortalCrossings = new Map();
   #onRegistryDispose = null;
-  #ownedTopologyIds = new Set();
+  #ownedTopologies = new Map();
 
   constructor({
     world,
@@ -427,7 +427,8 @@ export class WorldCoreBridge {
           instance.layerDomains.get(layer.id)
         )
       ),
-      newTopologyIds
+      newTopologyIds,
+      newTopologies: new Map()
     };
 
     const domainStateById = new Map(
@@ -542,7 +543,23 @@ export class WorldCoreBridge {
 
     try {
       for (const layer of definition.layers) {
-        this.ensureLayerTopology(definition, layer);
+        const topology =
+          this.ensureLayerTopology(
+            definition,
+            layer
+          );
+        if (
+          layer.topologyId != null &&
+          newTopologyIds.includes(
+            layer.topologyId
+          ) &&
+          topology != null
+        ) {
+          receipt.newTopologies.set(
+            layer.topologyId,
+            topology
+          );
+        }
         const domainId = instance.layerDomains.get(layer.id);
 
         if (!this.world.getDomain?.(domainId)) {
@@ -575,9 +592,13 @@ export class WorldCoreBridge {
       throw error;
     }
 
-    for (const topologyId of newTopologyIds) {
-      this.#ownedTopologyIds.add(
-        topologyId
+    for (
+      const [topologyId, topology] of
+      receipt.newTopologies
+    ) {
+      this.#ownedTopologies.set(
+        topologyId,
+        topology
       );
     }
     return receipt;
@@ -716,15 +737,30 @@ export class WorldCoreBridge {
       [...(receipt.newTopologyIds ?? [])].reverse()
     ) {
       try {
-        if (
-          this.navigation.topologies?.has?.(
+        const expected =
+          receipt.newTopologies?.get?.(
             topologyId
-          )
+          ) ?? null;
+        const current =
+          this.navigation.topologies?.get?.(
+            topologyId
+          ) ?? null;
+
+        if (
+          expected != null &&
+          current === expected
         ) {
           this.navigation.removeTopology(
             topologyId
           );
-          this.#ownedTopologyIds.delete(
+        }
+
+        if (
+          this.#ownedTopologies.get(
+            topologyId
+          ) === expected
+        ) {
+          this.#ownedTopologies.delete(
             topologyId
           );
         }
@@ -770,11 +806,30 @@ export class WorldCoreBridge {
 
     const removed = [];
     try {
-      for (const topologyId of targets) {
-        const topology =
-          this.navigation.topologies.get(
+      for (
+        const {
+          topologyId,
+          topology
+        } of targets
+      ) {
+        const current =
+          this.navigation.topologies?.get?.(
             topologyId
-          );
+          ) ?? null;
+
+        if (current !== topology) {
+          if (
+            this.#ownedTopologies.get(
+              topologyId
+            ) === topology
+          ) {
+            this.#ownedTopologies.delete(
+              topologyId
+            );
+          }
+          continue;
+        }
+
         const didRemove =
           this.navigation.removeTopology(
             topologyId
@@ -823,12 +878,23 @@ export class WorldCoreBridge {
       throw error;
     }
 
-    for (const topologyId of targets) {
-      this.#ownedTopologyIds.delete(
-        topologyId
-      );
+    for (
+      const {
+        topologyId,
+        topology
+      } of targets
+    ) {
+      if (
+        this.#ownedTopologies.get(
+          topologyId
+        ) === topology
+      ) {
+        this.#ownedTopologies.delete(
+          topologyId
+        );
+      }
     }
-    return targets.length;
+    return removed.length;
   }
 
   #releaseUnboundOwnedTopologies() {
@@ -840,9 +906,11 @@ export class WorldCoreBridge {
     const targets = [];
 
     for (
-      const topologyId of
-      [...this.#ownedTopologyIds]
-        .sort(compareStrings)
+      const [topologyId, topology] of
+      [...this.#ownedTopologies.entries()]
+        .sort((a, b) =>
+          compareStrings(a[0], b[0])
+        )
     ) {
       if (
         boundTopologyIds.has(topologyId) ||
@@ -852,17 +920,22 @@ export class WorldCoreBridge {
         continue;
       }
 
-      if (
-        !this.navigation.topologies
-          ?.has?.(topologyId)
-      ) {
-        this.#ownedTopologyIds.delete(
+      const current =
+        this.navigation.topologies
+          ?.get?.(topologyId) ??
+        null;
+
+      if (current !== topology) {
+        this.#ownedTopologies.delete(
           topologyId
         );
         continue;
       }
 
-      targets.push(topologyId);
+      targets.push({
+        topologyId,
+        topology
+      });
     }
 
     return this.#releaseOwnedTopologyTargets(
@@ -886,7 +959,7 @@ export class WorldCoreBridge {
           .map((layer) => layer.topologyId)
           .filter((topologyId) =>
             topologyId != null &&
-            this.#ownedTopologyIds.has(
+            this.#ownedTopologies.has(
               topologyId
             )
           )
@@ -933,17 +1006,29 @@ export class WorldCoreBridge {
         continue;
       }
 
+      const owned =
+        this.#ownedTopologies.get(
+          topologyId
+        );
+      const current =
+        this.navigation.topologies
+          ?.get?.(topologyId) ??
+        null;
+
       if (
-        !this.navigation.topologies
-          ?.has?.(topologyId)
+        owned == null ||
+        current !== owned
       ) {
-        this.#ownedTopologyIds.delete(
+        this.#ownedTopologies.delete(
           topologyId
         );
         continue;
       }
 
-      targets.push(topologyId);
+      targets.push({
+        topologyId,
+        topology: owned
+      });
     }
 
     return this.#releaseOwnedTopologyTargets(
