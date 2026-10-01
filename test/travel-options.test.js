@@ -1114,3 +1114,53 @@ test("replan cleanup failure does not leave travel active", () => {
     0
   );
 });
+
+
+test("stepTravel fails cleanly when the live entity identity drifts", () => {
+  const {
+    places,
+    entity,
+    bridge
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+
+  bridge.getEntity = (id) => {
+    if (id !== "hans") return null;
+    return {
+      ...entity,
+      id: "impostor"
+    };
+  };
+
+  const current =
+    stepTravel(
+      places,
+      bridge,
+      "hans"
+    );
+
+  assert.equal(current.status, "failed");
+  assert.equal(
+    current.failureReason,
+    "invalid-entity-state"
+  );
+  assert.equal(
+    places.activeTravels.has("hans"),
+    false
+  );
+  assert.equal(
+    places.getEntityLocation("impostor"),
+    null
+  );
+});
