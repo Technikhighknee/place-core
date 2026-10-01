@@ -379,3 +379,62 @@ test("travel targets reject ambiguous and malformed runtime shapes", () => {
     );
   }
 });
+
+
+test("planTravel validates direct entity identity, domain, and position", () => {
+  const {
+    places,
+    entity,
+    bridge
+  } = setup();
+
+  const target = {
+    placeId: "house",
+    anchorId: "private-bed"
+  };
+
+  assert.throws(
+    () =>
+      planTravel(
+        places,
+        bridge,
+        {
+          ...entity,
+          id: undefined
+        },
+        target
+      ),
+    /entity\.id|entity id/i
+  );
+
+  assert.throws(
+    () =>
+      planTravel(
+        places,
+        bridge,
+        {
+          ...entity,
+          position: {
+            x: Number.NaN,
+            y: 2
+          }
+        },
+        target
+      ),
+    /entity\.position|finite/i
+  );
+
+  assert.throws(
+    () =>
+      planTravel(
+        places,
+        bridge,
+        {
+          ...entity,
+          domainId: 42
+        },
+        target
+      ),
+    /entity\.domainId|domain id/i
+  );
+});
