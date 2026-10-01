@@ -145,6 +145,8 @@ export class WorldCoreBridge {
       }
     }
 
+    this.#releaseUnboundOwnedTopologies();
+
     let removed = false;
     let unsubscribeError = null;
     try {
@@ -741,6 +743,134 @@ export class WorldCoreBridge {
     return true;
   }
 
+  #releaseOwnedTopologyTargets(
+    targets,
+    failureLabel
+  ) {
+    if (!targets.length) {
+      return 0;
+    }
+
+    if (
+      typeof this.navigation.removeTopology !==
+      "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.removeTopology is required to release place-owned topologies"
+      );
+    }
+    if (
+      typeof this.navigation.registerTopology !==
+      "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.registerTopology is required for transactional topology release rollback"
+      );
+    }
+
+    const removed = [];
+    try {
+      for (const topologyId of targets) {
+        const topology =
+          this.navigation.topologies.get(
+            topologyId
+          );
+        const didRemove =
+          this.navigation.removeTopology(
+            topologyId
+          );
+        if (!didRemove) {
+          throw new Error(
+            `failed to remove navigation topology ${topologyId}`
+          );
+        }
+        removed.push({
+          topologyId,
+          topology
+        });
+      }
+    } catch (error) {
+      const rollbackErrors = [];
+      for (
+        const {
+          topologyId,
+          topology
+        } of removed.reverse()
+      ) {
+        try {
+          if (
+            !this.navigation.topologies
+              ?.has?.(topologyId)
+          ) {
+            this.navigation.registerTopology(
+              topologyId,
+              topology
+            );
+          }
+        } catch (rollbackError) {
+          rollbackErrors.push(
+            rollbackError
+          );
+        }
+      }
+
+      if (rollbackErrors.length) {
+        throw new AggregateError(
+          [error, ...rollbackErrors],
+          failureLabel
+        );
+      }
+      throw error;
+    }
+
+    for (const topologyId of targets) {
+      this.#ownedTopologyIds.delete(
+        topologyId
+      );
+    }
+    return targets.length;
+  }
+
+  #releaseUnboundOwnedTopologies() {
+    const boundTopologyIds = new Set(
+      this.navigation.domainBindings
+        ?.values?.() ??
+      []
+    );
+    const targets = [];
+
+    for (
+      const topologyId of
+      [...this.#ownedTopologyIds]
+        .sort(compareStrings)
+    ) {
+      if (
+        boundTopologyIds.has(topologyId) ||
+        this.navigation.defaultTopologyId ===
+          topologyId
+      ) {
+        continue;
+      }
+
+      if (
+        !this.navigation.topologies
+          ?.has?.(topologyId)
+      ) {
+        this.#ownedTopologyIds.delete(
+          topologyId
+        );
+        continue;
+      }
+
+      targets.push(topologyId);
+    }
+
+    return this.#releaseOwnedTopologyTargets(
+      targets,
+      "failed to dispose WorldCoreBridge topologies and restore prior navigation state"
+    );
+  }
+
   releaseDefinitionTopologies(
     definition
   ) {
@@ -816,88 +946,10 @@ export class WorldCoreBridge {
       targets.push(topologyId);
     }
 
-    if (!targets.length) {
-      return 0;
-    }
-
-    if (
-      typeof this.navigation.removeTopology !==
-      "function"
-    ) {
-      throw new Error(
-        "world-core NavigationRegistry.removeTopology is required to release place definition topologies"
-      );
-    }
-    if (
-      typeof this.navigation.registerTopology !==
-      "function"
-    ) {
-      throw new Error(
-        "world-core NavigationRegistry.registerTopology is required for transactional topology release rollback"
-      );
-    }
-
-    const removed = [];
-    try {
-      for (const topologyId of targets) {
-        const topology =
-          this.navigation.topologies.get(
-            topologyId
-          );
-        const didRemove =
-          this.navigation.removeTopology(
-            topologyId
-          );
-        if (!didRemove) {
-          throw new Error(
-            `failed to remove navigation topology ${topologyId}`
-          );
-        }
-        removed.push({
-          topologyId,
-          topology
-        });
-      }
-    } catch (error) {
-      const rollbackErrors = [];
-      for (
-        const {
-          topologyId,
-          topology
-        } of removed.reverse()
-      ) {
-        try {
-          if (
-            !this.navigation.topologies
-              ?.has?.(topologyId)
-          ) {
-            this.navigation.registerTopology(
-              topologyId,
-              topology
-            );
-          }
-        } catch (rollbackError) {
-          rollbackErrors.push(
-            rollbackError
-          );
-        }
-      }
-
-      if (rollbackErrors.length) {
-        throw new AggregateError(
-          [error, ...rollbackErrors],
-          "failed to release place definition topologies and restore prior navigation state"
-        );
-      }
-      throw error;
-    }
-
-    for (const topologyId of targets) {
-      this.#ownedTopologyIds.delete(
-        topologyId
-      );
-    }
-    return targets.length;
+    return this.#releaseOwnedTopologyTargets(
+      targets,
+      "failed to release place definition topologies and restore prior navigation state"
+    );
   }
 
   ensureLayerTopology(definition, layer) {

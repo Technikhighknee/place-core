@@ -735,3 +735,85 @@ test("road-effect sync attempts every binding after individual failures", () => 
     ["one", "two"]
   );
 });
+
+
+test("disposing a detached-empty registry releases bridge-owned topologies", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(
+    definition()
+  );
+
+  const {
+    navigation,
+    bridge
+  } = makeBridge();
+
+  places.attachWorldCoreBridge(
+    bridge
+  );
+  places.createPlace({
+    id: "house",
+    definitionId:
+      "late-attach-place"
+  });
+
+  const topologyId =
+    places.getDefinition(
+      "late-attach-place"
+    ).layers[0].topologyId;
+
+  assert.ok(
+    navigation.topologies.has(
+      topologyId
+    )
+  );
+  assert.equal(
+    places.removePlace("house"),
+    true
+  );
+
+  bridge.dispose();
+
+  assert.equal(places.bridge, null);
+  assert.equal(
+    navigation.topologies.has(
+      topologyId
+    ),
+    false
+  );
+
+  assert.equal(
+    places.removeDefinition(
+      "late-attach-place"
+    ),
+    true
+  );
+
+  const replacement =
+    definition();
+  replacement.layers[0]
+    .navigation.roads[0].width = 3;
+
+  places.registerDefinition(
+    replacement
+  );
+  places.attachWorldCoreBridge(
+    bridge
+  );
+
+  assert.doesNotThrow(
+    () =>
+      places.createPlace({
+        id: "replacement-house",
+        definitionId:
+          "late-attach-place"
+      })
+  );
+  assert.equal(
+    navigation.topologies
+      .get(topologyId)
+      .roads.get("door-road")
+      .width,
+    3
+  );
+});
