@@ -1219,3 +1219,73 @@ test("stepTravel finalizes travel when a replanned local journey start throws", 
     false
   );
 });
+
+
+test("stepPlaceSimulation orders active travels deterministically", () => {
+  const run = (order) => {
+    const places = new PlaceRegistry();
+    const entities = new Map(
+      ["a", "b"].map((id) => [
+        id,
+        {
+          id,
+          domainId: "world",
+          position: { x: 0, y: 0 },
+          mobility: { speed: 1 },
+          journey: null
+        }
+      ])
+    );
+    const reads = [];
+
+    const bridge = {
+      getEntity(id) {
+        reads.push(id);
+        return entities.get(id) ?? null;
+      },
+      planLocalRoute() {
+        return { estimatedSeconds: 10 };
+      },
+      startLocalJourney(
+        id,
+        destinationNodeId
+      ) {
+        entities.get(id).journey = {
+          destinationNodeId
+        };
+        return true;
+      },
+      stopLocalJourney(id) {
+        entities.get(id).journey = null;
+      }
+    };
+
+    for (const id of order) {
+      assert.ok(
+        startTravel(
+          places,
+          bridge,
+          id,
+          {
+            domainId: "world",
+            position: { x: 10, y: 0 },
+            nodeId: "target"
+          }
+        )
+      );
+    }
+
+    reads.length = 0;
+    stepPlaceSimulation(
+      places,
+      bridge,
+      0
+    );
+    return reads;
+  };
+
+  assert.deepEqual(
+    run(["a", "b"]),
+    run(["b", "a"])
+  );
+});
