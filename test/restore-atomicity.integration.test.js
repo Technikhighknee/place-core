@@ -15,6 +15,7 @@ import {
   compilePlace,
   deserializePlaceCore,
   serializePlaceCore,
+  validatePlaceCoreSnapshot,
   startTravel,
   stepTravel
 } from "../src/index.js";
