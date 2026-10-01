@@ -1959,7 +1959,23 @@ export function stepTravel(registry, a, b, c) {
 
   if (worldChangePolicy === "eager" &&
       state.travelRevision !== registry.travelRevision) {
-    const next = replan(registry, bridge, state, effectiveOptions);
+    const live = liveTravelEntity(
+      registry,
+      bridge,
+      state
+    );
+    if (live.failure) {
+      return publicTravelState(
+        live.failure
+      );
+    }
+
+    const next = replan(
+      registry,
+      bridge,
+      state,
+      effectiveOptions
+    );
     if (next.status !== "active") {
       return publicTravelState(next);
     }

@@ -1921,3 +1921,61 @@ test("replan planning exception is finalized without duplicate cleanup", () => {
     0
   );
 });
+
+
+test("eager replan clears stale occupancy when entity disappears before replanning", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      },
+      {
+        worldChangePolicy: "eager"
+      }
+    )
+  );
+
+  assert.ok(
+    places.getEntityLocation("hans")
+  );
+
+  places.setPortalState(
+    "house",
+    "stairs",
+    { locked: true }
+  );
+  bridge.getEntity = () => null;
+
+  const current =
+    stepTravel(
+      places,
+      bridge,
+      "hans"
+    );
+
+  assert.equal(
+    current.status,
+    "failed"
+  );
+  assert.equal(
+    current.failureReason,
+    "entity-missing"
+  );
+  assert.equal(
+    places.getEntityLocation("hans"),
+    null
+  );
+  assert.equal(
+    places.activeTravels.has("hans"),
+    false
+  );
+});
