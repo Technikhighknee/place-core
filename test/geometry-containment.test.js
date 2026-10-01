@@ -410,3 +410,71 @@ test("segment-bounds intersection survives finite subtraction overflow", () => {
     true
   );
 });
+
+
+test("deep space enablement remains scalable and invalidates after overrides", () => {
+  const depth = 3_000;
+  const spaces = Array.from(
+    { length: depth },
+    (_, index) => ({
+      id: `space-${index}`,
+      layerId: "inside",
+      parentSpaceId:
+        index === 0
+          ? null
+          : `space-${index - 1}`,
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 1,
+        maxY: 1
+      }
+    })
+  );
+
+  const definition = compilePlace({
+    id: "deep-space-enablement",
+    layers: [{ id: "inside" }],
+    spaces
+  });
+
+  const places = new PlaceRegistry();
+  places.registerDefinition(definition);
+  const place = places.createPlace({
+    id: "deep-place",
+    definitionId: definition.id
+  });
+  const domainId =
+    place.layerDomains.get("inside");
+
+  assert.equal(
+    places.locate(
+      domainId,
+      { x: 0.5, y: 0.5 }
+    ).spaces.length,
+    depth
+  );
+
+  places.setSpaceState(
+    "deep-place",
+    "space-0",
+    { enabled: false }
+  );
+
+  assert.equal(
+    places.locate(
+      domainId,
+      { x: 0.5, y: 0.5 }
+    ).spaces.length,
+    0
+  );
+
+  assert.equal(
+    places.getSpace(
+      "deep-place",
+      `space-${depth - 1}`
+    ).enabled,
+    false
+  );
+});
