@@ -1454,26 +1454,15 @@ function advance(registry, bridge, state, options = {}) {
         );
       }
 
-      registry.updateEntityOccupancy(moved);
-
       const movedDomainId = moved.domainId ?? "default";
       const transferPositionValid =
         moved.position &&
         Number.isFinite(moved.position.x) &&
         Number.isFinite(moved.position.y);
-      const transferPositionDistance =
-        transferPositionValid
-          ? pointDistance(
-              moved.position,
-              direction.to.position
-            )
-          : Infinity;
 
-      if (
-        movedDomainId !== step.toDomainId ||
-        transferPositionDistance >
-          portalEntryTolerance
-      ) {
+      const emitTransferFailed = (
+        actualPosition
+      ) => {
         registry.emit("portal-transfer-failed", {
           entityId: state.entityId,
           placeId: portal.instanceId,
@@ -1484,12 +1473,39 @@ function advance(registry, bridge, state, options = {}) {
             x: direction.to.position.x,
             y: direction.to.position.y
           },
-          actualPosition: transferPositionValid
-            ? {
-                x: moved.position.x,
-                y: moved.position.y
-              }
-            : null
+          actualPosition
+        });
+      };
+
+      if (!transferPositionValid) {
+        registry.removeEntityOccupancy(
+          state.entityId
+        );
+        emitTransferFailed(null);
+        return fail(
+          registry,
+          bridge,
+          state,
+          "invalid-position-after-portal-transfer"
+        );
+      }
+
+      registry.updateEntityOccupancy(moved);
+
+      const transferPositionDistance =
+        pointDistance(
+          moved.position,
+          direction.to.position
+        );
+
+      if (
+        movedDomainId !== step.toDomainId ||
+        transferPositionDistance >
+          portalEntryTolerance
+      ) {
+        emitTransferFailed({
+          x: moved.position.x,
+          y: moved.position.y
         });
         return replan(registry, bridge, state, options);
       }
