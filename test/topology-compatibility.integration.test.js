@@ -1060,3 +1060,95 @@ test("external topology road bindings are validated before domain mutation", () 
     external
   );
 });
+
+
+test("external topology threshold road must connect portal endpoint nodes", () => {
+  const world = new World();
+  const navigation =
+    new NavigationRegistry();
+  const external = new Navigation();
+
+  external.addNode({
+    id: "a",
+    x: 0,
+    y: 0
+  });
+  external.addNode({
+    id: "b",
+    x: 1,
+    y: 0
+  });
+  external.addNode({
+    id: "c",
+    x: 2,
+    y: 0
+  });
+  external.addRoad({
+    id: "threshold",
+    from: "a",
+    to: "b"
+  });
+  navigation.registerTopology(
+    "external-threshold",
+    external
+  );
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+  const places = new PlaceRegistry({
+    bridge
+  });
+
+  places.registerDefinition({
+    id: "external-threshold-place",
+    layers: [{
+      id: "inside",
+      topologyId:
+        "external-threshold"
+    }],
+    portals: [{
+      id: "door",
+      a: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        nodeId: "a"
+      },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 2, y: 0 },
+        nodeId: "c"
+      },
+      roadBindings: [{
+        layerId: "inside",
+        roadId: "threshold"
+      }]
+    }]
+  });
+
+  assert.throws(
+    () =>
+      places.createPlace({
+        id: "house",
+        definitionId:
+          "external-threshold-place"
+      }),
+    /threshold road binding threshold does not connect its endpoint nodes/
+  );
+
+  assert.equal(
+    world.getDomain("house:inside"),
+    undefined
+  );
+  assert.equal(
+    navigation.domainBindings.has(
+      "house:inside"
+    ),
+    false
+  );
+});
