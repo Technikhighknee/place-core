@@ -1498,9 +1498,33 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     }
   }
 
+  const assertFreshTravelTargetReference = (
+    travel,
+    label
+  ) => {
+    if (travel.planStale === true) {
+      return;
+    }
+
+    const placeId =
+      travel.plan.resolvedTarget.placeId;
+    if (
+      placeId != null &&
+      !instances.has(idKey(placeId))
+    ) {
+      throw new Error(
+        `${label} fresh plan references missing target place ${String(placeId)}`
+      );
+    }
+  };
+
   const travelEntities = new Set();
   for (const travel of snapshot.activeTravels ?? []) {
     assertPersistedActiveTravelState(
+      travel,
+      "active travel"
+    );
+    assertFreshTravelTargetReference(
       travel,
       "active travel"
     );
@@ -1573,6 +1597,10 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       );
     }
     assertPersistedActiveTravelState(
+      pending.savedState,
+      `${pendingLabel}.savedState`
+    );
+    assertFreshTravelTargetReference(
       pending.savedState,
       `${pendingLabel}.savedState`
     );

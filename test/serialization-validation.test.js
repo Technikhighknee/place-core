@@ -1305,3 +1305,89 @@ test("pending saved travel state uses full active-state validation", () => {
     /estimatedSeconds.*mismatch|estimated.*step.*sum/i
   );
 });
+
+
+test("fresh travel snapshots cannot reference a missing target place", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "fresh-target-place",
+    layers: [{ id: "inside" }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      position: { x: 5, y: 0 },
+      nodeId: "target"
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "fresh-target-place"
+  });
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 5 };
+    },
+    startLocalJourney() {
+      entity.journey = {
+        destinationNodeId: "target"
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+
+  const fresh =
+    serializePlaceCore(places);
+  assert.equal(
+    fresh.activeTravels[0].planStale,
+    false
+  );
+  fresh.instances = [];
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        fresh
+      ),
+    /fresh plan references missing target place house/
+  );
+
+  const stale =
+    serializePlaceCore(places);
+  stale.activeTravels[0].planStale =
+    true;
+  stale.instances = [];
+
+  assert.doesNotThrow(
+    () =>
+      validatePlaceCoreSnapshot(
+        stale
+      )
+  );
+});
