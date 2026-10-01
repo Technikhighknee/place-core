@@ -678,3 +678,125 @@ test("owned shared topology survives until the last referencing definition is re
     false
   );
 });
+
+
+test("definition topology release rolls back partial removal failures", () => {
+  const {
+    navigation,
+    places
+  } = setup();
+
+  const layer = (
+    id,
+    topologyId
+  ) => ({
+    id,
+    topologyId,
+    navigation: {
+      nodes: [
+        {
+          id: "a",
+          x: 0,
+          y: 0
+        },
+        {
+          id: "b",
+          x: 1,
+          y: 0
+        }
+      ],
+      roads: [{
+        id: "road",
+        from: "a",
+        to: "b"
+      }]
+    }
+  });
+
+  places.registerDefinition({
+    id: "release-rollback",
+    layers: [
+      layer(
+        "first",
+        "release-first"
+      ),
+      layer(
+        "second",
+        "release-second"
+      )
+    ]
+  });
+  places.createPlace({
+    id: "house",
+    definitionId: "release-rollback"
+  });
+  assert.equal(
+    places.removePlace("house"),
+    true
+  );
+
+  const originalRemoveTopology =
+    navigation.removeTopology.bind(
+      navigation
+    );
+  let removals = 0;
+  navigation.removeTopology = (
+    topologyId
+  ) => {
+    removals += 1;
+    if (removals === 2) {
+      throw new Error(
+        "synthetic topology release failure"
+      );
+    }
+    return originalRemoveTopology(
+      topologyId
+    );
+  };
+
+  assert.throws(
+    () =>
+      places.removeDefinition(
+        "release-rollback"
+      ),
+    /synthetic topology release failure/
+  );
+
+  navigation.removeTopology =
+    originalRemoveTopology;
+
+  assert.ok(
+    places.getDefinition(
+      "release-rollback"
+    )
+  );
+  assert.ok(
+    navigation.topologies.has(
+      "release-first"
+    )
+  );
+  assert.ok(
+    navigation.topologies.has(
+      "release-second"
+    )
+  );
+
+  assert.equal(
+    places.removeDefinition(
+      "release-rollback"
+    ),
+    true
+  );
+  assert.equal(
+    navigation.topologies.has(
+      "release-first"
+    ),
+    false
+  );
+  assert.equal(
+    navigation.topologies.has(
+      "release-second"
+    ),
+    false
+  );
+});
