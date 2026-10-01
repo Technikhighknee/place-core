@@ -326,7 +326,9 @@ export function resolveTravelTarget(registry, target) {
   return deepFreeze({
     placeId: target.placeId,
     anchorId: anchor.id,
-    spaceId: anchor.spaceId,
+    spaceId:
+      target.spaceId ??
+      anchor.spaceId,
     layerId: anchor.layerId,
     domainId: instance.layerDomains.get(anchor.layerId),
     position: anchor.position,

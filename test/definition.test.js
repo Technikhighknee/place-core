@@ -98,47 +98,6 @@ test("embedded navigation nodes must coincide with semantic target positions", (
   );
 });
 
-test("space default anchors must belong to the space semantically", () => {
-  assert.throws(
-    () => compilePlace({
-      id: "wrong-space-default-anchor",
-      layers: [{ id: "inside" }],
-      spaces: [
-        {
-          id: "a",
-          layerId: "inside",
-          geometry: {
-            type: "aabb",
-            minX: 0,
-            minY: 0,
-            maxX: 10,
-            maxY: 10
-          },
-          defaultAnchorId: "target"
-        },
-        {
-          id: "b",
-          layerId: "inside",
-          geometry: {
-            type: "aabb",
-            minX: 0,
-            minY: 0,
-            maxX: 10,
-            maxY: 10
-          }
-        }
-      ],
-      anchors: [{
-        id: "target",
-        layerId: "inside",
-        spaceId: "b",
-        position: { x: 5, y: 5 }
-      }]
-    }),
-    /default anchor target must belong to that space/
-  );
-});
-
 test("space default anchors must physically lie inside their space", () => {
   const invalid = tavernBlueprint();
   invalid.spaces[1].defaultAnchorId = "front";

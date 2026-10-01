@@ -1,4 +1,5 @@
 import { compilePlace } from "../definition.js";
+import { pointInGeometry } from "../geometry.js";
 import {
   assertId,
   assertStringId,
@@ -1642,11 +1643,75 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         );
       }
 
+      const targetSpaceMatchesAnchor = (() => {
+        const anchorSpaceId =
+          anchor.spaceId ?? null;
+        const resolvedSpaceId =
+          target.spaceId ?? null;
+
+        if (anchorSpaceId === resolvedSpaceId) {
+          return true;
+        }
+
+        const requestedSpaceId =
+          travel.target?.domainId == null &&
+          travel.target?.kind == null &&
+          travel.target?.anchorId == null
+            ? travel.target?.spaceId ?? null
+            : null;
+
+        if (
+          requestedSpaceId == null ||
+          resolvedSpaceId !== requestedSpaceId
+        ) {
+          return false;
+        }
+
+        const requestedSpace =
+          definition.getSpace(
+            requestedSpaceId
+          );
+        if (
+          !requestedSpace ||
+          requestedSpace.layerId !==
+            anchor.layerId ||
+          !pointInGeometry(
+            anchor.position,
+            requestedSpace.geometry
+          )
+        ) {
+          return false;
+        }
+
+        if (anchorSpaceId == null) {
+          return true;
+        }
+
+        let current =
+          definition.getSpace(
+            anchorSpaceId
+          );
+        while (current) {
+          if (
+            current.id ===
+              requestedSpaceId
+          ) {
+            return true;
+          }
+          current =
+            current.parentSpaceId == null
+              ? null
+              : definition.getSpace(
+                  current.parentSpaceId
+                );
+        }
+        return false;
+      })();
+
       if (
         anchor.layerId !==
           target.layerId ||
-        (anchor.spaceId ?? null) !==
-          (target.spaceId ?? null) ||
+        !targetSpaceMatchesAnchor ||
         (anchor.nodeId ?? null) !==
           (target.nodeId ?? null) ||
         anchor.position.x !==

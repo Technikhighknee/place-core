@@ -140,6 +140,69 @@ test("direct travel context does not become a semantic availability requirement"
   );
 });
 
+test("space targets preserve the requested parent space when its default anchor is nested", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "nested-default-anchor",
+    layers: [{ id: "inside" }],
+    spaces: [
+      {
+        id: "floor",
+        layerId: "inside",
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: 0,
+          maxX: 10,
+          maxY: 10
+        },
+        defaultAnchorId: "counter"
+      },
+      {
+        id: "room",
+        parentSpaceId: "floor",
+        layerId: "inside",
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: 0,
+          maxX: 5,
+          maxY: 5
+        }
+      }
+    ],
+    anchors: [{
+      id: "counter",
+      layerId: "inside",
+      spaceId: "room",
+      position: { x: 1, y: 1 },
+      nodeId: "counter"
+    }]
+  });
+  places.createPlace({
+    id: "house",
+    definitionId: "nested-default-anchor"
+  });
+
+  const resolved =
+    resolveTravelTarget(
+      places,
+      {
+        placeId: "house",
+        spaceId: "floor"
+      }
+    );
+
+  assert.equal(
+    resolved.anchorId,
+    "counter"
+  );
+  assert.equal(
+    resolved.spaceId,
+    "floor"
+  );
+});
+
 test("explicit anchor targets reject disabled spaces", () => {
   const { places, bridge } = setup();
   places.setSpaceState("house", "private-room", { enabled: false });
