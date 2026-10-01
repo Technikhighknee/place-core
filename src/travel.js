@@ -1811,9 +1811,10 @@ export function stepTravel(registry, a, b, c) {
   );
   if (!state) return null;
 
-  const effectiveOptions = normalizeEffectiveStepOptions(
-    effectiveTravelOptions(state, options)
-  );
+  try {
+    const effectiveOptions = normalizeEffectiveStepOptions(
+      effectiveTravelOptions(state, options)
+    );
   const worldChangePolicy = effectiveOptions.worldChangePolicy;
 
   if (worldChangePolicy === "eager" &&
@@ -1866,14 +1867,46 @@ export function stepTravel(registry, a, b, c) {
     }
   }
 
-  return publicTravelState(
-    advance(
-      registry,
-      bridge,
-      state,
-      effectiveOptions
-    )
-  );
+    return publicTravelState(
+      advance(
+        registry,
+        bridge,
+        state,
+        effectiveOptions
+      )
+    );
+  } catch (error) {
+    if (
+      state.status === "active" &&
+      registry._hasActiveTravel(
+        PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+        entityId
+      )
+    ) {
+      let cleanupError = null;
+      try {
+        bridge.stopLocalJourney?.(
+          entityId
+        );
+      } catch (failure) {
+        cleanupError = failure;
+      }
+
+      finalizeFailedTravel(
+        registry,
+        state,
+        "step-error"
+      );
+
+      if (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "travel step failed and local journey cleanup also failed"
+        );
+      }
+    }
+    throw error;
+  }
 }
 
 export function stepPlaceSimulation(
