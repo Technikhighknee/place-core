@@ -745,6 +745,15 @@ test("active travel snapshots reject ignored or contradictory plan state", () =>
     /stepIndex must reference an executable plan step/
   );
 
+  const unsafeReplans =
+    serializePlaceCore(places);
+  unsafeReplans.activeTravels[0].replans =
+    Number.MAX_SAFE_INTEGER + 1;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(unsafeReplans),
+    /replans.*safe integer|invalid active travel replans/i
+  );
+
   const failedButActive = serializePlaceCore(places);
   failedButActive.activeTravels[0].failureReason =
     "should-not-exist";
