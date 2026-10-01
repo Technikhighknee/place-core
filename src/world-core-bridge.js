@@ -428,6 +428,16 @@ export class WorldCoreBridge {
         );
       }
 
+      if (
+        domainState.existed &&
+        this.existingDomainPolicy === "adopt" &&
+        domainId === "default"
+      ) {
+        throw new Error(
+          "world-core default domain cannot be adopted because it cannot be removed"
+        );
+      }
+
       if (layer.topologyId != null) {
         if (typeof this.navigation.bindDomain !== "function") {
           throw new Error(
