@@ -365,3 +365,68 @@ test("road-bound bridge sync requires road-effect capabilities on demand", () =>
     /removeDomainRoadEffect/
   );
 });
+
+
+test("materialization preflights domain rollback capability before mutation", () => {
+  const domains = new Map();
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain(id) {
+      return domains.get(id);
+    },
+    addDomain({ id }) {
+      const domain = { id, entityCount: 0 };
+      domains.set(id, domain);
+      return domain;
+    }
+  };
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation: {},
+    startJourney,
+    stopJourney
+  });
+
+  const instance = {
+    id: "house",
+    layerDomains: new Map([
+      ["one", "house:one"],
+      ["two", "house:two"]
+    ])
+  };
+  const placeDefinition = {
+    id: "two-layer-place",
+    layers: [
+      {
+        id: "one",
+        topologyId: null,
+        navigation: null
+      },
+      {
+        id: "two",
+        topologyId: null,
+        navigation: null
+      }
+    ],
+    portals: [],
+    boundaries: []
+  };
+
+  assert.throws(
+    () =>
+      bridge.materializePlace(
+        instance,
+        placeDefinition
+      ),
+    /removeDomain.*transaction|rollback.*removeDomain/i
+  );
+
+  assert.equal(
+    domains.size,
+    0,
+    "preflight must fail before any domain is created"
+  );
+});
