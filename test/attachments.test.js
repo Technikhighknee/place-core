@@ -132,3 +132,95 @@ test("detaching a portal makes an existing graph edge disappear immediately", ()
   assert.equal(places.getPortalsForDomain(inside).length, 0);
   assert.equal(places.getPortalsForDomain("street").length, 0);
 });
+
+
+test("attachment rollback attempts every affected portal after restore errors", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "multi-attachment-portals",
+    layers: [{ id: "inside" }],
+    portals: [
+      {
+        id: "one",
+        a: { kind: "external", slot: "street" },
+        b: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 0, y: 0 }
+        }
+      },
+      {
+        id: "two",
+        a: { kind: "external", slot: "street" },
+        b: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 1, y: 0 }
+        }
+      }
+    ]
+  });
+
+  places.createPlace({
+    id: "house",
+    definitionId: "multi-attachment-portals"
+  });
+
+  const calls = [];
+  const bridge = {
+    syncPortalState(
+      _instance,
+      portal,
+      resolved
+    ) {
+      calls.push({
+        portalId: portal.id,
+        connected: resolved.connected
+      });
+
+      if (calls.length === 2) {
+        throw new Error(
+          "synthetic forward portal sync failure"
+        );
+      }
+      if (calls.length === 3) {
+        throw new Error(
+          "synthetic first restore failure"
+        );
+      }
+    }
+  };
+
+  places.attachWorldCoreBridge(bridge);
+
+  assert.throws(
+    () =>
+      places.setAttachment(
+        "house",
+        "street",
+        {
+          domainId: "road",
+          position: { x: 5, y: 0 }
+        }
+      ),
+    AggregateError
+  );
+
+  assert.deepEqual(
+    calls.map((call) => [
+      call.portalId,
+      call.connected
+    ]),
+    [
+      ["one", true],
+      ["two", true],
+      ["one", false],
+      ["two", false]
+    ]
+  );
+  assert.equal(
+    places.getPlace("house")
+      .attachments.has("street"),
+    false
+  );
+});
