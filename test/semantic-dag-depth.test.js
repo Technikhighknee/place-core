@@ -160,3 +160,75 @@ test("high-degree semantic memberships keep consistency checks linear", () => {
     memberships.length
   );
 });
+
+
+test("deep footprint placements avoid repeated ancestor resolution", () => {
+  const depth = 3_000;
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "deep-footprint-node",
+    layers: [{ id: "inside" }],
+    footprint: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 1,
+      maxY: 1
+    }
+  });
+
+  for (let i = 0; i < depth; i += 1) {
+    places.createPlace({
+      id: `foot-${i}`,
+      definitionId: "deep-footprint-node",
+      placement: i === 0
+        ? {
+            domainId: "world",
+            containment: "footprint",
+            transform: {
+              x: 0,
+              y: 0,
+              rotation: 0,
+              scale: 1
+            }
+          }
+        : {
+            parentPlaceId: `foot-${i - 1}`,
+            containment: "footprint",
+            transform: {
+              x: 1,
+              y: 0,
+              rotation: 0,
+              scale: 1
+            }
+          }
+    });
+  }
+
+  places.setPlacement(
+    "foot-0",
+    {
+      domainId: "world",
+      containment: "footprint",
+      transform: {
+        x: 10,
+        y: 0,
+        rotation: 0,
+        scale: 1
+      }
+    }
+  );
+
+  const resolved =
+    places.getResolvedPlacement(
+      `foot-${depth - 1}`
+    );
+
+  assert.ok(resolved);
+  assert.equal(
+    resolved.transform.x,
+    10 + depth - 1
+  );
+
+  places.assertInternalConsistency();
+});
