@@ -1513,6 +1513,15 @@ function currentPortalDestination(portal, step) {
 function advance(registry, bridge, state, options = {}) {
   while (state.status === "active") {
     if (state.stepIndex >= state.plan.steps.length) {
+      const live = liveTravelEntity(
+        registry,
+        bridge,
+        state
+      );
+      if (live.failure) {
+        return live.failure;
+      }
+
       if (!resolvedTargetAvailable(registry, state.plan.resolvedTarget)) {
         registry.emit("travel-target-unavailable", {
           entityId: state.entityId,

@@ -423,6 +423,77 @@ test("maxCost zero still permits a zero-cost semantic target", () => {
   assert.equal(plan.resolvedTarget.anchorId, "here");
 });
 
+test("immediate travel completion synchronizes live occupancy", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "immediate-complete-place",
+    layers: [{ id: "inside" }],
+    anchors: [{
+      id: "here",
+      layerId: "inside",
+      position: { x: 0, y: 0 },
+      nodeId: "here"
+    }]
+  });
+  const place = places.createPlace({
+    id: "room",
+    definitionId:
+      "immediate-complete-place"
+  });
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      throw new Error(
+        "immediate target must not need local routing"
+      );
+    },
+    startLocalJourney() {
+      throw new Error(
+        "immediate target must not start a journey"
+      );
+    },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const travel =
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "room",
+        anchorId: "here"
+      }
+    );
+
+  assert.equal(
+    travel.status,
+    "complete"
+  );
+  assert.equal(
+    places.activeTravels.has("hans"),
+    false
+  );
+  assert.ok(
+    places.getEntityLocation("hans")
+  );
+  assert.deepEqual(
+    places.getEntityLocation("hans").places,
+    ["room"]
+  );
+});
+
 test("deltaSeconds rejects invalid simulation deltas instead of clamping", () => {
   const { places, bridge } = twoLayerRuntime();
 
