@@ -629,3 +629,109 @@ test("road-effect cleanup attempts every binding after individual failures", () 
     ["one", "two"]
   );
 });
+
+
+test("road-effect sync attempts every binding after individual failures", () => {
+  const applied = [];
+  const navigation = {
+    setDomainRoadEffect(
+      domainId,
+      effectId,
+      roadId
+    ) {
+      applied.push([domainId, effectId, roadId]);
+      if (roadId === "one") {
+        throw new Error(
+          "synthetic road sync failure"
+        );
+      }
+    },
+    removeDomainRoadEffect(
+      domainId,
+      effectId,
+      roadId
+    ) {
+      applied.push([domainId, effectId, roadId]);
+      if (roadId === "one") {
+        throw new Error(
+          "synthetic road remove failure"
+        );
+      }
+    }
+  };
+  const world = new World({
+    domains: [{ id: "inside-domain" }]
+  });
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+  const instance = {
+    id: "house",
+    layerDomains: new Map([
+      ["inside", "inside-domain"]
+    ])
+  };
+
+  assert.throws(
+    () =>
+      bridge.syncBoundaryState(
+        instance,
+        {
+          id: "wall",
+          layerId: "inside",
+          enabled: true,
+          roadBindings: [
+            { roadId: "one" },
+            { roadId: "two" }
+          ]
+        }
+      ),
+    /synthetic road sync failure/
+  );
+
+  assert.deepEqual(
+    applied.map((entry) => entry[2]),
+    ["one", "two"]
+  );
+
+  applied.length = 0;
+
+  assert.throws(
+    () =>
+      bridge.syncPortalState(
+        instance,
+        {
+          id: "door",
+          roadBindings: [
+            { layerId: "inside", roadId: "one" },
+            { layerId: "inside", roadId: "two" }
+          ]
+        },
+        {
+          connected: true,
+          a: {
+            domainId: "inside-domain"
+          },
+          b: {
+            domainId: "inside-domain"
+          },
+          transitionCost: 0,
+          enabled: true,
+          open: true,
+          locked: false,
+          blocked: false,
+          destroyed: false,
+          blocksWhenClosed: false
+        }
+      ),
+    /synthetic road remove failure/
+  );
+
+  assert.deepEqual(
+    applied.map((entry) => entry[2]),
+    ["one", "two"]
+  );
+});
