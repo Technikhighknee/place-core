@@ -28,6 +28,69 @@ export {
   validateTravelTarget
 };
 
+const activeTravelBridges = new WeakMap();
+
+export function bindTravelRuntimeBridge(
+  state,
+  bridge
+) {
+  if (!state || typeof state !== "object") {
+    throw new TypeError(
+      "active travel state must be an object"
+    );
+  }
+  if (!bridge || typeof bridge !== "object") {
+    throw new TypeError(
+      "active travel bridge must be an object"
+    );
+  }
+
+  const existing =
+    activeTravelBridges.get(state);
+  if (existing && existing !== bridge) {
+    throw new Error(
+      "active travel is already bound to a different WorldCoreBridge"
+    );
+  }
+
+  activeTravelBridges.set(state, bridge);
+  return state;
+}
+
+function assertRegistryExecutionBridge(
+  registry,
+  bridge,
+  operation
+) {
+  if (
+    registry.bridge != null &&
+    registry.bridge !== bridge
+  ) {
+    throw new Error(
+      `${operation} cannot use a WorldCoreBridge different from the one attached to the PlaceRegistry`
+    );
+  }
+}
+
+function assertActiveTravelBridge(
+  state,
+  bridge,
+  operation
+) {
+  const existing =
+    activeTravelBridges.get(state);
+
+  if (existing && existing !== bridge) {
+    throw new Error(
+      `${operation} must use the WorldCoreBridge that owns the active travel`
+    );
+  }
+
+  if (!existing) {
+    activeTravelBridges.set(state, bridge);
+  }
+}
+
 function validateTravelEntity(
   entity,
   expectedId = undefined
@@ -1700,6 +1763,25 @@ export function startTravel(registry, a, b, c, d) {
   const { bridge, entityId, target, options } = resolveStartCall(registry, a, b, c, d);
   if (!bridge) throw new Error("startTravel requires a WorldCoreBridge");
 
+  assertRegistryExecutionBridge(
+    registry,
+    bridge,
+    "startTravel"
+  );
+
+  const existingState =
+    registry._getActiveTravel(
+      PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+      entityId
+    );
+  if (existingState) {
+    assertActiveTravelBridge(
+      existingState,
+      bridge,
+      "startTravel"
+    );
+  }
+
   const capturedOptions = captureTravelOptions(options);
   const plan = planTravel(
     registry,
@@ -1737,6 +1819,10 @@ export function startTravel(registry, a, b, c, d) {
     failureReason: null,
     replans: 0
   };
+  bindTravelRuntimeBridge(
+    state,
+    bridge
+  );
   registry._setActiveTravel(
     PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
     entityId,
@@ -1810,6 +1896,17 @@ export function stepTravel(registry, a, b, c) {
     entityId
   );
   if (!state) return null;
+
+  assertRegistryExecutionBridge(
+    registry,
+    bridge,
+    "stepTravel"
+  );
+  assertActiveTravelBridge(
+    state,
+    bridge,
+    "stepTravel"
+  );
 
   try {
     const effectiveOptions = normalizeEffectiveStepOptions(
@@ -1995,6 +2092,27 @@ export function stopTravel(registry, a, b, c = {}) {
     entityId
   );
   if (!state) return false;
+
+  bridge ??=
+    activeTravelBridges.get(state) ??
+    registry.bridge;
+
+  if (!bridge) {
+    throw new Error(
+      "stopTravel requires the WorldCoreBridge that owns the active travel"
+    );
+  }
+
+  assertRegistryExecutionBridge(
+    registry,
+    bridge,
+    "stopTravel"
+  );
+  assertActiveTravelBridge(
+    state,
+    bridge,
+    "stopTravel"
+  );
 
   let cleanupError = null;
   try {
