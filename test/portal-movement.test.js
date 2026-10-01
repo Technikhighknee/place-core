@@ -508,6 +508,12 @@ test("portal travel fails cleanly if the entity disappears during transfer", () 
     runtime.places.activeTravels.has("hans"),
     false
   );
+  assert.equal(
+    runtime.places.getEntityLocation(
+      "hans"
+    ),
+    null
+  );
 
   const events = runtime.places.drainEvents();
   assert.equal(

@@ -1647,6 +1647,9 @@ function advance(registry, bridge, state, options = {}) {
       }
 
       if (!moved) {
+        registry.removeEntityOccupancy(
+          state.entityId
+        );
         return fail(
           registry,
           bridge,
