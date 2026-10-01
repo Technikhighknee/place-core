@@ -105,6 +105,11 @@ export class WorldCoreBridge {
       );
     }
 
+    if (this.#unsubscribeWorldEvents) {
+      this.#unsubscribeWorldEvents();
+      this.#unsubscribeWorldEvents = null;
+    }
+
     const unsubscribe = this.world.subscribeEvents(
       (event) => this.#handleWorldEvent(event),
       {
@@ -123,7 +128,6 @@ export class WorldCoreBridge {
       }
     );
 
-    this.#unsubscribeWorldEvents?.();
     this.#sameDomainPortalCrossings.clear();
     this.#registry = registry;
     this.#onRegistryDispose = onDispose;
@@ -145,32 +149,50 @@ export class WorldCoreBridge {
       }
     }
 
-    this.#releaseUnboundOwnedTopologies();
+    const errors = [];
+
+    try {
+      this.#releaseUnboundOwnedTopologies();
+    } catch (error) {
+      errors.push(error);
+    }
 
     let removed = false;
+    let unsubscribeFailed = false;
     if (this.#unsubscribeWorldEvents) {
-      // Do not detach or discard the unsubscribe callback when
-      // unsubscription fails. Otherwise a live world-event subscription
-      // can survive disposal and become impossible to remove on retry.
-      removed =
-        this.#unsubscribeWorldEvents() ??
-        false;
+      try {
+        removed =
+          this.#unsubscribeWorldEvents() ??
+          false;
+      } catch (error) {
+        unsubscribeFailed = true;
+        errors.push(error);
+      }
     }
 
     const onDispose = this.#onRegistryDispose;
-    this.#unsubscribeWorldEvents = null;
+    if (!unsubscribeFailed) {
+      this.#unsubscribeWorldEvents = null;
+    }
     this.#sameDomainPortalCrossings.clear();
     this.#registry = null;
     this.#onRegistryDispose = null;
 
-    let detachError = null;
     try {
       onDispose?.();
     } catch (error) {
-      detachError = error;
+      errors.push(error);
     }
 
-    if (detachError) throw detachError;
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        "failed to dispose WorldCoreBridge cleanly"
+      );
+    }
     return removed;
   }
 
