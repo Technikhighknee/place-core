@@ -1022,3 +1022,45 @@ test("failed travel state is removed even when local journey cleanup throws", ()
     0
   );
 });
+
+
+test("stopTravel finalizes cancellation even when local cleanup throws", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+
+  bridge.stopLocalJourney = () => {
+    throw new Error(
+      "synthetic cancellation cleanup failure"
+    );
+  };
+
+  assert.throws(
+    () =>
+      stopTravel(
+        places,
+        bridge,
+        "hans",
+        { reason: "test-cancel" }
+      ),
+    /synthetic cancellation cleanup failure/
+  );
+
+  assert.equal(
+    places.activeTravels.size,
+    0
+  );
+});
