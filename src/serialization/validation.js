@@ -240,6 +240,17 @@ function assertTravelPlan(plan, entityId) {
         step.portalId,
         `active travel plan.steps[${i}].portalId`
       );
+
+      const expectedPortalKey = tupleKey(
+        idKey(step.placeId),
+        step.portalId
+      );
+      if (step.portalKey !== expectedPortalKey) {
+        throw new Error(
+          `active travel plan.steps[${i}] portalKey mismatch for place/portal identity`
+        );
+      }
+
       assertStringId(
         step.fromDomainId,
         `active travel plan.steps[${i}].fromDomainId`
