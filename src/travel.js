@@ -1746,7 +1746,13 @@ export function stopTravel(registry, a, b, c = {}) {
   );
   if (!state) return false;
 
-  bridge?.stopLocalJourney?.(entityId);
+  let cleanupError = null;
+  try {
+    bridge?.stopLocalJourney?.(entityId);
+  } catch (error) {
+    cleanupError = error;
+  }
+
   registry._deleteActiveTravel(
     PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
     entityId
@@ -1756,5 +1762,9 @@ export function stopTravel(registry, a, b, c = {}) {
     entityId,
     reason: options.reason
   });
+
+  if (cleanupError) {
+    throw cleanupError;
+  }
   return true;
 }
