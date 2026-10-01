@@ -169,6 +169,7 @@ function assertTravelPlan(plan, entityId) {
 
   let currentDomainId = plan.startDomainId;
   const expectedDomainPath = [currentDomainId];
+  let expectedEstimatedSeconds = 0;
 
   for (let i = 0; i < plan.steps.length; i += 1) {
     const step = plan.steps[i];
@@ -211,6 +212,13 @@ function assertTravelPlan(plan, entityId) {
       if (step.domainId !== currentDomainId) {
         throw new Error(
           `active travel plan.steps[${i}] local-journey domain mismatch`
+        );
+      }
+      expectedEstimatedSeconds +=
+        step.estimatedSeconds;
+      if (!Number.isFinite(expectedEstimatedSeconds)) {
+        throw new Error(
+          "active travel plan step cost sum must remain finite"
         );
       }
       continue;
@@ -283,6 +291,13 @@ function assertTravelPlan(plan, entityId) {
       }
       currentDomainId = step.toDomainId;
       expectedDomainPath.push(currentDomainId);
+      expectedEstimatedSeconds +=
+        step.transitionCost;
+      if (!Number.isFinite(expectedEstimatedSeconds)) {
+        throw new Error(
+          "active travel plan step cost sum must remain finite"
+        );
+      }
       continue;
     }
 
@@ -321,6 +336,11 @@ function assertTravelPlan(plan, entityId) {
 
   if (!Number.isFinite(plan.estimatedSeconds) || plan.estimatedSeconds < 0) {
     throw new Error("invalid active travel plan estimatedSeconds");
+  }
+  if (plan.estimatedSeconds !== expectedEstimatedSeconds) {
+    throw new Error(
+      "active travel plan estimatedSeconds mismatch with step cost sum"
+    );
   }
 
   assertArray(
