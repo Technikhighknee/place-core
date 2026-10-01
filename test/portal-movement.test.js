@@ -568,3 +568,51 @@ test("portal travel fails cleanly when transfer returns a non-finite position", 
         "invalid-position-after-portal-transfer"
   ));
 });
+
+
+test("portal travel rejects a transferred entity with the wrong identity", () => {
+  const runtime = transferFailureRuntime(
+    (entity, endpoint) => ({
+      ...entity,
+      id: "impostor",
+      domainId: endpoint.domainId,
+      position: {
+        ...endpoint.position
+      },
+      journey: null
+    })
+  );
+
+  const travel =
+    reachPortalAndAttemptTransfer(runtime);
+
+  assert.equal(travel.status, "failed");
+  assert.equal(
+    travel.failureReason,
+    "entity-id-mismatch-after-portal-transfer"
+  );
+  assert.equal(
+    runtime.places.activeTravels.has("hans"),
+    false
+  );
+  assert.equal(
+    runtime.places.getEntityLocation("impostor"),
+    null
+  );
+
+  const events = runtime.places.drainEvents();
+  assert.equal(
+    events.some(
+      (event) =>
+        event.type === "portal-traverse"
+    ),
+    false
+  );
+  assert.equal(
+    events.some(
+      (event) =>
+        event.type === "portal-exit"
+    ),
+    false
+  );
+});
