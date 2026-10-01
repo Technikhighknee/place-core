@@ -138,12 +138,88 @@ export class PlacementGraphIndex {
       );
     }
 
-    this.assertParentDoesNotCycle(instance.id, parentId);
-
     if (!this.#children.get(parentId)?.has(instance.id)) {
       throw new Error(
         `instance ${String(instance.id)} missing placement dependency index`
       );
+    }
+  }
+
+  assertConsistency() {
+    for (const instance of this.#instances.values()) {
+      this.assertInstanceIndexed(instance);
+    }
+
+    for (const [parentId, children] of this.#children) {
+      if (!this.#instances.has(parentId)) {
+        throw new Error(
+          `placement dependency index references missing parent ${String(parentId)}`
+        );
+      }
+
+      for (const childId of children) {
+        const child = this.#instances.get(childId);
+        if (!child) {
+          throw new Error(
+            `placement dependency index references missing child ${String(childId)}`
+          );
+        }
+        if (
+          child.placement?.parentPlaceId !==
+          parentId
+        ) {
+          throw new Error(
+            `placement dependency index drift for ${String(childId)}`
+          );
+        }
+      }
+    }
+
+    const permanent = new Set();
+    const roots = [...this.#instances.keys()]
+      .sort((a, b) =>
+        compareStrings(
+          typedIdKey(a),
+          typedIdKey(b)
+        )
+      );
+
+    for (const rootId of roots) {
+      const rootKey = typedIdKey(rootId);
+      if (permanent.has(rootKey)) {
+        continue;
+      }
+
+      const path = [];
+      const visiting = new Set();
+      let cursorId = rootId;
+
+      while (cursorId != null) {
+        const key = typedIdKey(cursorId);
+        if (permanent.has(key)) {
+          break;
+        }
+        if (visiting.has(key)) {
+          throw new Error(
+            "place placement cycle"
+          );
+        }
+
+        visiting.add(key);
+        path.push(cursorId);
+
+        const cursor =
+          this.#instances.get(cursorId);
+        cursorId =
+          cursor?.placement
+            ?.parentPlaceId ?? null;
+      }
+
+      for (const id of path) {
+        permanent.add(
+          typedIdKey(id)
+        );
+      }
     }
   }
 }
