@@ -79,3 +79,36 @@ test("10k instances retain one definition", () => {
   assert.equal(places.getDiagnostics().portalOverrideCount, 0);
   places.assertInternalConsistency();
 });
+
+
+test("exterior locate order is deterministic across insertion order", () => {
+  const make = (order) => {
+    const places = new PlaceRegistry();
+    places.registerDefinition(definition);
+
+    for (const id of order) {
+      places.createPlace({
+        id,
+        definitionId: "house",
+        placement: {
+          domainId: "city",
+          transform: {
+            x: 100,
+            y: 100
+          },
+          containment: "footprint"
+        }
+      });
+    }
+
+    return places.locate(
+      "city",
+      { x: 105, y: 105 }
+    ).places;
+  };
+
+  assert.deepEqual(
+    make(["a", "b"]),
+    make(["b", "a"])
+  );
+});
