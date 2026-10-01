@@ -1333,6 +1333,38 @@ export class PlaceRegistry {
     };
   }
 
+  #restorePortalBridgeStates(
+    instance,
+    portals
+  ) {
+    const errors = [];
+
+    for (const portal of portals) {
+      try {
+        this.#bridge?.syncPortalState?.(
+          instance,
+          portal,
+          this.resolvePortal(
+            instance.id,
+            portal.id
+          )
+        );
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        "failed to restore portal bridge states"
+      );
+    }
+  }
+
   setAttachment(instanceId, slot, value) {
     const instance = this.#instances.get(instanceId);
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
@@ -1407,13 +1439,10 @@ export class PlaceRegistry {
 
       let rollbackError = null;
       try {
-        for (const portal of affectedPortals) {
-          this.#bridge?.syncPortalState?.(
-            instance,
-            portal,
-            this.resolvePortal(instanceId, portal.id)
-          );
-        }
+        this.#restorePortalBridgeStates(
+          instance,
+          affectedPortals
+        );
       } catch (restoreError) {
         rollbackError = restoreError;
       }
@@ -1479,13 +1508,10 @@ export class PlaceRegistry {
 
       let rollbackError = null;
       try {
-        for (const portal of affectedPortals) {
-          this.#bridge?.syncPortalState?.(
-            instance,
-            portal,
-            this.resolvePortal(instanceId, portal.id)
-          );
-        }
+        this.#restorePortalBridgeStates(
+          instance,
+          affectedPortals
+        );
       } catch (restoreError) {
         rollbackError = restoreError;
       }
