@@ -1218,3 +1218,90 @@ test("snapshot validation rejects active travel portal identity drift", () => {
     /entered portal.*positive portalTransitionRemaining/
   );
 });
+
+
+test("pending saved travel state uses full active-state validation", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "pending-state-validation",
+    layers: [{ id: "inside" }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      position: { x: 5, y: 0 },
+      nodeId: "target"
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "pending-state-validation"
+  });
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      return {
+        estimatedSeconds: 5
+      };
+    },
+    startLocalJourney() {
+      entity.journey = {
+        active: true
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+  const saved =
+    structuredClone(
+      snapshot.activeTravels[0]
+    );
+  snapshot.activeTravels = [];
+  snapshot.pendingTravels = [{
+    entityId: saved.entityId,
+    target:
+      structuredClone(saved.target),
+    savedState: saved
+  }];
+
+  snapshot.pendingTravels[0]
+    .savedState.plan.estimatedSeconds +=
+      1;
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      ),
+    /estimatedSeconds.*mismatch|estimated.*step.*sum/i
+  );
+});

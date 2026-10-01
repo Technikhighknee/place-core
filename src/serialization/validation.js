@@ -784,6 +784,178 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
   );
 }
 
+
+function assertPersistedActiveTravelState(
+  travel,
+  label
+) {
+  assertOnlyKeys(
+    travel,
+    [
+      "entityId",
+      "target",
+      "plan",
+      "options",
+      "stepIndex",
+      "localStarted",
+      "portalEntered",
+      "portalTransitionRemaining",
+      "worldChangePolicy",
+      "status",
+      "failureReason",
+      "replans"
+    ],
+    label
+  );
+  assertId(
+    travel.entityId,
+    \`\${label}.entityId\`
+  );
+
+  if (travel.status !== "active") {
+    throw new Error(
+      \`\${label} must contain an active travel state\`
+    );
+  }
+  assertTravelTarget(
+    travel.target,
+    \`\${label}.target\`
+  );
+
+  normalizeBoolean(
+    travel.localStarted,
+    \`\${label}.localStarted\`
+  );
+  normalizeBoolean(
+    travel.portalEntered,
+    \`\${label}.portalEntered\`
+  );
+
+  if (
+    !Number.isFinite(
+      travel.portalTransitionRemaining
+    ) ||
+    travel.portalTransitionRemaining < 0
+  ) {
+    throw new Error(
+      \`invalid \${label}.portalTransitionRemaining\`
+    );
+  }
+  if (
+    !Number.isInteger(travel.stepIndex) ||
+    travel.stepIndex < 0
+  ) {
+    throw new Error(
+      \`invalid \${label}.stepIndex\`
+    );
+  }
+  if (
+    !Number.isSafeInteger(travel.replans) ||
+    travel.replans < 0
+  ) {
+    throw new Error(
+      \`\${label}.replans must be a non-negative safe integer\`
+    );
+  }
+  if (travel.failureReason !== null) {
+    throw new Error(
+      \`\${label}.failureReason must be null\`
+    );
+  }
+
+  if (
+    travel.worldChangePolicy !==
+      "encounter" &&
+    travel.worldChangePolicy !== "eager"
+  ) {
+    throw new Error(
+      \`invalid \${label}.worldChangePolicy\`
+    );
+  }
+
+  assertTravelOptions(
+    travel.options,
+    \`\${label}.options\`
+  );
+  const optionPolicy =
+    travel.options.worldChangePolicy ??
+    travel.worldChangePolicy;
+  if (
+    optionPolicy !==
+    travel.worldChangePolicy
+  ) {
+    throw new Error(
+      \`\${label}.options.worldChangePolicy disagrees with travel state\`
+    );
+  }
+
+  assertTravelPlan(
+    travel.plan,
+    travel.entityId,
+    travel.target
+  );
+  if (
+    travel.stepIndex >=
+    travel.plan.steps.length
+  ) {
+    throw new Error(
+      \`\${label}.stepIndex must reference an executable plan step\`
+    );
+  }
+
+  const currentStep =
+    travel.plan.steps[travel.stepIndex];
+
+  if (
+    travel.localStarted &&
+    currentStep.type !== "local-journey"
+  ) {
+    throw new Error(
+      \`\${label}.localStarted requires a local-journey step\`
+    );
+  }
+  if (
+    travel.portalEntered &&
+    currentStep.type !== "traverse-portal"
+  ) {
+    throw new Error(
+      \`\${label}.portalEntered requires a traverse-portal step\`
+    );
+  }
+  if (
+    travel.portalTransitionRemaining > 0 &&
+    (
+      !travel.portalEntered ||
+      currentStep.type !==
+        "traverse-portal"
+    )
+  ) {
+    throw new Error(
+      \`\${label}.portalTransitionRemaining requires an entered portal step\`
+    );
+  }
+  if (
+    travel.portalEntered &&
+    travel.portalTransitionRemaining <= 0
+  ) {
+    throw new Error(
+      \`\${label} entered portal must have positive portalTransitionRemaining\`
+    );
+  }
+  if (
+    currentStep.type ===
+      "traverse-portal" &&
+    travel.portalTransitionRemaining >
+      currentStep.transitionCost
+  ) {
+    throw new Error(
+      \`\${label}.portalTransitionRemaining cannot exceed step transitionCost\`
+    );
+  }
+
+  return true;
+}
+
 export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   assertOnlyKeys(
     options,
@@ -1319,25 +1491,10 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
   const travelEntities = new Set();
   for (const travel of snapshot.activeTravels ?? []) {
-    assertOnlyKeys(
+    assertPersistedActiveTravelState(
       travel,
-      [
-        "entityId",
-        "target",
-        "plan",
-        "options",
-        "stepIndex",
-        "localStarted",
-        "portalEntered",
-        "portalTransitionRemaining",
-        "worldChangePolicy",
-        "status",
-        "failureReason",
-        "replans"
-      ],
       "active travel"
     );
-    assertId(travel.entityId, "active travel.entityId");
 
     const key = idKey(travel.entityId);
     if (travelEntities.has(key)) {
@@ -1346,100 +1503,6 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       );
     }
     travelEntities.add(key);
-
-    if (travel.status !== "active") {
-      throw new Error(
-        "only active travel states may be persisted in activeTravels"
-      );
-    }
-    assertTravelTarget(travel.target, "active travel.target");
-
-    normalizeBoolean(travel.localStarted, "active travel.localStarted");
-    normalizeBoolean(travel.portalEntered, "active travel.portalEntered");
-
-    if (!Number.isFinite(travel.portalTransitionRemaining) ||
-        travel.portalTransitionRemaining < 0) {
-      throw new Error("invalid active travel portalTransitionRemaining");
-    }
-    if (!Number.isInteger(travel.stepIndex) || travel.stepIndex < 0) {
-      throw new Error("invalid active travel stepIndex");
-    }
-    if (
-      !Number.isSafeInteger(travel.replans) ||
-      travel.replans < 0
-    ) {
-      throw new Error(
-        "active travel replans must be a non-negative safe integer"
-      );
-    }
-    if (travel.failureReason !== null) {
-      throw new Error(
-        "active travel failureReason must be null"
-      );
-    }
-
-    if (travel.worldChangePolicy !== "encounter" &&
-        travel.worldChangePolicy !== "eager") {
-      throw new Error("invalid active travel worldChangePolicy");
-    }
-
-    assertTravelOptions(travel.options, "active travel options");
-    const optionPolicy =
-      travel.options.worldChangePolicy ??
-      travel.worldChangePolicy;
-    if (optionPolicy !== travel.worldChangePolicy) {
-      throw new Error(
-        "active travel options.worldChangePolicy disagrees with travel state"
-      );
-    }
-
-    assertTravelPlan(
-      travel.plan,
-      travel.entityId,
-      travel.target
-    );
-    if (travel.stepIndex >= travel.plan.steps.length) {
-      throw new Error(
-        "active travel stepIndex must reference an executable plan step"
-      );
-    }
-
-    const currentStep =
-      travel.plan.steps[travel.stepIndex];
-    if (travel.localStarted &&
-        currentStep.type !== "local-journey") {
-      throw new Error(
-        "active travel localStarted requires a local-journey step"
-      );
-    }
-    if (travel.portalEntered &&
-        currentStep.type !== "traverse-portal") {
-      throw new Error(
-        "active travel portalEntered requires a traverse-portal step"
-      );
-    }
-    if (travel.portalTransitionRemaining > 0 &&
-        (!travel.portalEntered ||
-         currentStep.type !== "traverse-portal")) {
-      throw new Error(
-        "active travel portalTransitionRemaining requires an entered portal step"
-      );
-    }
-    if (travel.portalEntered &&
-        travel.portalTransitionRemaining <= 0) {
-      throw new Error(
-        "active travel entered portal must have positive portalTransitionRemaining"
-      );
-    }
-    if (
-      currentStep.type === "traverse-portal" &&
-      travel.portalTransitionRemaining >
-        currentStep.transitionCost
-    ) {
-      throw new Error(
-        "active travel portalTransitionRemaining cannot exceed step transitionCost"
-      );
-    }
   }
 
   for (let i = 0; i < (snapshot.pendingTravels ?? []).length; i += 1) {
@@ -1500,6 +1563,10 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         `${pendingLabel}.savedState target mismatch`
       );
     }
+    assertPersistedActiveTravelState(
+      pending.savedState,
+      `${pendingLabel}.savedState`
+    );
     if (pending.restartError != null) {
       assertOnlyKeys(
         pending.restartError,
