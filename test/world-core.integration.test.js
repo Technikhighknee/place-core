@@ -331,3 +331,49 @@ test("domain transfer event clears stale occupancy when world entity is unavaila
     null
   );
 });
+
+
+test("domain transfer lookup exception clears stale occupancy before surfacing bridge error", () => {
+  let onEvent = null;
+  const world = {
+    subscribeEvents(handler) {
+      onEvent = handler;
+      return () => true;
+    },
+    getEntity() {
+      throw new Error(
+        "synthetic domain transfer lookup failure"
+      );
+    }
+  };
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation: {},
+    startJourney() {},
+    stopJourney() {}
+  });
+  const places = new PlaceRegistry();
+
+  places.attachWorldCoreBridge(
+    bridge
+  );
+  places.updateEntityOccupancy({
+    id: "hans",
+    domainId: "street",
+    position: { x: 1, y: 2 }
+  });
+
+  assert.throws(
+    () =>
+      onEvent({
+        type: "entityDomainTransferred",
+        entityId: "hans"
+      }),
+    /synthetic domain transfer lookup failure/
+  );
+
+  assert.equal(
+    places.getEntityLocation("hans"),
+    null
+  );
+});

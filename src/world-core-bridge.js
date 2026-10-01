@@ -271,7 +271,18 @@ export class WorldCoreBridge {
         );
       }
 
-      const entity = this.world.getEntity(event.entityId);
+      let entity;
+      try {
+        entity = this.world.getEntity(
+          event.entityId
+        );
+      } catch (error) {
+        this.#registry.removeEntityOccupancy(
+          event.entityId
+        );
+        throw error;
+      }
+
       if (entity) {
         this.#registry.updateEntityOccupancy(entity);
       } else {
