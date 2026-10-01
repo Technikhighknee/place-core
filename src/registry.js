@@ -2488,11 +2488,10 @@ export class PlaceRegistry {
       const definition = this.#definitions.get(instance.definitionId);
       if (!definition) throw new Error(`instance ${String(instance.id)} references missing definition`);
       this.#semanticGraph.assertInstanceIndexed(instance);
-
-      this.#placementGraph.assertInstanceIndexed(instance);
     }
 
     this.#semanticGraph.assertConsistency();
+    this.#placementGraph.assertConsistency();
 
     for (const [key, record] of this.#portalRecords) {
       if (!this.#instances.has(record.instanceId)) throw new Error(`portal record ${key} references missing instance`);
