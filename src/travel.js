@@ -1212,14 +1212,28 @@ function publicTravelState(state) {
 }
 
 function fail(registry, bridge, state, reason) {
-  bridge.stopLocalJourney(state.entityId);
+  let cleanupError = null;
+  try {
+    bridge.stopLocalJourney(state.entityId);
+  } catch (error) {
+    cleanupError = error;
+  }
+
   state.status = "failed";
   state.failureReason = reason;
   registry._deleteActiveTravel(
     PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
     state.entityId
   );
-  registry.emit("travel-failed", { entityId: state.entityId, reason, target: state.target });
+  registry.emit("travel-failed", {
+    entityId: state.entityId,
+    reason,
+    target: state.target
+  });
+
+  if (cleanupError) {
+    throw cleanupError;
+  }
   return state;
 }
 
