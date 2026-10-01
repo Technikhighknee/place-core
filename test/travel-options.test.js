@@ -1163,6 +1163,60 @@ test("stepTravel fails cleanly when the live entity identity drifts", () => {
     places.getEntityLocation("impostor"),
     null
   );
+  assert.equal(
+    places.getEntityLocation("hans"),
+    null
+  );
+});
+
+
+test("stepTravel clears occupancy when the live entity disappears", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+
+  assert.ok(
+    places.getEntityLocation("hans")
+  );
+
+  bridge.getEntity = () => null;
+
+  const current =
+    stepTravel(
+      places,
+      bridge,
+      "hans"
+    );
+
+  assert.equal(
+    current.status,
+    "failed"
+  );
+  assert.equal(
+    current.failureReason,
+    "entity-missing"
+  );
+  assert.equal(
+    places.activeTravels.has("hans"),
+    false
+  );
+  assert.equal(
+    places.getEntityLocation("hans"),
+    null
+  );
 });
 
 
