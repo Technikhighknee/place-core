@@ -1211,14 +1211,11 @@ function publicTravelState(state) {
   return snapshotTravelState(state);
 }
 
-function fail(registry, bridge, state, reason) {
-  let cleanupError = null;
-  try {
-    bridge.stopLocalJourney(state.entityId);
-  } catch (error) {
-    cleanupError = error;
-  }
-
+function finalizeFailedTravel(
+  registry,
+  state,
+  reason
+) {
   state.status = "failed";
   state.failureReason = reason;
   registry._deleteActiveTravel(
@@ -1230,6 +1227,22 @@ function fail(registry, bridge, state, reason) {
     reason,
     target: state.target
   });
+  return state;
+}
+
+function fail(registry, bridge, state, reason) {
+  let cleanupError = null;
+  try {
+    bridge.stopLocalJourney(state.entityId);
+  } catch (error) {
+    cleanupError = error;
+  }
+
+  finalizeFailedTravel(
+    registry,
+    state,
+    reason
+  );
 
   if (cleanupError) {
     throw cleanupError;
@@ -1252,7 +1265,17 @@ function complete(registry, state) {
 }
 
 function replan(registry, bridge, state, options) {
-  bridge.stopLocalJourney(state.entityId);
+  try {
+    bridge.stopLocalJourney(state.entityId);
+  } catch (error) {
+    finalizeFailedTravel(
+      registry,
+      state,
+      "replan-cleanup-failed"
+    );
+    throw error;
+  }
+
   let plan;
   try {
     const {
