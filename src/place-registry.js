@@ -7,9 +7,11 @@ import { compilePlace, CompiledPlaceDefinition } from "./definition.js";
 import {
   assertId,
   assertStringId,
+  compareStrings,
   deepFreeze,
   normalizeBoolean
 } from "./utils.js";
+import { typedIdKey } from "./registry/support.js";
 
 export class PlaceRegistry extends CorePlaceRegistry {
   registerDefinition(input, options) {
@@ -107,8 +109,15 @@ export class PlaceRegistry extends CorePlaceRegistry {
 
     const result = [];
     const places = placeId == null
-      ? this.instances.values()
-      : [this.getPlace(placeId)].filter(Boolean);
+      ? [...this.instances.values()]
+          .sort((a, b) =>
+            compareStrings(
+              typedIdKey(a.id),
+              typedIdKey(b.id)
+            )
+          )
+      : [this.getPlace(placeId)]
+          .filter(Boolean);
 
     for (const instance of places) {
       const definition = this.getDefinition(instance.definitionId);
@@ -145,11 +154,37 @@ export class PlaceRegistry extends CorePlaceRegistry {
   }
 
   *resolvedPortals(placeId = null) {
-    const places = placeId == null ? this.instances.values() : [this.getPlace(placeId)].filter(Boolean);
+    const places = placeId == null
+      ? [...this.instances.values()]
+          .sort((a, b) =>
+            compareStrings(
+              typedIdKey(a.id),
+              typedIdKey(b.id)
+            )
+          )
+      : [this.getPlace(placeId)]
+          .filter(Boolean);
+
     for (const instance of places) {
-      const definition = this.getDefinition(instance.definitionId);
-      for (const portal of definition.portals) yield this.resolvePortal(instance.id, portal.id);
-      for (const portalId of instance.dynamicPortals.keys()) yield this.resolvePortal(instance.id, portalId);
+      const definition =
+        this.getDefinition(instance.definitionId);
+
+      for (const portal of definition.portals) {
+        yield this.resolvePortal(
+          instance.id,
+          portal.id
+        );
+      }
+
+      const dynamicPortalIds = [
+        ...instance.dynamicPortals.keys()
+      ].sort(compareStrings);
+      for (const portalId of dynamicPortalIds) {
+        yield this.resolvePortal(
+          instance.id,
+          portalId
+        );
+      }
     }
   }
 }
