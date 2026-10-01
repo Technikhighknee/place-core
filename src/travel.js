@@ -1,6 +1,8 @@
 import { squaredDistance } from "./geometry.js";
 import { isPortalTraversable } from "./registry.js";
 import {
+  assertId,
+  assertStringId,
   cloneJson,
   compareStrings,
   deepFreeze,
@@ -25,6 +27,48 @@ export {
   validatePersistedTravelOptions,
   validateTravelTarget
 };
+
+function validateTravelEntity(
+  entity,
+  expectedId = undefined
+) {
+  assertId(entity?.id, "entity.id");
+
+  if (
+    expectedId !== undefined &&
+    entity.id !== expectedId
+  ) {
+    throw new Error(
+      `bridge returned entity ${String(entity.id)} for requested entity ${String(expectedId)}`
+    );
+  }
+
+  const domainId =
+    entity.domainId ?? "default";
+  assertStringId(
+    domainId,
+    "entity.domainId"
+  );
+
+  if (
+    !entity.position ||
+    typeof entity.position !== "object" ||
+    !Number.isFinite(entity.position.x) ||
+    !Number.isFinite(entity.position.y)
+  ) {
+    throw new TypeError(
+      "entity.position must contain finite x/y"
+    );
+  }
+
+  if (!entity.mobility) {
+    throw new Error(
+      `entity ${String(entity.id)} has no mobility profile`
+    );
+  }
+
+  return entity;
+}
 
 import {
   PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
@@ -1039,11 +1083,23 @@ export function planTravel(registry, a, b, c, d) {
   if (!bridge) throw new Error("planTravel requires a WorldCoreBridge");
   const options = normalizePlanningOptions(rawOptions);
   validateTravelTarget(target);
-  const entity = typeof entityOrId === "object"
+  const directEntity =
+    entityOrId != null &&
+    typeof entityOrId === "object";
+  const entity = directEntity
     ? entityOrId
     : bridge.getEntity(entityOrId);
-  if (!entity) throw new Error(`unknown entity ${String(entityOrId)}`);
-  if (!entity.mobility) throw new Error(`entity ${String(entity.id)} has no mobility profile`);
+  if (!entity) {
+    throw new Error(
+      `unknown entity ${String(entityOrId)}`
+    );
+  }
+  validateTravelEntity(
+    entity,
+    directEntity
+      ? undefined
+      : entityOrId
+  );
 
   if (target?.kind === "nearest" && target.tag) {
     return planNearestTaggedAnchor(registry, bridge, entity, target, options);
