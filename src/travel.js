@@ -1455,6 +1455,9 @@ function advance(registry, bridge, state, options = {}) {
       }
 
       const movedDomainId = moved.domainId ?? "default";
+      const transferDomainValid =
+        typeof movedDomainId === "string" &&
+        movedDomainId.length > 0;
       const transferPositionValid =
         moved.position &&
         Number.isFinite(moved.position.x) &&
@@ -1468,7 +1471,10 @@ function advance(registry, bridge, state, options = {}) {
           placeId: portal.instanceId,
           portalId: portal.id,
           expectedDomainId: step.toDomainId,
-          actualDomainId: movedDomainId,
+          actualDomainId:
+            transferDomainValid
+              ? movedDomainId
+              : null,
           expectedPosition: {
             x: direction.to.position.x,
             y: direction.to.position.y
@@ -1494,6 +1500,26 @@ function advance(registry, bridge, state, options = {}) {
           bridge,
           state,
           "entity-id-mismatch-after-portal-transfer"
+        );
+      }
+
+      if (!transferDomainValid) {
+        registry.removeEntityOccupancy(
+          state.entityId
+        );
+        emitTransferFailed(
+          transferPositionValid
+            ? {
+                x: moved.position.x,
+                y: moved.position.y
+              }
+            : null
+        );
+        return fail(
+          registry,
+          bridge,
+          state,
+          "invalid-domain-after-portal-transfer"
         );
       }
 
