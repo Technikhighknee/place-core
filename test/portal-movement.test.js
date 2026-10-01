@@ -316,6 +316,77 @@ function reachPortalAndAttemptTransfer(runtime) {
   );
 }
 
+test("portal transfer lookup exception clears stale occupancy before failing travel", () => {
+  let transferred = false;
+  const runtime =
+    transferFailureRuntime(
+      (entity, endpoint) => {
+        entity.domainId =
+          endpoint.domainId;
+        entity.position = {
+          x: endpoint.position.x,
+          y: endpoint.position.y
+        };
+        entity.journey = null;
+        transferred = true;
+        return entity;
+      }
+    );
+
+  const originalGetEntity =
+    runtime.bridge.getEntity.bind(
+      runtime.bridge
+    );
+  runtime.bridge.getEntity = (id) => {
+    if (transferred) {
+      throw new Error(
+        "synthetic post-transfer lookup failure"
+      );
+    }
+    return originalGetEntity(id);
+  };
+
+  assert.throws(
+    () =>
+      reachPortalAndAttemptTransfer(
+        runtime
+      ),
+    /synthetic post-transfer lookup failure/
+  );
+
+  assert.equal(
+    runtime.places.activeTravels.has(
+      "hans"
+    ),
+    false
+  );
+  assert.equal(
+    runtime.places.getEntityLocation(
+      "hans"
+    ),
+    null
+  );
+
+  const events =
+    runtime.places.drainEvents();
+  assert.ok(
+    events.some(
+      (event) =>
+        event.type ===
+          "travel-failed" &&
+        event.reason === "step-error"
+    )
+  );
+  assert.equal(
+    events.some(
+      (event) =>
+        event.type ===
+        "portal-traverse"
+    ),
+    false
+  );
+});
+
 test("portal travel does not advance when a bridge transfer is a no-op", () => {
   const runtime = transferFailureRuntime((entity) => entity);
   const travel = reachPortalAndAttemptTransfer(runtime);

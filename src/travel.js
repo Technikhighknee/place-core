@@ -1631,7 +1631,18 @@ function advance(registry, bridge, state, options = {}) {
       }
 
       bridge.transferEntity(state.entityId, direction.to);
-      const moved = bridge.getEntity(state.entityId);
+
+      let moved;
+      try {
+        moved = bridge.getEntity(
+          state.entityId
+        );
+      } catch (error) {
+        registry.removeEntityOccupancy(
+          state.entityId
+        );
+        throw error;
+      }
 
       if (!moved) {
         return fail(
