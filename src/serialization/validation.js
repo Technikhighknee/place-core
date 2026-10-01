@@ -1364,8 +1364,13 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     if (!Number.isInteger(travel.stepIndex) || travel.stepIndex < 0) {
       throw new Error("invalid active travel stepIndex");
     }
-    if (!Number.isInteger(travel.replans) || travel.replans < 0) {
-      throw new Error("invalid active travel replans");
+    if (
+      !Number.isSafeInteger(travel.replans) ||
+      travel.replans < 0
+    ) {
+      throw new Error(
+        "active travel replans must be a non-negative safe integer"
+      );
     }
     if (travel.failureReason !== null) {
       throw new Error(
