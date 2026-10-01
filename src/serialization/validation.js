@@ -1310,6 +1310,15 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         "active travel portalTransitionRemaining requires an entered portal step"
       );
     }
+    if (
+      currentStep.type === "traverse-portal" &&
+      travel.portalTransitionRemaining >
+        currentStep.transitionCost
+    ) {
+      throw new Error(
+        "active travel portalTransitionRemaining cannot exceed step transitionCost"
+      );
+    }
   }
 
   for (let i = 0; i < (snapshot.pendingTravels ?? []).length; i += 1) {
