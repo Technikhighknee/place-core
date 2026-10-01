@@ -167,6 +167,9 @@ function assertTravelPlan(plan, entityId) {
   );
   assertArray(plan.steps, "active travel plan.steps");
 
+  let currentDomainId = plan.startDomainId;
+  const expectedDomainPath = [currentDomainId];
+
   for (let i = 0; i < plan.steps.length; i += 1) {
     const step = plan.steps[i];
     assertObject(step, `active travel plan.steps[${i}]`);
@@ -203,6 +206,11 @@ function assertTravelPlan(plan, entityId) {
       if (!Number.isFinite(step.estimatedSeconds) || step.estimatedSeconds < 0) {
         throw new Error(
           `invalid active travel plan.steps[${i}].estimatedSeconds`
+        );
+      }
+      if (step.domainId !== currentDomainId) {
+        throw new Error(
+          `active travel plan.steps[${i}] local-journey domain mismatch`
         );
       }
       continue;
@@ -268,11 +276,35 @@ function assertTravelPlan(plan, entityId) {
           `invalid active travel plan.steps[${i}].transitionCost`
         );
       }
+      if (step.fromDomainId !== currentDomainId) {
+        throw new Error(
+          `active travel plan.steps[${i}] portal fromDomainId mismatch`
+        );
+      }
+      currentDomainId = step.toDomainId;
+      expectedDomainPath.push(currentDomainId);
       continue;
     }
 
     throw new Error(
       `unknown active travel plan step type: ${String(step.type)}`
+    );
+  }
+
+  if (currentDomainId !== plan.resolvedTarget.domainId) {
+    throw new Error(
+      "active travel plan resolved target domain mismatch"
+    );
+  }
+  if (
+    plan.domainPath.length !== expectedDomainPath.length ||
+    plan.domainPath.some(
+      (domainId, index) =>
+        domainId !== expectedDomainPath[index]
+    )
+  ) {
+    throw new Error(
+      "active travel plan domainPath mismatch"
     );
   }
 
