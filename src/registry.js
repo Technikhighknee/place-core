@@ -1758,13 +1758,31 @@ export class PlaceRegistry {
 
   getSemanticAncestors(
     instanceId,
-    { includeSelf = false } = {}
+    options = {}
   ) {
-    if (!this.#instances.has(instanceId)) return [];
-    const closure = this.#semanticGraph.closure([instanceId]);
+    assertPatchKeys(
+      options,
+      ["includeSelf"],
+      "getSemanticAncestors options"
+    );
+    const includeSelf = normalizeBoolean(
+      options.includeSelf,
+      "getSemanticAncestors.includeSelf",
+      { defaultValue: false }
+    );
+
+    if (!this.#instances.has(instanceId)) {
+      return [];
+    }
+    const closure =
+      this.#semanticGraph.closure(
+        [instanceId]
+      );
     return includeSelf
       ? closure
-      : closure.filter((id) => id !== instanceId);
+      : closure.filter(
+          (id) => id !== instanceId
+        );
   }
 
   setPortalState(instanceId, portalId, patch) {
