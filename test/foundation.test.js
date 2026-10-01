@@ -112,3 +112,61 @@ test("exterior locate order is deterministic across insertion order", () => {
     make(["b", "a"])
   );
 });
+
+
+test("findAnchors is deterministic across place insertion order", () => {
+  const make = (order) => {
+    const places = new PlaceRegistry();
+    places.registerDefinition(definition);
+
+    for (const id of order) {
+      places.createPlace({
+        id,
+        definitionId: "house"
+      });
+    }
+
+    return places.findAnchors()
+      .map((anchor) =>
+        `${String(anchor.placeId)}:${anchor.id}`
+      );
+  };
+
+  assert.deepEqual(
+    make(["a", "b"]),
+    make(["b", "a"])
+  );
+});
+
+test("resolvedPortals is deterministic across dynamic portal insertion order", () => {
+  const make = (order) => {
+    const places = new PlaceRegistry();
+    places.registerDefinition(definition);
+    places.createPlace({
+      id: "home",
+      definitionId: "house"
+    });
+
+    for (const id of order) {
+      places.addPortal("home", {
+        id,
+        a: {
+          domainId: "outside",
+          position: { x: 0, y: 0 }
+        },
+        b: {
+          domainId: "outside",
+          position: { x: 1, y: 0 }
+        }
+      });
+    }
+
+    return [...places.resolvedPortals("home")]
+      .map((portal) => portal.id);
+  };
+
+  assert.deepEqual(
+    make(["a", "b"]),
+    make(["b", "a"])
+  );
+});
