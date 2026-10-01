@@ -438,3 +438,37 @@ test("planTravel validates direct entity identity, domain, and position", () => 
     /entity\.domainId|domain id/i
   );
 });
+
+
+test("planTravel rejects bridge lookup identity mismatch", () => {
+  const {
+    places,
+    entity,
+    bridge
+  } = setup();
+
+  const mismatchedBridge = {
+    ...bridge,
+    getEntity(id) {
+      if (id !== "hans") return null;
+      return {
+        ...entity,
+        id: "impostor"
+      };
+    }
+  };
+
+  assert.throws(
+    () =>
+      planTravel(
+        places,
+        mismatchedBridge,
+        "hans",
+        {
+          placeId: "house",
+          anchorId: "private-bed"
+        }
+      ),
+    /bridge returned entity impostor for requested entity hans/
+  );
+});
