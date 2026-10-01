@@ -409,7 +409,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
     for (const saved of active) {
       const state = cloneJson(saved);
       const planWasStale =
-        state.planStale === true;
+        state.planStale !== false;
       delete state.planStale;
       state.worldChangePolicy ??= "encounter";
       state.options = Object.freeze({
