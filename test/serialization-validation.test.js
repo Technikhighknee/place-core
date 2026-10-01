@@ -1976,3 +1976,91 @@ test("fresh nearest travel target must still satisfy anchor filters", () => {
 });
 
 
+
+
+test("snapshot validation rejects portal road bindings in unrelated domains", () => {
+  const places = new PlaceRegistry();
+
+  places.registerDefinition({
+    id: "snapshot-binding-domain-place",
+    layers: [
+      {
+        id: "ground",
+        navigation: {
+          nodes: [
+            { id: "ga", x: 0, y: 0 },
+            { id: "gb", x: 1, y: 0 }
+          ],
+          roads: [{
+            id: "ground-road",
+            from: "ga",
+            to: "gb"
+          }]
+        }
+      },
+      {
+        id: "cellar",
+        navigation: {
+          nodes: [
+            { id: "ca", x: 0, y: 0 },
+            { id: "cb", x: 1, y: 0 }
+          ],
+          roads: [{
+            id: "cellar-road",
+            from: "ca",
+            to: "cb"
+          }]
+        }
+      }
+    ]
+  });
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "snapshot-binding-domain-place"
+  });
+
+  places.addPortal(
+    "house",
+    {
+      id: "dynamic-door",
+      a: {
+        domainId: "street",
+        position: { x: 10, y: 0 },
+        nodeId: "street-door"
+      },
+      b: {
+        domainId:
+          place.layerDomains.get(
+            "ground"
+          ),
+        position: { x: 0, y: 0 },
+        nodeId: "ga"
+      },
+      roadBindings: [{
+        layerId: "ground",
+        roadId: "ground-road"
+      }]
+    }
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+
+  const dynamic =
+    snapshot.instances[0]
+      .dynamicPortals[0];
+  dynamic.roadBindings = [{
+    layerId: "cellar",
+    roadId: "cellar-road"
+  }];
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      ),
+    /road binding cellar-road belongs to unrelated domain house:cellar/
+  );
+});
