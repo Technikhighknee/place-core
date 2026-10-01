@@ -1138,7 +1138,7 @@ test("external topology threshold road must connect portal endpoint nodes", () =
         definitionId:
           "external-threshold-place"
       }),
-    /threshold road binding threshold does not connect its endpoint nodes/
+    /portal door road binding threshold does not connect its endpoint nodes/
   );
 
   assert.equal(
