@@ -809,26 +809,26 @@ function assertPersistedActiveTravelState(
   );
   assertId(
     travel.entityId,
-    \`\${label}.entityId\`
+    `${label}.entityId`
   );
 
   if (travel.status !== "active") {
     throw new Error(
-      \`\${label} must contain an active travel state\`
+      `${label} must contain an active travel state`
     );
   }
   assertTravelTarget(
     travel.target,
-    \`\${label}.target\`
+    `${label}.target`
   );
 
   normalizeBoolean(
     travel.localStarted,
-    \`\${label}.localStarted\`
+    `${label}.localStarted`
   );
   normalizeBoolean(
     travel.portalEntered,
-    \`\${label}.portalEntered\`
+    `${label}.portalEntered`
   );
 
   if (
@@ -838,7 +838,7 @@ function assertPersistedActiveTravelState(
     travel.portalTransitionRemaining < 0
   ) {
     throw new Error(
-      \`invalid \${label}.portalTransitionRemaining\`
+      `invalid ${label}.portalTransitionRemaining`
     );
   }
   if (
@@ -846,7 +846,7 @@ function assertPersistedActiveTravelState(
     travel.stepIndex < 0
   ) {
     throw new Error(
-      \`invalid \${label}.stepIndex\`
+      `invalid ${label}.stepIndex`
     );
   }
   if (
@@ -854,12 +854,12 @@ function assertPersistedActiveTravelState(
     travel.replans < 0
   ) {
     throw new Error(
-      \`\${label}.replans must be a non-negative safe integer\`
+      `${label}.replans must be a non-negative safe integer`
     );
   }
   if (travel.failureReason !== null) {
     throw new Error(
-      \`\${label}.failureReason must be null\`
+      `${label}.failureReason must be null`
     );
   }
 
@@ -869,13 +869,13 @@ function assertPersistedActiveTravelState(
     travel.worldChangePolicy !== "eager"
   ) {
     throw new Error(
-      \`invalid \${label}.worldChangePolicy\`
+      `invalid ${label}.worldChangePolicy`
     );
   }
 
   assertTravelOptions(
     travel.options,
-    \`\${label}.options\`
+    `${label}.options`
   );
   const optionPolicy =
     travel.options.worldChangePolicy ??
@@ -885,7 +885,7 @@ function assertPersistedActiveTravelState(
     travel.worldChangePolicy
   ) {
     throw new Error(
-      \`\${label}.options.worldChangePolicy disagrees with travel state\`
+      `${label}.options.worldChangePolicy disagrees with travel state`
     );
   }
 
@@ -899,7 +899,7 @@ function assertPersistedActiveTravelState(
     travel.plan.steps.length
   ) {
     throw new Error(
-      \`\${label}.stepIndex must reference an executable plan step\`
+      `${label}.stepIndex must reference an executable plan step`
     );
   }
 
@@ -911,7 +911,7 @@ function assertPersistedActiveTravelState(
     currentStep.type !== "local-journey"
   ) {
     throw new Error(
-      \`\${label}.localStarted requires a local-journey step\`
+      `${label}.localStarted requires a local-journey step`
     );
   }
   if (
@@ -919,7 +919,7 @@ function assertPersistedActiveTravelState(
     currentStep.type !== "traverse-portal"
   ) {
     throw new Error(
-      \`\${label}.portalEntered requires a traverse-portal step\`
+      `${label}.portalEntered requires a traverse-portal step`
     );
   }
   if (
@@ -931,7 +931,7 @@ function assertPersistedActiveTravelState(
     )
   ) {
     throw new Error(
-      \`\${label}.portalTransitionRemaining requires an entered portal step\`
+      `${label}.portalTransitionRemaining requires an entered portal step`
     );
   }
   if (
@@ -939,7 +939,7 @@ function assertPersistedActiveTravelState(
     travel.portalTransitionRemaining <= 0
   ) {
     throw new Error(
-      \`\${label} entered portal must have positive portalTransitionRemaining\`
+      `${label} entered portal must have positive portalTransitionRemaining`
     );
   }
   if (
@@ -949,7 +949,7 @@ function assertPersistedActiveTravelState(
       currentStep.transitionCost
   ) {
     throw new Error(
-      \`\${label}.portalTransitionRemaining cannot exceed step transitionCost\`
+      `${label}.portalTransitionRemaining cannot exceed step transitionCost`
     );
   }
 
