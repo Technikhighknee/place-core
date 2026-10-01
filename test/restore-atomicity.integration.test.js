@@ -663,6 +663,18 @@ test("resume preserves eager stale-plan semantics across snapshots", () => {
       }
     );
 
+  assert.ok(
+    restored.getEntityLocation(
+      "hans"
+    )
+  );
+  assert.deepEqual(
+    restored.getEntityLocation(
+      "hans"
+    ).places,
+    ["house"]
+  );
+
   const resumed =
     restored.activeTravels.get(
       "hans"

@@ -354,6 +354,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
 
 
   const active = snapshot.activeTravels ?? [];
+  const resumableEntities = new Map();
 
   // Resume requires a matching restored world. Verify entity coverage before
   // materializing any place state into that world.
@@ -370,6 +371,10 @@ export function deserializePlaceCore(snapshot, options = {}) {
         entity,
         saved.entityId
       );
+      resumableEntities.set(
+        saved.entityId,
+        entity
+      );
     }
   }
 
@@ -377,6 +382,16 @@ export function deserializePlaceCore(snapshot, options = {}) {
   // transaction. PlaceRegistry.attachWorldCoreBridge rolls all earlier places back if
   // any later materialization/sync fails.
   if (bridge) registry.attachWorldCoreBridge(bridge);
+
+  if (bridge && resumeWorldCoreState) {
+    for (const saved of active) {
+      registry.updateEntityOccupancy(
+        resumableEntities.get(
+          saved.entityId
+        )
+      );
+    }
+  }
 
   const retainPending = (
     saved,
