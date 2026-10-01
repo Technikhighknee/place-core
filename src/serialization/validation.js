@@ -1505,7 +1505,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     travel,
     label
   ) => {
-    if (travel.planStale === true) {
+    if (travel.planStale !== false) {
       return;
     }
 
