@@ -745,6 +745,17 @@ test("active travel snapshots reject ignored or contradictory plan state", () =>
     /stepIndex must reference an executable plan step/
   );
 
+  const replannedLocal =
+    serializePlaceCore(places);
+  replannedLocal.activeTravels[0]
+    .localStarted = false;
+  assert.doesNotThrow(
+    () =>
+      validatePlaceCoreSnapshot(
+        replannedLocal
+      )
+  );
+
   const unsafeReplans =
     serializePlaceCore(places);
   unsafeReplans.activeTravels[0].replans =
@@ -1126,6 +1137,28 @@ test("snapshot validation rejects active travel portal identity drift", () => {
         excessiveRemaining
       ),
     /portalTransitionRemaining.*transitionCost|remaining.*transition/i
+  );
+
+  const replannedPortal =
+    serializePlaceCore(places);
+  const replanned =
+    replannedPortal.activeTravels[0];
+  const replannedPortalIndex =
+    replanned.plan.steps.findIndex(
+      (step) =>
+        step.type === "traverse-portal"
+    );
+  replanned.stepIndex =
+    replannedPortalIndex;
+  replanned.localStarted = false;
+  replanned.portalEntered = false;
+  replanned.portalTransitionRemaining = 0;
+
+  assert.doesNotThrow(
+    () =>
+      validatePlaceCoreSnapshot(
+        replannedPortal
+      )
   );
 
   const zeroRemaining =
