@@ -286,3 +286,48 @@ test("world-core entity removal clears occupancy and active travel", () => {
     event.reason === "entity-removed"
   ));
 });
+
+
+test("domain transfer event clears stale occupancy when world entity is unavailable", () => {
+  let onEvent = null;
+  const world = {
+    subscribeEvents(handler) {
+      onEvent = handler;
+      return () => true;
+    },
+    getEntity() {
+      return null;
+    }
+  };
+  const navigation = {};
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney() {},
+    stopJourney() {}
+  });
+  const places = new PlaceRegistry();
+
+  places.attachWorldCoreBridge(
+    bridge
+  );
+  places.updateEntityOccupancy({
+    id: "hans",
+    domainId: "street",
+    position: { x: 1, y: 2 }
+  });
+
+  assert.ok(
+    places.getEntityLocation("hans")
+  );
+
+  onEvent({
+    type: "entityDomainTransferred",
+    entityId: "hans"
+  });
+
+  assert.equal(
+    places.getEntityLocation("hans"),
+    null
+  );
+});

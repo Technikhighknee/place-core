@@ -274,6 +274,10 @@ export class WorldCoreBridge {
       const entity = this.world.getEntity(event.entityId);
       if (entity) {
         this.#registry.updateEntityOccupancy(entity);
+      } else {
+        this.#registry.removeEntityOccupancy(
+          event.entityId
+        );
       }
       return;
     }
