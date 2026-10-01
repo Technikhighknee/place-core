@@ -616,3 +616,46 @@ test("portal travel rejects a transferred entity with the wrong identity", () =>
     false
   );
 });
+
+
+test("portal travel fails cleanly when transfer returns an invalid domain id", () => {
+  const runtime = transferFailureRuntime(
+    (entity, endpoint) => {
+      entity.domainId = 42;
+      entity.position = {
+        ...endpoint.position
+      };
+      entity.journey = null;
+      return entity;
+    }
+  );
+
+  const travel =
+    reachPortalAndAttemptTransfer(runtime);
+
+  assert.equal(travel.status, "failed");
+  assert.equal(
+    travel.failureReason,
+    "invalid-domain-after-portal-transfer"
+  );
+  assert.equal(
+    runtime.places.activeTravels.has("hans"),
+    false
+  );
+
+  const events = runtime.places.drainEvents();
+  assert.equal(
+    events.some(
+      (event) =>
+        event.type === "portal-traverse"
+    ),
+    false
+  );
+  assert.equal(
+    events.some(
+      (event) =>
+        event.type === "portal-exit"
+    ),
+    false
+  );
+});
