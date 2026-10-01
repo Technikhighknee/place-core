@@ -433,3 +433,72 @@ test("missing external topology reference fails before domain creation", () => {
     false
   );
 });
+
+
+test("missing external topology does not require topology rollback capability", () => {
+  const world = new World();
+  const realNavigation =
+    new NavigationRegistry();
+  const navigation = {
+    topologies:
+      realNavigation.topologies,
+    domainBindings:
+      realNavigation.domainBindings,
+    domainInstances:
+      realNavigation.domainInstances,
+    bindDomain:
+      realNavigation.bindDomain.bind(
+        realNavigation
+      ),
+    unbindDomain:
+      realNavigation.unbindDomain.bind(
+        realNavigation
+      ),
+    clearDomainOverrides:
+      realNavigation.clearDomainOverrides.bind(
+        realNavigation
+      ),
+    setDomainRoadEffect:
+      realNavigation.setDomainRoadEffect.bind(
+        realNavigation
+      )
+  };
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+  const definition = {
+    id: "missing-external-preflight",
+    layers: [{
+      id: "inside",
+      topologyId: "not-registered",
+      navigation: null
+    }],
+    boundaries: [],
+    portals: []
+  };
+  const instance = {
+    id: "house",
+    layerDomains: new Map([
+      ["inside", "house:inside"]
+    ]),
+    dynamicPortals: new Map()
+  };
+
+  assert.throws(
+    () =>
+      bridge.materializePlace(
+        instance,
+        definition
+      ),
+    /topology not-registered.*not registered/
+  );
+
+  assert.equal(
+    world.getDomain("house:inside"),
+    undefined
+  );
+});

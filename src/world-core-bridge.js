@@ -395,6 +395,9 @@ export class WorldCoreBridge {
     const newTopologyIds = [
       ...new Set(
         definition.layers
+          .filter((layer) =>
+            layer.navigation != null
+          )
           .map((layer) => layer.topologyId)
           .filter((topologyId) =>
             topologyId != null &&
