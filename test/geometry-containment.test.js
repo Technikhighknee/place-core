@@ -479,3 +479,64 @@ test("deep space enablement remains scalable and invalidates after overrides", (
     false
   );
 });
+
+
+test("setSpaceState returns effective enablement under disabled ancestors", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "space-effective-state",
+    layers: [{ id: "inside" }],
+    spaces: [
+      {
+        id: "parent",
+        layerId: "inside",
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: 0,
+          maxX: 10,
+          maxY: 10
+        }
+      },
+      {
+        id: "child",
+        layerId: "inside",
+        parentSpaceId: "parent",
+        geometry: {
+          type: "aabb",
+          minX: 1,
+          minY: 1,
+          maxX: 9,
+          maxY: 9
+        }
+      }
+    ]
+  });
+
+  places.createPlace({
+    id: "house",
+    definitionId: "space-effective-state"
+  });
+
+  places.setSpaceState(
+    "house",
+    "parent",
+    { enabled: false }
+  );
+
+  const child =
+    places.setSpaceState(
+      "house",
+      "child",
+      { enabled: true }
+    );
+
+  assert.equal(child.enabled, false);
+  assert.equal(
+    places.getSpace(
+      "house",
+      "child"
+    ).enabled,
+    false
+  );
+});
