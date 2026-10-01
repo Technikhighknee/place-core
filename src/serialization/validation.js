@@ -1642,6 +1642,27 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
           `${label} fresh plan target anchor is in a disabled space`
         );
       }
+
+      if (travel.target.kind === "nearest") {
+        if (
+          !anchor.tags.includes(
+            travel.target.tag
+          )
+        ) {
+          throw new Error(
+            `${label} fresh nearest target anchor no longer matches tag ${travel.target.tag}`
+          );
+        }
+        if (
+          travel.target.anchorKind != null &&
+          anchor.kind !==
+            travel.target.anchorKind
+        ) {
+          throw new Error(
+            `${label} fresh nearest target anchor no longer matches kind ${travel.target.anchorKind}`
+          );
+        }
+      }
     }
 
     for (

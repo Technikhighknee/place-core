@@ -1888,3 +1888,89 @@ test("fresh semantic travel target cannot remain in a disabled ancestor space", 
     /target anchor is in a disabled space/
   );
 });
+
+
+test("fresh nearest travel target must still satisfy anchor filters", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "nearest-filter-place",
+    layers: [{ id: "inside" }],
+    anchors: [
+      {
+        id: "goal",
+        layerId: "inside",
+        position: { x: 5, y: 0 },
+        nodeId: "target-node",
+        tags: ["goal"],
+        kind: "counter"
+      },
+      {
+        id: "other",
+        layerId: "inside",
+        position: { x: 5, y: 0 },
+        nodeId: "target-node",
+        tags: ["other"],
+        kind: "counter"
+      }
+    ]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "nearest-filter-place"
+  });
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 5 };
+    },
+    startLocalJourney() {
+      entity.journey = {
+        destinationNodeId:
+          "target-node"
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        kind: "nearest",
+        tag: "goal",
+        anchorKind: "counter"
+      }
+    )
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+  snapshot.activeTravels[0]
+    .plan.resolvedTarget.anchorId =
+      "other";
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      ),
+    /nearest target anchor no longer matches tag goal/
+  );
+});
