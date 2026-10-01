@@ -1630,10 +1630,12 @@ function advance(registry, bridge, state, options = {}) {
         if (state.portalTransitionRemaining > 0) return state;
       }
 
-      bridge.transferEntity(state.entityId, direction.to);
-
       let moved;
       try {
+        bridge.transferEntity(
+          state.entityId,
+          direction.to
+        );
         moved = bridge.getEntity(
           state.entityId
         );
