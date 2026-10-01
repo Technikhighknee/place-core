@@ -981,3 +981,44 @@ test("startTravel does not leak active state when initial journey start throws",
     null
   );
 });
+
+
+test("failed travel state is removed even when local journey cleanup throws", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  const travel = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "house",
+      anchorId: "target"
+    }
+  );
+  assert.ok(travel);
+
+  bridge.getEntity = () => null;
+  bridge.stopLocalJourney = () => {
+    throw new Error(
+      "synthetic stop cleanup failure"
+    );
+  };
+
+  assert.throws(
+    () =>
+      stepTravel(
+        places,
+        bridge,
+        "hans"
+      ),
+    /synthetic stop cleanup failure/
+  );
+
+  assert.equal(
+    places.activeTravels.size,
+    0
+  );
+});
