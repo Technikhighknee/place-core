@@ -819,12 +819,14 @@ test("disposing a detached-empty registry releases bridge-owned topologies", () 
 });
 
 
-test("failed world-event unsubscribe keeps bridge attached and retryable", () => {
+test("failed world-event unsubscribe detaches logically and remains cleanup-retryable", () => {
+  let subscribeCalls = 0;
   let unsubscribeCalls = 0;
   let activeSubscription = true;
 
   const world = {
     subscribeEvents() {
+      subscribeCalls += 1;
       activeSubscription = true;
       return () => {
         unsubscribeCalls += 1;
@@ -858,15 +860,41 @@ test("failed world-event unsubscribe keeps bridge attached and retryable", () =>
 
   assert.equal(
     places.bridge,
-    bridge
+    null
   );
   assert.equal(
     activeSubscription,
     true
   );
   assert.equal(
+    subscribeCalls,
+    1
+  );
+  assert.equal(
     unsubscribeCalls,
     1
+  );
+
+  places.attachWorldCoreBridge(
+    bridge
+  );
+
+  assert.equal(
+    unsubscribeCalls,
+    2,
+    "reattach must clear the old pending subscription first"
+  );
+  assert.equal(
+    subscribeCalls,
+    2
+  );
+  assert.equal(
+    places.bridge,
+    bridge
+  );
+  assert.equal(
+    activeSubscription,
+    true
   );
 
   assert.equal(
@@ -875,7 +903,7 @@ test("failed world-event unsubscribe keeps bridge attached and retryable", () =>
   );
   assert.equal(
     unsubscribeCalls,
-    2
+    3
   );
   assert.equal(
     activeSubscription,
