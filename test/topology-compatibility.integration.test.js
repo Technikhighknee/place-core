@@ -319,3 +319,117 @@ test("failed multi-layer materialization removes newly registered topologies", (
     false
   );
 });
+
+
+test("explicit external topology references reuse a pre-registered topology", () => {
+  const world = new World();
+  const navigation = new NavigationRegistry();
+  const external = new Navigation();
+
+  external.addNode({
+    id: "a",
+    x: 0,
+    y: 0
+  });
+  external.addNode({
+    id: "b",
+    x: 1,
+    y: 0
+  });
+  external.addRoad({
+    id: "road",
+    from: "a",
+    to: "b"
+  });
+  navigation.registerTopology(
+    "external-topology",
+    external
+  );
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+  const places = new PlaceRegistry({
+    bridge
+  });
+
+  places.registerDefinition({
+    id: "external-topology-place",
+    layers: [{
+      id: "inside",
+      topologyId: "external-topology"
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "external-topology-place"
+  });
+
+  assert.ok(
+    world.getDomain(
+      place.layerDomains.get("inside")
+    )
+  );
+  assert.equal(
+    navigation.domainBindings.get(
+      place.layerDomains.get("inside")
+    ),
+    "external-topology"
+  );
+  assert.equal(
+    navigation.topologies.get(
+      "external-topology"
+    ),
+    external
+  );
+});
+
+
+test("missing external topology reference fails before domain creation", () => {
+  const world = new World();
+  const navigation =
+    new NavigationRegistry();
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+  const places = new PlaceRegistry({
+    bridge
+  });
+
+  places.registerDefinition({
+    id: "missing-external-topology",
+    layers: [{
+      id: "inside",
+      topologyId: "not-registered"
+    }]
+  });
+
+  assert.throws(
+    () =>
+      places.createPlace({
+        id: "house",
+        definitionId:
+          "missing-external-topology"
+      }),
+    /topology not-registered.*not registered/
+  );
+
+  assert.equal(
+    world.getDomain("house:inside"),
+    undefined
+  );
+  assert.equal(
+    navigation.domainBindings.has(
+      "house:inside"
+    ),
+    false
+  );
+});

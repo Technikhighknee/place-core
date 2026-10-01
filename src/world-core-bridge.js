@@ -730,12 +730,24 @@ export class WorldCoreBridge {
   }
 
   ensureLayerTopology(definition, layer) {
-    if (layer.topologyId == null || layer.navigation == null) return null;
+    if (layer.topologyId == null) return null;
 
     const existing = this.navigation.topologies?.get?.(layer.topologyId);
     if (existing) {
-      this.#assertLayerTopologyCompatible(existing, definition, layer);
+      if (layer.navigation != null) {
+        this.#assertLayerTopologyCompatible(
+          existing,
+          definition,
+          layer
+        );
+      }
       return existing;
+    }
+
+    if (layer.navigation == null) {
+      throw new Error(
+        `navigation topology ${layer.topologyId} referenced by place layer ${definition.id}:${layer.id} is not registered`
+      );
     }
 
     if (!this.NavigationClass) {
