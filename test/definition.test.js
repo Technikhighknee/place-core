@@ -98,6 +98,47 @@ test("embedded navigation nodes must coincide with semantic target positions", (
   );
 });
 
+test("space default anchors cannot belong to unrelated overlapping spaces", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "unrelated-default-anchor",
+      layers: [{ id: "inside" }],
+      spaces: [
+        {
+          id: "target",
+          layerId: "inside",
+          geometry: {
+            type: "aabb",
+            minX: 0,
+            minY: 0,
+            maxX: 10,
+            maxY: 10
+          },
+          defaultAnchorId: "other-anchor"
+        },
+        {
+          id: "other",
+          layerId: "inside",
+          geometry: {
+            type: "aabb",
+            minX: 0,
+            minY: 0,
+            maxX: 10,
+            maxY: 10
+          }
+        }
+      ],
+      anchors: [{
+        id: "other-anchor",
+        layerId: "inside",
+        spaceId: "other",
+        position: { x: 5, y: 5 }
+      }]
+    }),
+    /belongs to unrelated space other/
+  );
+});
+
 test("space default anchors must physically lie inside their space", () => {
   const invalid = tavernBlueprint();
   invalid.spaces[1].defaultAnchorId = "front";

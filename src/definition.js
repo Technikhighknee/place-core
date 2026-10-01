@@ -1149,6 +1149,47 @@ export function compilePlace(input, options = {}) {
     );
   }
 
+  for (const space of spaces) {
+    if (space.defaultAnchorId == null) {
+      continue;
+    }
+
+    const anchor =
+      anchorsById.get(
+        space.defaultAnchorId
+      );
+
+    if (anchor?.spaceId == null) {
+      continue;
+    }
+
+    let current =
+      spacesById.get(
+        anchor.spaceId
+      ) ?? null;
+    let belongsToSpace = false;
+
+    while (current) {
+      if (current.id === space.id) {
+        belongsToSpace = true;
+        break;
+      }
+
+      current =
+        current.parentSpaceId == null
+          ? null
+          : spacesById.get(
+              current.parentSpaceId
+            ) ?? null;
+    }
+
+    if (!belongsToSpace) {
+      throw new Error(
+        `space ${space.id} default anchor ${anchor.id} belongs to unrelated space ${anchor.spaceId}`
+      );
+    }
+  }
+
   const spaceIndexes = new Map();
   const cellSize = options.spaceIndexCellSize ?? DEFAULT_SPACE_INDEX_CELL_SIZE;
   for (const layer of layers) {
