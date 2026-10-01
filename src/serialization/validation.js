@@ -422,6 +422,47 @@ function assertSnapshotResolvedPortalPhysical(
   }
 }
 
+function claimSnapshotThresholdRoadOwnership(
+  portal,
+  item,
+  owners,
+  label
+) {
+  if (!portal?.a || !portal?.b) return;
+  if (portal.a.domainId !== portal.b.domainId) return;
+
+  const domainId = portal.a.domainId;
+  for (const binding of portal.roadBindings ?? []) {
+    if (
+      ownValue(
+        item.layerDomains,
+        binding.layerId
+      ) !== domainId
+    ) {
+      continue;
+    }
+
+    const key = tupleKey(
+      domainId,
+      binding.roadId
+    );
+    const owner = owners.get(key);
+    if (
+      owner != null &&
+      owner.portalId !== portal.id
+    ) {
+      throw new Error(
+        `navigation road ${binding.roadId} in domain ${domainId} is already bound as a threshold by portal ${owner.portalId}; ${label} cannot also own it`
+      );
+    }
+
+    owners.set(key, {
+      portalId: portal.id,
+      label
+    });
+  }
+}
+
 function resolveSnapshotPortalEndpoint(endpoint, item) {
   if (endpoint.kind === "local") {
     return {
@@ -884,12 +925,20 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     }
 
     const dynamicIds = new Set();
+    const thresholdRoadOwners = new Map();
+
     for (const portal of item.dynamicPortals ?? []) {
       assertDynamicPortal(
         portal,
         definition,
         item,
         dynamicIds
+      );
+      claimSnapshotThresholdRoadOwnership(
+        portal,
+        item,
+        thresholdRoadOwners,
+        `dynamic portal ${portal.id}`
       );
     }
 
@@ -908,6 +957,12 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
           resolved,
           definition,
           item,
+          `portal ${basePortal.id}`
+        );
+        claimSnapshotThresholdRoadOwnership(
+          resolved,
+          item,
+          thresholdRoadOwners,
           `portal ${basePortal.id}`
         );
       }
