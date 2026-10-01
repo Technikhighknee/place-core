@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   compilePlace,
+  PlaceRegistry,
   composeTransforms,
   geometryBounds,
   geometryContainsGeometry,
