@@ -105,6 +105,10 @@ export class WorldCoreBridge {
       );
     }
 
+    // A previous dispose can detach logically even if topology cleanup
+    // failed. Do not let ownership residue leak into a new registry.
+    this.#releaseUnboundOwnedTopologies();
+
     if (this.#unsubscribeWorldEvents) {
       this.#unsubscribeWorldEvents();
       this.#unsubscribeWorldEvents = null;
