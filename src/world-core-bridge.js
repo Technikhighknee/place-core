@@ -585,12 +585,33 @@ export class WorldCoreBridge {
           state.existed &&
           !this.world.getDomain?.(state.domainId)
         ) {
-          this.world.addDomain?.({
+          if (
+            typeof this.world.addDomain !==
+              "function"
+          ) {
+            throw new Error(
+              "world-core World.addDomain is required to restore materialized domains"
+            );
+          }
+          this.world.addDomain({
             id: state.domainId
           });
         }
 
-        this.navigation.clearDomainOverrides?.(state.domainId);
+        if (state.roadEffects.length > 0) {
+          if (
+            typeof this.navigation
+              .clearDomainOverrides !==
+              "function"
+          ) {
+            throw new Error(
+              "world-core NavigationRegistry.clearDomainOverrides is required to restore domain road effects"
+            );
+          }
+          this.navigation.clearDomainOverrides(
+            state.domainId
+          );
+        }
 
         const currentBinding =
           this.navigation.domainBindings?.get?.(state.domainId) ??
@@ -598,10 +619,28 @@ export class WorldCoreBridge {
 
         if (state.previousBinding == null) {
           if (currentBinding != null) {
-            this.navigation.unbindDomain?.(state.domainId);
+            if (
+              typeof this.navigation.unbindDomain !==
+                "function"
+            ) {
+              throw new Error(
+                "world-core NavigationRegistry.unbindDomain is required to restore domain bindings"
+              );
+            }
+            this.navigation.unbindDomain(
+              state.domainId
+            );
           }
         } else if (currentBinding !== state.previousBinding) {
-          this.navigation.bindDomain?.(
+          if (
+            typeof this.navigation.bindDomain !==
+              "function"
+          ) {
+            throw new Error(
+              "world-core NavigationRegistry.bindDomain is required to restore domain bindings"
+            );
+          }
+          this.navigation.bindDomain(
             state.domainId,
             state.previousBinding
           );
@@ -609,7 +648,9 @@ export class WorldCoreBridge {
 
         if (state.previousBinding != null) {
           for (const saved of state.roadEffects) {
-            this.navigation.setDomainRoadEffect?.(
+            this.#navigationMethod(
+              "setDomainRoadEffect"
+            )(
               state.domainId,
               saved.effectId,
               saved.roadId,
@@ -618,8 +659,21 @@ export class WorldCoreBridge {
           }
         }
 
-        if (!state.existed && this.world.getDomain?.(state.domainId)) {
-          this.world.removeDomain?.(state.domainId);
+        if (
+          !state.existed &&
+          this.world.getDomain?.(state.domainId)
+        ) {
+          if (
+            typeof this.world.removeDomain !==
+              "function"
+          ) {
+            throw new Error(
+              "world-core World.removeDomain is required to rollback newly materialized domains"
+            );
+          }
+          this.world.removeDomain(
+            state.domainId
+          );
         }
       } catch (error) {
         errors.push(error);
