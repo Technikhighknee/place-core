@@ -1742,8 +1742,8 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         );
       }
 
-      const matches =
-        directions.some(
+      const matchedDirection =
+        directions.find(
           ({ from, to }) =>
             from.domainId ===
               step.fromDomainId &&
@@ -1753,13 +1753,57 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
               step.destinationPosition.x &&
             to.position.y ===
               step.destinationPosition.y
-        );
+        ) ?? null;
 
-      if (!matches) {
+      if (!matchedDirection) {
         throw new Error(
           `${label} fresh plan step ${i} portal route no longer matches snapshot state`
         );
       }
+
+      const previous =
+        travel.plan.steps[i - 1] ??
+        null;
+      if (
+        previous?.type ===
+        "local-journey" &&
+        (
+          previous.domainId !==
+            matchedDirection.from.domainId ||
+          previous.destinationNodeId !==
+            matchedDirection.from.nodeId ||
+          previous.destinationPosition.x !==
+            matchedDirection.from.position.x ||
+          previous.destinationPosition.y !==
+            matchedDirection.from.position.y
+        )
+      ) {
+        throw new Error(
+          `${label} fresh plan local step before portal ${step.portalId} no longer matches portal entry`
+        );
+      }
+    }
+
+    const finalStep =
+      travel.plan.steps.at(-1) ??
+      null;
+    if (
+      finalStep?.type ===
+      "local-journey" &&
+      (
+        finalStep.domainId !==
+          travel.plan.resolvedTarget.domainId ||
+        finalStep.destinationNodeId !==
+          travel.plan.resolvedTarget.nodeId ||
+        finalStep.destinationPosition.x !==
+          travel.plan.resolvedTarget.position.x ||
+        finalStep.destinationPosition.y !==
+          travel.plan.resolvedTarget.position.y
+      )
+    ) {
+      throw new Error(
+        `${label} fresh plan final local step no longer matches resolved target`
+      );
     }
   };
 

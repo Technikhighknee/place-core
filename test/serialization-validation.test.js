@@ -1505,6 +1505,65 @@ test("fresh travel snapshots require every portal step to still resolve", () => 
     /fresh plan step.*non-traversable portal door/
   );
 
+  const wrongPortalEntry =
+    serializePlaceCore(places);
+  const portalIndex =
+    wrongPortalEntry.activeTravels[0]
+      .plan.steps.findIndex(
+        (step) =>
+          step.type ===
+          "traverse-portal"
+      );
+  const entryStep =
+    wrongPortalEntry.activeTravels[0]
+      .plan.steps[portalIndex - 1];
+  assert.equal(
+    entryStep.type,
+    "local-journey"
+  );
+  entryStep.destinationPosition.x +=
+    1;
+  wrongPortalEntry.activeTravels[0]
+    .plan.legs =
+      structuredClone(
+        wrongPortalEntry.activeTravels[0]
+          .plan.steps
+      );
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        wrongPortalEntry
+      ),
+    /local step before portal.*no longer matches portal entry/
+  );
+
+  const wrongFinalLeg =
+    serializePlaceCore(places);
+  const finalLeg =
+    wrongFinalLeg.activeTravels[0]
+      .plan.steps.at(-1);
+  assert.equal(
+    finalLeg.type,
+    "local-journey"
+  );
+  finalLeg.destinationPosition.x +=
+    1;
+  wrongFinalLeg.activeTravels[0]
+    .plan.legs =
+      structuredClone(
+        wrongFinalLeg.activeTravels[0]
+          .plan.steps
+      );
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        wrongFinalLeg
+      ),
+    /final local step no longer matches resolved target/
+  );
+
   const wrongCost =
     serializePlaceCore(places);
   const wrongCostStep =
