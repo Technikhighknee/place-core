@@ -709,6 +709,21 @@ export class WorldCoreBridge {
           `cannot remove occupied world-core domain ${domainId}`
         );
       }
+
+      const obstacleField =
+        domain != null
+          ? this.world.domainObstacleFields
+              ?.get?.(domain.handle) ??
+            null
+          : null;
+      if (
+        obstacleField?.obstacles?.size >
+        0
+      ) {
+        throw new Error(
+          `cannot remove world-core domain ${domainId} with obstacles`
+        );
+      }
     }
 
     const receipt = {
