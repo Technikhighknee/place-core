@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import {
   PlaceRegistry,
   startTravel,
-  stepTravel
+  stepTravel,
+  stopTravel
 } from "../src/index.js";
 
 test("encounter travel replans instead of teleporting through a moved portal endpoint", () => {
@@ -364,6 +365,14 @@ test("portal transfer exception clears uncertain occupancy before failing travel
         event.reason === "step-error"
     )
   );
+  assert.ok(
+    events.some(
+      (event) =>
+        event.type === "portal-abort" &&
+        event.portalId === "door" &&
+        event.reason === "step-error"
+    )
+  );
 });
 
 test("portal transfer lookup exception clears stale occupancy before failing travel", () => {
@@ -458,6 +467,11 @@ test("portal travel does not advance when a bridge transfer is a no-op", () => {
     events.some((event) => event.type === "portal-exit"),
     false
   );
+  assert.ok(events.some((event) =>
+    event.type === "portal-abort" &&
+    event.portalId === "door" &&
+    event.reason === "replan"
+  ));
 });
 
 test("portal travel replans when transfer lands at the wrong target position", () => {
@@ -784,5 +798,128 @@ test("portal travel fails cleanly when transfer returns an invalid domain id", (
         event.type === "portal-exit"
     ),
     false
+  );
+});
+
+
+test("cancelling during a portal transition emits one portal abort", () => {
+  const places = new PlaceRegistry({
+    captureEvents: true
+  });
+  places.registerDefinition({
+    id: "cancel-transition-place",
+    layers: [{ id: "inside" }],
+    portals: [{
+      id: "door",
+      transitionCost: 5,
+      a: {
+        kind: "external",
+        slot: "street"
+      },
+      b: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 },
+        nodeId: "inside-door"
+      }
+    }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      position: { x: 1, y: 0 },
+      nodeId: "target"
+    }]
+  });
+  places.createPlace({
+    id: "house",
+    definitionId: "cancel-transition-place",
+    attachments: {
+      street: {
+        domainId: "street",
+        position: { x: 0, y: 0 },
+        nodeId: "street-door"
+      }
+    }
+  });
+
+  const entity = {
+    id: "hans",
+    domainId: "street",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 0 };
+    },
+    startLocalJourney() {
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {
+      throw new Error(
+        "transfer must not run before cancellation"
+      );
+    }
+  };
+
+  const started = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "house",
+      anchorId: "target"
+    }
+  );
+
+  assert.ok(started);
+  assert.equal(
+    started.portalEntered,
+    true
+  );
+  assert.equal(
+    started.portalTransitionRemaining,
+    5
+  );
+
+  places.drainEvents();
+
+  assert.equal(
+    stopTravel(
+      places,
+      bridge,
+      "hans",
+      { reason: "user-cancel" }
+    ),
+    true
+  );
+
+  const events = places.drainEvents();
+  const aborts = events.filter(
+    (event) =>
+      event.type === "portal-abort"
+  );
+
+  assert.equal(aborts.length, 1);
+  assert.equal(
+    aborts[0].portalId,
+    "door"
+  );
+  assert.equal(
+    aborts[0].reason,
+    "user-cancel"
+  );
+  assert.ok(
+    events.some(
+      (event) =>
+        event.type === "travel-cancelled"
+    )
   );
 });

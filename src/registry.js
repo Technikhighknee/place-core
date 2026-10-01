@@ -30,6 +30,7 @@ import {
   PLACE_INSTANCE_MUTATION_TOKEN,
   PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN,
   PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+  abortEnteredTravelPortal,
   bindTravelRuntimeBridge,
   getTravelRuntimeBridge,
   ReadonlyMapView,
@@ -327,6 +328,11 @@ export class PlaceRegistry {
 
     const state = this.#activeTravels.get(entityId) ?? null;
     if (state) {
+      abortEnteredTravelPortal(
+        this,
+        state,
+        "entity-removed"
+      );
       this.#activeTravels.delete(entityId);
       state.status = "failed";
       state.failureReason = "entity-removed";

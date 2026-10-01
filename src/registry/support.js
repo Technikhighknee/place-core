@@ -52,6 +52,38 @@ export function getTravelRuntimeBridge(state) {
   return activeTravelBridges.get(state) ?? null;
 }
 
+export function abortEnteredTravelPortal(
+  registry,
+  state,
+  reason
+) {
+  if (!state?.portalEntered) {
+    return false;
+  }
+
+  const step =
+    state.plan?.steps?.[state.stepIndex] ??
+    null;
+
+  state.portalEntered = false;
+  state.portalTransitionRemaining = 0;
+
+  if (step?.type !== "traverse-portal") {
+    return false;
+  }
+
+  registry.emit?.("portal-abort", {
+    entityId: state.entityId,
+    portalKey: step.portalKey,
+    placeId: step.placeId,
+    portalId: step.portalId,
+    fromDomainId: step.fromDomainId,
+    toDomainId: step.toDomainId,
+    reason
+  });
+  return true;
+}
+
 export class ReadonlyMapView {
   #map;
   #project;

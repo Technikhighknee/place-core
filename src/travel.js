@@ -128,6 +128,7 @@ function validateTravelEntity(
 
 import {
   PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+  abortEnteredTravelPortal,
   bindTravelRuntimeBridge,
   getTravelRuntimeBridge,
   snapshotTravelState
@@ -1340,6 +1341,11 @@ function finalizeFailedTravel(
   state,
   reason
 ) {
+  abortEnteredTravelPortal(
+    registry,
+    state,
+    reason
+  );
   state.status = "failed";
   state.failureReason = reason;
   registry._deleteActiveTravel(
@@ -1442,6 +1448,12 @@ function complete(registry, state) {
 }
 
 function replan(registry, bridge, state, options) {
+  abortEnteredTravelPortal(
+    registry,
+    state,
+    "replan"
+  );
+
   try {
     bridge.stopLocalJourney(state.entityId);
   } catch (error) {
@@ -2213,6 +2225,12 @@ export function stopTravel(registry, a, b, c = {}) {
     state,
     bridge,
     "stopTravel"
+  );
+
+  abortEnteredTravelPortal(
+    registry,
+    state,
+    options.reason
   );
 
   let cleanupError = null;
