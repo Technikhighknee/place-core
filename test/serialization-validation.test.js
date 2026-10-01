@@ -780,6 +780,19 @@ test("active travel snapshots reject ignored or contradictory plan state", () =>
     () => validatePlaceCoreSnapshot(wrongEstimate),
     /estimatedSeconds.*mismatch|estimated.*step.*sum/i
   );
+
+  const wrongResolvedTarget =
+    serializePlaceCore(places);
+  wrongResolvedTarget.activeTravels[0]
+    .plan.resolvedTarget.placeId =
+      "other-house";
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        wrongResolvedTarget
+      ),
+    /resolvedTarget.*placeId.*target|resolved target.*mismatch/i
+  );
 });
 
 test("deserialize options reject unknown fields", () => {
