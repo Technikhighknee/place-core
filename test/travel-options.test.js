@@ -1674,3 +1674,75 @@ test("stepPlaceSimulation rejects a foreign bridge even with no active travels",
     /different from the one attached to the PlaceRegistry/
   );
 });
+
+
+test("attaching a different bridge cannot strand an active explicit travel", () => {
+  const places = new PlaceRegistry();
+  const entity = {
+    id: "a",
+    domainId: "world",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+
+  const bridge = {
+    getEntity(id) {
+      return id === "a" ? entity : null;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 10 };
+    },
+    startLocalJourney(
+      id,
+      destinationNodeId
+    ) {
+      entity.journey = {
+        destinationNodeId
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    }
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "a",
+      {
+        domainId: "world",
+        position: { x: 10, y: 0 },
+        nodeId: "target"
+      }
+    )
+  );
+
+  let attachCalls = 0;
+  const foreignBridge = {
+    attachRegistry() {
+      attachCalls += 1;
+    }
+  };
+
+  assert.throws(
+    () =>
+      places.attachWorldCoreBridge(
+        foreignBridge
+      ),
+    /different from the one owning active travel/
+  );
+
+  assert.equal(attachCalls, 0);
+  assert.equal(places.bridge, null);
+  assert.equal(
+    stopTravel(
+      places,
+      "a"
+    ),
+    true
+  );
+  assert.equal(entity.journey, null);
+});

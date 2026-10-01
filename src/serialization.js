@@ -1,6 +1,7 @@
 import { PlaceRegistry } from "./place-registry.js";
 import {
-  PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN
+  PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+  bindTravelRuntimeBridge
 } from "./registry/support.js";
 import { compilePlace } from "./definition.js";
 import {
@@ -14,7 +15,6 @@ import {
   sha256
 } from "./utils.js";
 import {
-  bindTravelRuntimeBridge,
   startTravel,
   stopTravel
 } from "./travel.js";

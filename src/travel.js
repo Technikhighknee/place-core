@@ -28,35 +28,6 @@ export {
   validateTravelTarget
 };
 
-const activeTravelBridges = new WeakMap();
-
-export function bindTravelRuntimeBridge(
-  state,
-  bridge
-) {
-  if (!state || typeof state !== "object") {
-    throw new TypeError(
-      "active travel state must be an object"
-    );
-  }
-  if (!bridge || typeof bridge !== "object") {
-    throw new TypeError(
-      "active travel bridge must be an object"
-    );
-  }
-
-  const existing =
-    activeTravelBridges.get(state);
-  if (existing && existing !== bridge) {
-    throw new Error(
-      "active travel is already bound to a different WorldCoreBridge"
-    );
-  }
-
-  activeTravelBridges.set(state, bridge);
-  return state;
-}
-
 function assertRegistryExecutionBridge(
   registry,
   bridge,
@@ -78,7 +49,7 @@ function assertActiveTravelBridge(
   operation
 ) {
   const existing =
-    activeTravelBridges.get(state);
+    getTravelRuntimeBridge(state);
 
   if (existing && existing !== bridge) {
     throw new Error(
@@ -87,7 +58,7 @@ function assertActiveTravelBridge(
   }
 
   if (!existing) {
-    activeTravelBridges.set(state, bridge);
+    bindTravelRuntimeBridge(state, bridge);
   }
 }
 
@@ -157,6 +128,8 @@ function validateTravelEntity(
 
 import {
   PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+  bindTravelRuntimeBridge,
+  getTravelRuntimeBridge,
   snapshotTravelState
 } from "./registry/support.js";
 import {
@@ -2141,7 +2114,7 @@ export function stopTravel(registry, a, b, c = {}) {
   if (!state) return false;
 
   bridge ??=
-    activeTravelBridges.get(state) ??
+    getTravelRuntimeBridge(state) ??
     registry.bridge;
 
   if (!bridge) {

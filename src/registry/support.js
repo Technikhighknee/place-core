@@ -16,6 +16,42 @@ export const PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN =
 export const PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN =
   Symbol("place-core-travel-mutation");
 
+const activeTravelBridges = new WeakMap();
+
+export function bindTravelRuntimeBridge(
+  state,
+  bridge
+) {
+  if (!state || typeof state !== "object") {
+    throw new TypeError(
+      "active travel state must be an object"
+    );
+  }
+  if (!bridge || typeof bridge !== "object") {
+    throw new TypeError(
+      "active travel bridge must be an object"
+    );
+  }
+
+  const existing =
+    activeTravelBridges.get(state);
+  if (existing && existing !== bridge) {
+    throw new Error(
+      "active travel is already bound to a different WorldCoreBridge"
+    );
+  }
+
+  activeTravelBridges.set(state, bridge);
+  return state;
+}
+
+export function getTravelRuntimeBridge(state) {
+  if (!state || typeof state !== "object") {
+    return null;
+  }
+  return activeTravelBridges.get(state) ?? null;
+}
+
 export class ReadonlyMapView {
   #map;
   #project;

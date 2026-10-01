@@ -30,6 +30,8 @@ import {
   PLACE_INSTANCE_MUTATION_TOKEN,
   PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN,
   PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+  bindTravelRuntimeBridge,
+  getTravelRuntimeBridge,
   ReadonlyMapView,
   assertPlainObject,
   assertPatchKeys,
@@ -349,6 +351,16 @@ export class PlaceRegistry {
       throw new Error("place-core already has a different bridge attached");
     }
 
+    for (const state of this.#activeTravels.values()) {
+      const owner =
+        getTravelRuntimeBridge(state);
+      if (owner != null && owner !== bridge) {
+        throw new Error(
+          "cannot attach a WorldCoreBridge different from the one owning active travel"
+        );
+      }
+    }
+
     const materialized = [];
     let registryAttached = false;
 
@@ -437,6 +449,12 @@ export class PlaceRegistry {
       throw error;
     }
 
+    for (const state of this.#activeTravels.values()) {
+      bindTravelRuntimeBridge(
+        state,
+        bridge
+      );
+    }
     this.#bridge = bridge;
     return this;
   }
