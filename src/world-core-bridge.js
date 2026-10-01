@@ -824,6 +824,80 @@ export class WorldCoreBridge {
       )
     };
 
+    const existingDomains = receipt.domains.filter(
+      (state) => state.existed
+    );
+
+    if (
+      existingDomains.length > 0 &&
+      typeof this.world.removeDomain !==
+        "function"
+    ) {
+      throw new Error(
+        "world-core World.removeDomain is required to unmaterialize place domains"
+      );
+    }
+
+    if (
+      existingDomains.length > 0 &&
+      typeof this.world.addDomain !==
+        "function"
+    ) {
+      throw new Error(
+        "world-core World.addDomain is required for transactional unmaterialization rollback"
+      );
+    }
+
+    if (
+      receipt.domains.some(
+        (state) =>
+          state.previousBinding != null
+      )
+    ) {
+      if (
+        typeof this.navigation.unbindDomain !==
+          "function"
+      ) {
+        throw new Error(
+          "world-core NavigationRegistry.unbindDomain is required to unmaterialize bound place domains"
+        );
+      }
+      if (
+        typeof this.navigation.bindDomain !==
+          "function"
+      ) {
+        throw new Error(
+          "world-core NavigationRegistry.bindDomain is required for transactional unmaterialization rollback"
+        );
+      }
+    }
+
+    if (
+      receipt.domains.some(
+        (state) =>
+          state.roadEffects.length > 0
+      )
+    ) {
+      if (
+        typeof this.navigation
+          .clearDomainOverrides !==
+          "function"
+      ) {
+        throw new Error(
+          "world-core NavigationRegistry.clearDomainOverrides is required to unmaterialize domain road effects"
+        );
+      }
+      if (
+        typeof this.navigation
+          .setDomainRoadEffect !==
+          "function"
+      ) {
+        throw new Error(
+          "world-core NavigationRegistry.setDomainRoadEffect is required for transactional road-effect rollback"
+        );
+      }
+    }
+
     try {
       for (const portal of definition.portals) {
         this.clearPortalEffects(
@@ -852,15 +926,24 @@ export class WorldCoreBridge {
       }
 
       for (
-        const domainId of
-        [...domains].reverse()
+        const state of
+        [...receipt.domains].reverse()
       ) {
-        this.navigation
-          .clearDomainOverrides?.(domainId);
-        this.navigation
-          .unbindDomain?.(domainId);
-        this.world
-          .removeDomain?.(domainId);
+        if (state.roadEffects.length > 0) {
+          this.navigation.clearDomainOverrides(
+            state.domainId
+          );
+        }
+        if (state.previousBinding != null) {
+          this.navigation.unbindDomain(
+            state.domainId
+          );
+        }
+        if (state.existed) {
+          this.world.removeDomain(
+            state.domainId
+          );
+        }
       }
     } catch (error) {
       let rollbackError = null;
