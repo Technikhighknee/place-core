@@ -1064,3 +1064,53 @@ test("stopTravel finalizes cancellation even when local cleanup throws", () => {
     0
   );
 });
+
+
+test("replan cleanup failure does not leave travel active", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      },
+      {
+        worldChangePolicy: "eager"
+      }
+    )
+  );
+
+  places.setPortalState(
+    "house",
+    "stairs",
+    { locked: true }
+  );
+
+  bridge.stopLocalJourney = () => {
+    throw new Error(
+      "synthetic replan cleanup failure"
+    );
+  };
+
+  assert.throws(
+    () =>
+      stepTravel(
+        places,
+        bridge,
+        "hans"
+      ),
+    /synthetic replan cleanup failure/
+  );
+
+  assert.equal(
+    places.activeTravels.size,
+    0
+  );
+});
