@@ -422,13 +422,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
           0.25
       });
       state.worldChangePolicy = state.options.worldChangePolicy;
-      if (state.plan) {
-        state.plan.travelRevision =
-          registry.travelRevision;
-        state.plan.legs = state.plan.steps;
-        deepFreeze(state.plan);
-      }
-      state.travelRevision =
+      const resumedTravelRevision =
         planWasStale
           ? (
               registry.travelRevision === 0
@@ -436,6 +430,14 @@ export function deserializePlaceCore(snapshot, options = {}) {
                 : registry.travelRevision - 1
             )
           : registry.travelRevision;
+      if (state.plan) {
+        state.plan.travelRevision =
+          resumedTravelRevision;
+        state.plan.legs = state.plan.steps;
+        deepFreeze(state.plan);
+      }
+      state.travelRevision =
+        resumedTravelRevision;
       bindTravelRuntimeBridge(
         state,
         bridge

@@ -664,6 +664,10 @@ test("resume preserves eager stale-plan semantics across snapshots", () => {
     resumed.travelRevision,
     restored.travelRevision
   );
+  assert.equal(
+    resumed.plan.travelRevision,
+    resumed.travelRevision
+  );
 
   const result = stepTravel(
     restored,
