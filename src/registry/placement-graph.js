@@ -69,18 +69,33 @@ export class PlacementGraphIndex {
   }
 
   assertParentDoesNotCycle(instanceId, parentId) {
-    let cursorId = parentId;
-    const visited = new Set([typedIdKey(instanceId)]);
+    const parentKey = typedIdKey(parentId);
+    const queue = [instanceId];
+    const visited = new Set();
 
-    while (cursorId != null) {
-      const key = typedIdKey(cursorId);
-      if (visited.has(key)) {
+    for (let i = 0; i < queue.length; i += 1) {
+      const currentId = queue[i];
+      const currentKey = typedIdKey(currentId);
+
+      if (currentKey === parentKey) {
         throw new Error("place placement cycle");
       }
+      if (visited.has(currentKey)) {
+        continue;
+      }
+      visited.add(currentKey);
 
-      visited.add(key);
-      const cursor = this.#instances.get(cursorId);
-      cursorId = cursor?.placement?.parentPlaceId ?? null;
+      const children = this.#children.get(currentId);
+      if (!children) continue;
+
+      queue.push(
+        ...[...children].sort((a, b) =>
+          compareStrings(
+            typedIdKey(a),
+            typedIdKey(b)
+          )
+        )
+      );
     }
   }
 
