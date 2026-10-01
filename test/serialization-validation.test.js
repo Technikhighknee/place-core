@@ -745,6 +745,13 @@ test("active travel snapshots reject ignored or contradictory plan state", () =>
     /stepIndex must reference an executable plan step/
   );
 
+  const inactiveLocal = serializePlaceCore(places);
+  inactiveLocal.activeTravels[0].localStarted = false;
+  assert.throws(
+    () => validatePlaceCoreSnapshot(inactiveLocal),
+    /local-journey.*localStarted true/
+  );
+
   const unsafeReplans =
     serializePlaceCore(places);
   unsafeReplans.activeTravels[0].replans =
@@ -1126,5 +1133,50 @@ test("snapshot validation rejects active travel portal identity drift", () => {
         excessiveRemaining
       ),
     /portalTransitionRemaining.*transitionCost|remaining.*transition/i
+  );
+
+  const unenteredPortal =
+    serializePlaceCore(places);
+  const unentered =
+    unenteredPortal.activeTravels[0];
+  const unenteredPortalIndex =
+    unentered.plan.steps.findIndex(
+      (step) =>
+        step.type === "traverse-portal"
+    );
+  unentered.stepIndex =
+    unenteredPortalIndex;
+  unentered.localStarted = false;
+  unentered.portalEntered = false;
+  unentered.portalTransitionRemaining = 0;
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        unenteredPortal
+      ),
+    /traverse-portal.*portalEntered true/
+  );
+
+  const zeroRemaining =
+    serializePlaceCore(places);
+  const zero =
+    zeroRemaining.activeTravels[0];
+  const zeroPortalIndex =
+    zero.plan.steps.findIndex(
+      (step) =>
+        step.type === "traverse-portal"
+    );
+  zero.stepIndex = zeroPortalIndex;
+  zero.localStarted = false;
+  zero.portalEntered = true;
+  zero.portalTransitionRemaining = 0;
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        zeroRemaining
+      ),
+    /entered portal.*positive portalTransitionRemaining/
   );
 });
