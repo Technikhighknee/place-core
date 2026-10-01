@@ -8,6 +8,7 @@ import { typedIdKey } from "./support.js";
 export class PlacementGraphIndex {
   #instances;
   #children = new Map();
+  #resolvedCache = new Map();
 
   constructor(instances) {
     this.#instances = instances;
@@ -18,6 +19,10 @@ export class PlacementGraphIndex {
   }
 
   register(instance) {
+    this.invalidateResolvedDescendants(
+      instance.id
+    );
+
     const parentId = instance?.placement?.parentPlaceId;
     if (parentId == null) return;
 
@@ -30,6 +35,10 @@ export class PlacementGraphIndex {
   }
 
   unregister(instance) {
+    this.invalidateResolvedDescendants(
+      instance.id
+    );
+
     const parentId = instance?.placement?.parentPlaceId;
     if (parentId == null) return;
 
@@ -68,6 +77,13 @@ export class PlacementGraphIndex {
     return result;
   }
 
+  invalidateResolvedDescendants(instanceId) {
+    for (const id of
+      this.collectDescendants(instanceId)) {
+      this.#resolvedCache.delete(id);
+    }
+  }
+
   assertParentDoesNotCycle(instanceId, parentId) {
     const parentKey = typedIdKey(parentId);
     const queue = [instanceId];
@@ -100,47 +116,93 @@ export class PlacementGraphIndex {
   }
 
   resolve(instanceId) {
+    if (this.#resolvedCache.has(instanceId)) {
+      return this.#resolvedCache.get(instanceId);
+    }
+
     const chain = [];
     const visited = new Set();
     let current = this.#instances.get(instanceId);
+    let resolved = null;
+    let baseKnown = false;
 
     while (current?.placement) {
       const key = typedIdKey(current.id);
       if (visited.has(key)) {
         throw new Error("place placement cycle");
       }
-
       visited.add(key);
-      chain.push(current.placement);
-      if (current.placement.domainId != null) break;
+
+      if (this.#resolvedCache.has(current.id)) {
+        resolved =
+          this.#resolvedCache.get(current.id);
+        baseKnown = true;
+        break;
+      }
+
+      if (current.placement.domainId != null) {
+        resolved = deepFreeze({
+          domainId:
+            current.placement.domainId,
+          transform:
+            current.placement.transform,
+          containment:
+            current.placement.containment ??
+            "none"
+        });
+        this.#resolvedCache.set(
+          current.id,
+          resolved
+        );
+        baseKnown = true;
+        break;
+      }
+
+      chain.push(current);
       current = this.#instances.get(
         current.placement.parentPlaceId
       );
     }
 
-    if (!chain.length ||
-        chain[chain.length - 1].domainId == null) {
-      return null;
+    if (!baseKnown) {
+      resolved = null;
     }
 
-    const root = chain.pop();
-    let transform = root.transform;
-    const domainId = root.domainId;
-
     while (chain.length) {
-      transform = composeTransforms(
-        transform,
-        chain.pop().transform
+      const child = chain.pop();
+
+      if (resolved == null) {
+        this.#resolvedCache.set(
+          child.id,
+          null
+        );
+        continue;
+      }
+
+      resolved = deepFreeze({
+        domainId: resolved.domainId,
+        transform: composeTransforms(
+          resolved.transform,
+          child.placement.transform
+        ),
+        containment:
+          child.placement.containment ??
+          "none"
+      });
+      this.#resolvedCache.set(
+        child.id,
+        resolved
       );
     }
 
-    return deepFreeze({
-      domainId,
-      transform,
-      containment:
-        this.#instances.get(instanceId)
-          ?.placement?.containment ?? "none"
-    });
+    if (!this.#resolvedCache.has(instanceId)) {
+      this.#resolvedCache.set(
+        instanceId,
+        resolved
+      );
+    }
+
+    return this.#resolvedCache.get(instanceId);
   }
 
   assertInstanceIndexed(instance) {
@@ -161,6 +223,14 @@ export class PlacementGraphIndex {
   }
 
   assertConsistency() {
+    for (const instanceId of this.#resolvedCache.keys()) {
+      if (!this.#instances.has(instanceId)) {
+        throw new Error(
+          `placement resolve cache references missing instance ${String(instanceId)}`
+        );
+      }
+    }
+
     for (const instance of this.#instances.values()) {
       this.assertInstanceIndexed(instance);
     }
