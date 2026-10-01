@@ -71,3 +71,57 @@ test("deep semantic containment does not depend on the JavaScript call stack", (
 
   restored.assertInternalConsistency();
 });
+
+
+test("deep relative placement remains iterative across consistency and snapshot validation", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "deep-placement-node",
+    layers: [{ id: "inside" }]
+  });
+
+  for (let i = 0; i < DEPTH; i += 1) {
+    places.createPlace({
+      id: id(i),
+      definitionId: "deep-placement-node",
+      placement: i === 0
+        ? {
+            domainId: "world",
+            transform: {
+              x: 0,
+              y: 0,
+              rotation: 0,
+              scale: 1
+            }
+          }
+        : {
+            parentPlaceId: id(i - 1),
+            transform: {
+              x: 1,
+              y: 0,
+              rotation: 0,
+              scale: 1
+            }
+          }
+    });
+  }
+
+  const last = id(DEPTH - 1);
+  const resolved =
+    places.getResolvedPlacement(last);
+
+  assert.ok(resolved);
+  assert.equal(resolved.domainId, "world");
+  assert.equal(
+    resolved.transform.x,
+    DEPTH - 1
+  );
+
+  places.assertInternalConsistency();
+
+  const snapshot = serializePlaceCore(places);
+  assert.equal(
+    validatePlaceCoreSnapshot(snapshot),
+    true
+  );
+});
