@@ -496,3 +496,59 @@ test("unmaterialization preflights domain removal capability before mutation", (
     "preflight must fail before the domain can be removed or local cleanup proceeds"
   );
 });
+
+
+test("rollbackMaterializePlace does not hide missing cleanup capabilities", () => {
+  const domains = new Map([
+    ["leaked-domain", {
+      id: "leaked-domain",
+      entityCount: 0
+    }]
+  ]);
+
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain(id) {
+      return domains.get(id);
+    }
+  };
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation: {},
+    startJourney,
+    stopJourney
+  });
+
+  assert.throws(
+    () =>
+      bridge.rollbackMaterializePlace(
+        {
+          id: "house",
+          layerDomains: new Map()
+        },
+        {
+          id: "place",
+          layers: [],
+          portals: [],
+          boundaries: []
+        },
+        {
+          domains: [{
+            domainId: "leaked-domain",
+            existed: false,
+            previousBinding: null,
+            roadEffects: []
+          }],
+          newTopologyIds: []
+        }
+      ),
+    /removeDomain/
+  );
+
+  assert.ok(
+    domains.has("leaked-domain")
+  );
+});
