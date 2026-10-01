@@ -1387,6 +1387,10 @@ function liveTravelEntity(
     };
   }
 
+  registry.updateEntityOccupancy(
+    entity
+  );
+
   return {
     entity,
     failure: null
@@ -1975,7 +1979,6 @@ export function stepTravel(registry, a, b, c) {
     }
     const entity = live.entity;
 
-    registry.updateEntityOccupancy(entity);
     if (entity.journey != null) {
       return publicTravelState(state);
     }
