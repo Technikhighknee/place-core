@@ -1502,7 +1502,7 @@ test("fresh travel snapshots require every portal step to still resolve", () => 
   assert.ok(portalStep);
   portalStep.placeId = "missing-house";
   portalStep.portalKey =
-    "string:missing-house\u001fdoor";
+    "6:string20:string:missing-house6:string4:door";
   fresh.activeTravels[0].plan.legs =
     structuredClone(
       fresh.activeTravels[0]
@@ -1531,7 +1531,7 @@ test("fresh travel snapshots require every portal step to still resolve", () => 
   stalePortal.placeId =
     "missing-house";
   stalePortal.portalKey =
-    "string:missing-house\u001fdoor";
+    "6:string20:string:missing-house6:string4:door";
   stale.activeTravels[0].plan.legs =
     structuredClone(
       stale.activeTravels[0]
