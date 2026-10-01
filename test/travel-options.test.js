@@ -1746,3 +1746,124 @@ test("attaching a different bridge cannot strand an active explicit travel", () 
   );
   assert.equal(entity.journey, null);
 });
+
+
+test("replan failure does not stop the same local journey twice", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      },
+      {
+        worldChangePolicy: "eager"
+      }
+    )
+  );
+
+  places.setPortalState(
+    "house",
+    "stairs",
+    { locked: true }
+  );
+
+  let stops = 0;
+  bridge.stopLocalJourney = () => {
+    stops += 1;
+    if (stops > 1) {
+      throw new Error(
+        "local journey stopped twice"
+      );
+    }
+  };
+
+  const result = stepTravel(
+    places,
+    bridge,
+    "hans"
+  );
+
+  assert.equal(result.status, "failed");
+  assert.equal(
+    result.failureReason,
+    "no-route-after-world-change"
+  );
+  assert.equal(stops, 1);
+  assert.equal(
+    places.activeTravels.size,
+    0
+  );
+});
+
+
+test("replan planning exception is finalized without duplicate cleanup", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      },
+      {
+        worldChangePolicy: "eager"
+      }
+    )
+  );
+
+  places.setPortalState(
+    "house",
+    "stairs",
+    { locked: true }
+  );
+  places.setPortalState(
+    "house",
+    "stairs",
+    { locked: false }
+  );
+
+  let stops = 0;
+  bridge.stopLocalJourney = () => {
+    stops += 1;
+    if (stops > 1) {
+      throw new Error(
+        "local journey stopped twice"
+      );
+    }
+  };
+  bridge.planLocalRoute = () => {
+    throw new Error(
+      "synthetic replan planning failure"
+    );
+  };
+
+  assert.throws(
+    () =>
+      stepTravel(
+        places,
+        bridge,
+        "hans"
+      ),
+    /synthetic replan planning failure/
+  );
+
+  assert.equal(stops, 1);
+  assert.equal(
+    places.activeTravels.size,
+    0
+  );
+});

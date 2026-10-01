@@ -1449,8 +1449,17 @@ function replan(registry, bridge, state, options) {
   } catch (error) {
     if (error?.code === "PLACE_TRAVEL_TARGET_UNAVAILABLE") {
       state.replans += 1;
-      return fail(registry, bridge, state, "target-unavailable-after-world-change");
+      return finalizeFailedTravel(
+        registry,
+        state,
+        "target-unavailable-after-world-change"
+      );
     }
+    finalizeFailedTravel(
+      registry,
+      state,
+      "replan-error"
+    );
     throw error;
   }
   state.replans += 1;
@@ -1459,7 +1468,13 @@ function replan(registry, bridge, state, options) {
   state.portalEntered = false;
   state.portalTransitionRemaining = 0;
 
-  if (!plan) return fail(registry, bridge, state, "no-route-after-world-change");
+  if (!plan) {
+    return finalizeFailedTravel(
+      registry,
+      state,
+      "no-route-after-world-change"
+    );
+  }
 
   state.plan = plan;
   state.travelRevision = registry.travelRevision;
@@ -1845,23 +1860,25 @@ export function startTravel(registry, a, b, c, d) {
     );
   } catch (error) {
     let cleanupError = null;
-    try {
-      bridge.stopLocalJourney?.(entityId);
-    } catch (failure) {
-      cleanupError = failure;
-    }
+    if (
+      state.status === "active" &&
+      registry._hasActiveTravel(
+        PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
+        entityId
+      )
+    ) {
+      try {
+        bridge.stopLocalJourney?.(entityId);
+      } catch (failure) {
+        cleanupError = failure;
+      }
 
-    state.status = "failed";
-    state.failureReason = "start-error";
-    registry._deleteActiveTravel(
-      PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
-      entityId
-    );
-    registry.emit("travel-failed", {
-      entityId,
-      reason: state.failureReason,
-      target: state.target
-    });
+      finalizeFailedTravel(
+        registry,
+        state,
+        "start-error"
+      );
+    }
 
     if (cleanupError) {
       throw new AggregateError(
