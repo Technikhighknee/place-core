@@ -305,3 +305,63 @@ test("disposing a bridge with active direct-domain travel is rejected", () => {
     true
   );
 });
+
+
+test("road-bound bridge sync requires road-effect capabilities on demand", () => {
+  const world = new World({
+    domains: [{ id: "inside-domain" }]
+  });
+  const instance = {
+    id: "house",
+    layerDomains: new Map([
+      ["inside", "inside-domain"]
+    ])
+  };
+  const boundary = {
+    id: "wall",
+    layerId: "inside",
+    enabled: true,
+    roadBindings: [{
+      layerId: "inside",
+      roadId: "road"
+    }]
+  };
+
+  const missingSet = new WorldCoreBridge({
+    world,
+    navigation: {},
+    startJourney,
+    stopJourney
+  });
+
+  assert.throws(
+    () =>
+      missingSet.syncBoundaryState(
+        instance,
+        boundary
+      ),
+    /setDomainRoadEffect/
+  );
+
+  const missingRemove =
+    new WorldCoreBridge({
+      world,
+      navigation: {
+        setDomainRoadEffect() {}
+      },
+      startJourney,
+      stopJourney
+    });
+
+  assert.throws(
+    () =>
+      missingRemove.syncBoundaryState(
+        instance,
+        {
+          ...boundary,
+          enabled: false
+        }
+      ),
+    /removeDomainRoadEffect/
+  );
+});
