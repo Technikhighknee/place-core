@@ -1545,3 +1545,147 @@ test("fresh travel snapshots require every portal step to still resolve", () => 
       )
   );
 });
+
+
+test("direct travel snapshot context does not require live place references", () => {
+  const places = new PlaceRegistry();
+  const entity = {
+    id: "hans",
+    domainId: "street",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 5 };
+    },
+    startLocalJourney() {
+      entity.journey = {
+        destinationNodeId: "target"
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        domainId: "street",
+        position: { x: 5, y: 0 },
+        nodeId: "target",
+        placeId: "context-only",
+        anchorId: "context-anchor",
+        spaceId: "context-space",
+        layerId: "context-layer"
+      }
+    )
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+  assert.equal(
+    snapshot.activeTravels[0]
+      .planStale,
+    false
+  );
+
+  assert.doesNotThrow(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      )
+  );
+});
+
+
+test("fresh semantic travel target must still match its anchor", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "fresh-anchor-target",
+    layers: [{ id: "inside" }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      position: { x: 5, y: 0 },
+      nodeId: "target-node"
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "fresh-anchor-target"
+  });
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 5 };
+    },
+    startLocalJourney() {
+      entity.journey = {
+        destinationNodeId:
+          "target-node"
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+  snapshot.activeTravels[0]
+    .plan.resolvedTarget.position.x =
+      6;
+  snapshot.activeTravels[0]
+    .plan.steps.at(-1)
+    .destinationPosition.x = 6;
+  snapshot.activeTravels[0]
+    .plan.legs =
+      structuredClone(
+        snapshot.activeTravels[0]
+          .plan.steps
+      );
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      ),
+    /target anchor no longer matches/
+  );
+});

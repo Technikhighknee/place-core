@@ -1506,15 +1506,99 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       return;
     }
 
-    const targetPlaceId =
-      travel.plan.resolvedTarget.placeId;
-    if (
-      targetPlaceId != null &&
-      !instances.has(idKey(targetPlaceId))
-    ) {
-      throw new Error(
-        `${label} fresh plan references missing target place ${String(targetPlaceId)}`
-      );
+    const semanticTarget =
+      travel.target.domainId == null;
+    const target =
+      travel.plan.resolvedTarget;
+
+    if (semanticTarget) {
+      const targetPlaceId =
+        target.placeId;
+      const item =
+        targetPlaceId == null
+          ? null
+          : instances.get(
+              idKey(targetPlaceId)
+            );
+
+      if (!item) {
+        throw new Error(
+          `${label} fresh plan references missing target place ${String(targetPlaceId)}`
+        );
+      }
+
+      const definition =
+        definitions.get(
+          item.definitionId
+        );
+
+      if (
+        target.layerId == null ||
+        !definition?.getLayer(
+          target.layerId
+        )
+      ) {
+        throw new Error(
+          `${label} fresh plan references missing target layer ${String(target.layerId)}`
+        );
+      }
+
+      if (
+        ownValue(
+          item.layerDomains,
+          target.layerId
+        ) !== target.domainId
+      ) {
+        throw new Error(
+          `${label} fresh plan target domain no longer matches target layer`
+        );
+      }
+
+      if (target.spaceId != null) {
+        const space =
+          definition.getSpace(
+            target.spaceId
+          );
+        if (
+          !space ||
+          space.layerId !==
+            target.layerId
+        ) {
+          throw new Error(
+            `${label} fresh plan references missing or mismatched target space ${target.spaceId}`
+          );
+        }
+      }
+
+      const anchor =
+        target.anchorId == null
+          ? null
+          : definition.getAnchor(
+              target.anchorId
+            );
+
+      if (!anchor) {
+        throw new Error(
+          `${label} fresh plan references missing target anchor ${String(target.anchorId)}`
+        );
+      }
+
+      if (
+        anchor.layerId !==
+          target.layerId ||
+        (anchor.spaceId ?? null) !==
+          (target.spaceId ?? null) ||
+        (anchor.nodeId ?? null) !==
+          (target.nodeId ?? null) ||
+        anchor.position.x !==
+          target.position.x ||
+        anchor.position.y !==
+          target.position.y
+      ) {
+        throw new Error(
+          `${label} fresh plan target anchor no longer matches resolved target`
+        );
+      }
     }
 
     for (
