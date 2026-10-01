@@ -914,3 +914,140 @@ test("snapshot validation rejects duplicate same-domain threshold road ownership
     /threshold|road.*portal|already bound/i
   );
 });
+
+
+test("snapshot validation rejects active travel portal identity drift", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "travel-portal-integrity",
+    layers: [{ id: "inside" }],
+    portals: [
+      {
+        id: "door-a",
+        a: { kind: "external", slot: "a" },
+        b: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 0, y: 0 },
+          nodeId: "inside-a"
+        }
+      },
+      {
+        id: "door-b",
+        a: { kind: "external", slot: "b" },
+        b: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 10, y: 0 },
+          nodeId: "inside-b"
+        }
+      }
+    ],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      position: { x: 20, y: 0 },
+      nodeId: "target"
+    }]
+  });
+
+  places.createPlace({
+    id: "house",
+    definitionId: "travel-portal-integrity",
+    attachments: {
+      a: {
+        domainId: "street",
+        position: { x: 0, y: 0 },
+        nodeId: "street-a"
+      },
+      b: {
+        domainId: "street",
+        position: { x: 100, y: 0 },
+        nodeId: "street-b"
+      }
+    }
+  });
+
+  const entity = {
+    id: "hans",
+    domainId: "street",
+    position: { x: -1, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+
+  const nodeX = new Map([
+    ["street-a", 0],
+    ["street-b", 100],
+    ["inside-a", 0],
+    ["inside-b", 10],
+    ["target", 20]
+  ]);
+
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute({
+      position,
+      destinationNodeId
+    }) {
+      const x = nodeX.get(destinationNodeId);
+      return x == null
+        ? null
+        : {
+            estimatedSeconds:
+              Math.abs(position.x - x)
+          };
+    },
+    startLocalJourney(
+      id,
+      destinationNodeId
+    ) {
+      entity.journey = { destinationNodeId };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+
+  const snapshot = serializePlaceCore(places);
+  const portalStep =
+    snapshot.activeTravels[0].plan.steps.find(
+      (step) =>
+        step.type === "traverse-portal"
+    );
+  assert.ok(portalStep);
+  assert.equal(portalStep.portalId, "door-a");
+
+  const otherPortal =
+    places.getPortalsForDomain("street").find(
+      (portal) => portal.id === "door-b"
+    );
+  assert.ok(otherPortal);
+
+  portalStep.portalKey = otherPortal.key;
+  snapshot.activeTravels[0].plan.legs =
+    structuredClone(
+      snapshot.activeTravels[0].plan.steps
+    );
+
+  assert.throws(
+    () => validatePlaceCoreSnapshot(snapshot),
+    /portal.*key.*mismatch|portalKey.*mismatch/i
+  );
+});
