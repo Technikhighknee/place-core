@@ -4,6 +4,8 @@ import {
 } from "./registry/support.js";
 import { compilePlace } from "./definition.js";
 import {
+  assertId,
+  assertStringId,
   canonicalStringify,
   cloneJson,
   compareStrings,
@@ -25,6 +27,42 @@ export {
   PLACE_CORE_SNAPSHOT_VERSION,
   validatePlaceCoreSnapshot
 };
+
+function assertResumableWorldEntity(
+  entity,
+  expectedId
+) {
+  assertId(entity?.id, "restored world entity.id");
+  if (entity.id !== expectedId) {
+    throw new Error(
+      `restored world entity identity mismatch: expected ${String(expectedId)}, got ${String(entity.id)}`
+    );
+  }
+
+  assertStringId(
+    entity.domainId ?? "default",
+    "restored world entity.domainId"
+  );
+
+  if (
+    !entity.position ||
+    typeof entity.position !== "object" ||
+    !Number.isFinite(entity.position.x) ||
+    !Number.isFinite(entity.position.y)
+  ) {
+    throw new TypeError(
+      "restored world entity.position must contain finite x/y"
+    );
+  }
+
+  if (!entity.mobility) {
+    throw new Error(
+      `restored world entity ${String(entity.id)} has no mobility profile`
+    );
+  }
+
+  return entity;
+}
 
 function assertDeserializeOptions(options) {
   if (!options ||
@@ -309,11 +347,17 @@ export function deserializePlaceCore(snapshot, options = {}) {
   // materializing any place state into that world.
   if (bridge && resumeWorldCoreState) {
     for (const saved of active) {
-      if (!bridge.getEntity?.(saved.entityId)) {
+      const entity =
+        bridge.getEntity?.(saved.entityId);
+      if (!entity) {
         throw new Error(
           `resumeWorldCoreState is missing world entity ${String(saved.entityId)}`
         );
       }
+      assertResumableWorldEntity(
+        entity,
+        saved.entityId
+      );
     }
   }
 
