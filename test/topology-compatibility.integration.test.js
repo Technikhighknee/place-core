@@ -11,7 +11,8 @@ import {
 
 import {
   PlaceRegistry,
-  WorldCoreBridge
+  WorldCoreBridge,
+  compilePlace
 } from "../src/index.js";
 
 function makeDefinition(id, patch = {}) {
@@ -60,7 +61,7 @@ function makeDefinition(id, patch = {}) {
 }
 
 function placesDefinitionForRollback() {
-  return {
+  return compilePlace({
     id: "rollback-ownership",
     layers: [{
       id: "inside",
@@ -68,16 +69,8 @@ function placesDefinitionForRollback() {
         "rollback-owned-topology",
       navigation: {
         nodes: [
-          {
-            id: "a",
-            x: 0,
-            y: 0
-          },
-          {
-            id: "b",
-            x: 1,
-            y: 0
-          }
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 }
         ],
         roads: [{
           id: "road",
@@ -85,10 +78,8 @@ function placesDefinitionForRollback() {
           to: "b"
         }]
       }
-    }],
-    boundaries: [],
-    portals: []
-  };
+    }]
+  });
 }
 
 function setup() {
