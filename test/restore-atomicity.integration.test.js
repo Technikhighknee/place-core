@@ -689,3 +689,54 @@ test("resume preserves eager stale-plan semantics across snapshots", () => {
     "target-unavailable-after-world-change"
   );
 });
+
+
+test("pending travel plans are marked stale before later structural mutations", () => {
+  const { snapshot } =
+    sourceSnapshot({
+      withTravel: true
+    });
+
+  const restored =
+    deserializePlaceCore(
+      snapshot
+    );
+
+  assert.equal(
+    restored.activeTravels.size,
+    0
+  );
+  assert.equal(
+    restored.pendingTravels.length,
+    1
+  );
+  assert.equal(
+    restored.pendingTravels[0]
+      .savedState.planStale,
+    true
+  );
+
+  const targetPlaceId =
+    restored.pendingTravels[0]
+      .savedState.plan.resolvedTarget
+      .placeId;
+
+  if (targetPlaceId != null) {
+    assert.equal(
+      restored.removePlace(
+        targetPlaceId
+      ),
+      true
+    );
+  }
+
+  const resnapshot =
+    serializePlaceCore(restored);
+
+  assert.doesNotThrow(
+    () =>
+      validatePlaceCoreSnapshot(
+        resnapshot
+      )
+  );
+});

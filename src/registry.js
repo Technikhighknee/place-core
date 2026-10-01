@@ -304,8 +304,20 @@ export class PlaceRegistry {
 
   _pushPendingTravel(token, pending) {
     this.#assertTravelMutationToken(token);
+    const copy = cloneJson(pending);
+
+    // Pending travel is retained intent, not an actively maintained plan.
+    // Once execution is detached, structural freshness can no longer be
+    // guaranteed against later registry mutations.
+    if (
+      copy?.savedState &&
+      typeof copy.savedState === "object"
+    ) {
+      copy.savedState.planStale = true;
+    }
+
     const stored =
-      deepFreeze(cloneJson(pending));
+      deepFreeze(copy);
     this.#pendingTravels.push(stored);
     return stored;
   }
