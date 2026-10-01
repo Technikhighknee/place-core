@@ -336,3 +336,46 @@ test("adopted removal preflights obstacles before changing any domain identity",
   );
   places.assertInternalConsistency();
 });
+
+
+test("adopt policy rejects the unremovable world-core default domain before mutation", () => {
+  const {
+    world,
+    navigation,
+    bridge
+  } = runtime("adopt");
+
+  const places =
+    new PlaceRegistry({ bridge });
+  places.registerDefinition(
+    definition("default-adoption")
+  );
+
+  const defaultDomain =
+    world.getDomain("default");
+  assert.ok(defaultDomain);
+
+  assert.throws(
+    () => places.createPlace({
+      id: "place",
+      definitionId: "default-adoption",
+      layerDomains: {
+        inside: "default"
+      }
+    }),
+    /default.*domain|cannot.*adopt|cannot.*own/i
+  );
+
+  assert.equal(
+    places.getPlace("place"),
+    null
+  );
+  assert.equal(
+    navigation.domainBindings.has("default"),
+    false
+  );
+  assert.equal(
+    world.getDomain("default"),
+    defaultDomain
+  );
+});
