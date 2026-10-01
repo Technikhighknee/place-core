@@ -165,7 +165,15 @@ function anchorAvailable(registry, placeId, anchor) {
   return registry.getSpace(placeId, anchor.spaceId)?.enabled === true;
 }
 
-function resolvedTargetAvailable(registry, target) {
+function resolvedTargetAvailable(
+  registry,
+  target,
+  requestedTarget = null
+) {
+  if (requestedTarget?.domainId != null) {
+    return true;
+  }
+
   if (target?.placeId == null) return true;
   const instance = registry.getPlace(target.placeId);
   if (!instance) return false;
@@ -1522,7 +1530,11 @@ function advance(registry, bridge, state, options = {}) {
         return live.failure;
       }
 
-      if (!resolvedTargetAvailable(registry, state.plan.resolvedTarget)) {
+      if (!resolvedTargetAvailable(
+        registry,
+        state.plan.resolvedTarget,
+        state.target
+      )) {
         registry.emit("travel-target-unavailable", {
           entityId: state.entityId,
           target: state.target,

@@ -90,6 +90,56 @@ function setup({ captureEvents = false } = {}) {
   return { places, place, entity, bridge };
 }
 
+test("direct travel context does not become a semantic availability requirement", () => {
+  const {
+    places,
+    place,
+    entity,
+    bridge
+  } = setup({ captureEvents: true });
+
+  const state = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      domainId:
+        place.layerDomains.get("inside"),
+      position: { x: 1, y: 2 },
+      nodeId: "entry",
+      placeId: "context-only",
+      anchorId: "context-anchor",
+      spaceId: "context-space",
+      layerId: "context-layer"
+    }
+  );
+
+  assert.ok(state);
+  assert.equal(state.status, "active");
+
+  entity.position = { x: 1, y: 2 };
+  entity.journey = null;
+
+  const completed = stepTravel(
+    places,
+    bridge,
+    "hans"
+  );
+
+  assert.equal(completed.status, "complete");
+  assert.equal(
+    places.activeTravels.has("hans"),
+    false
+  );
+  assert.equal(
+    places.drainEvents().some((event) =>
+      event.type ===
+        "travel-target-unavailable"
+    ),
+    false
+  );
+});
+
 test("explicit anchor targets reject disabled spaces", () => {
   const { places, bridge } = setup();
   places.setSpaceState("house", "private-room", { enabled: false });
