@@ -714,7 +714,7 @@ export class PlaceRegistry {
     radius: number,
     options?: { traversableOnly?: boolean; kind?: string; tag?: string }
   ): Array<{
-    portal: ResolvedPortal;
+    portal: IndexedResolvedPortal;
     endpoint: ResolvedPortalEndpoint;
     side: "a" | "b";
     distance: number;
@@ -729,7 +729,7 @@ export class PlaceRegistry {
       maxDistance?: number;
     }
   ): {
-    portal: ResolvedPortal;
+    portal: IndexedResolvedPortal;
     endpoint: ResolvedPortalEndpoint;
     side: "a" | "b";
     distance: number;
