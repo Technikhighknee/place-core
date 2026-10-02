@@ -190,7 +190,7 @@ test("snapshot validation requires canonical persisted attachment fields", () =>
           snapshot
         ),
       new RegExp(
-        `attachment\\.street is missing required field ${field}`
+        `attachments\\.street is missing required field ${field}`
       )
     );
   }
@@ -813,7 +813,11 @@ test("snapshot validation rejects static attachment threshold mismatch before re
   const item = snapshot.instances[0];
 
   item.attachments.outside = {
-    domainId: place.layerDomains.get("inside"),
+    ...item.attachments.outside,
+    domainId:
+      place.layerDomains.get(
+        "inside"
+      ),
     position: { x: 0, y: 1 },
     nodeId: "c"
   };
