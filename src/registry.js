@@ -2805,6 +2805,47 @@ export class PlaceRegistry {
     for (const instance of this.#instances.values()) {
       const definition = this.#definitions.get(instance.definitionId);
       if (!definition) throw new Error(`instance ${String(instance.id)} references missing definition`);
+
+      if (
+        instance.layerDomains.size !==
+        definition.layers.length
+      ) {
+        throw new Error(
+          `instance ${String(instance.id)} layer domain count drift`
+        );
+      }
+
+      for (const layer of definition.layers) {
+        const domainId =
+          instance.layerDomains.get(layer.id);
+        const binding =
+          domainId == null
+            ? null
+            : this.#domainBindings.get(
+                domainId
+              );
+        if (
+          domainId == null ||
+          !binding ||
+          binding.instanceId !==
+            instance.id ||
+          binding.layerId !== layer.id
+        ) {
+          throw new Error(
+            `instance ${String(instance.id)} missing domain binding for layer ${layer.id}`
+          );
+        }
+      }
+
+      for (const layerId of
+        instance.layerDomains.keys()) {
+        if (!definition.getLayer(layerId)) {
+          throw new Error(
+            `instance ${String(instance.id)} has domain for unknown layer ${layerId}`
+          );
+        }
+      }
+
       this.#semanticGraph.assertInstanceIndexed(instance);
       this.#validateInstancePortals(
         instance,
