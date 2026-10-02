@@ -1,4 +1,7 @@
-import { squaredDistance } from "./geometry.js";
+import {
+  pointInGeometry,
+  squaredDistance
+} from "./geometry.js";
 import { isPortalTraversable } from "./registry.js";
 import {
   assertId,
@@ -207,8 +210,26 @@ function anchorBelongsToSpace(
   anchor,
   spaceId
 ) {
+  const requestedSpace =
+    definition.getSpace(spaceId);
+  if (
+    !anchor ||
+    !requestedSpace ||
+    anchor.layerId !==
+      requestedSpace.layerId
+  ) {
+    return false;
+  }
+
   let currentSpaceId =
-    anchor?.spaceId ?? null;
+    anchor.spaceId ?? null;
+
+  if (currentSpaceId == null) {
+    return pointInGeometry(
+      anchor.position,
+      requestedSpace.geometry
+    );
+  }
 
   while (currentSpaceId != null) {
     if (currentSpaceId === spaceId) {

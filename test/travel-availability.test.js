@@ -222,6 +222,57 @@ test("space targets preserve the requested parent space when its default anchor 
   );
 });
 
+test("explicit space targets accept an unscoped anchor physically inside the requested space", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "unscoped-space-anchor",
+    layers: [{ id: "inside" }],
+    spaces: [{
+      id: "room",
+      layerId: "inside",
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 10,
+        maxY: 10
+      },
+      defaultAnchorId: "center"
+    }],
+    anchors: [{
+      id: "center",
+      layerId: "inside",
+      position: { x: 5, y: 5 },
+      nodeId: "center"
+    }]
+  });
+  places.createPlace({
+    id: "house",
+    definitionId: "unscoped-space-anchor"
+  });
+
+  const implicit = resolveTravelTarget(
+    places,
+    {
+      placeId: "house",
+      spaceId: "room"
+    }
+  );
+  const explicit = resolveTravelTarget(
+    places,
+    {
+      placeId: "house",
+      spaceId: "room",
+      anchorId: "center"
+    }
+  );
+
+  assert.equal(implicit.anchorId, "center");
+  assert.equal(implicit.spaceId, "room");
+  assert.equal(explicit.anchorId, "center");
+  assert.equal(explicit.spaceId, "room");
+});
+
 test("explicit anchor targets reject disabled spaces", () => {
   const { places, bridge } = setup();
   places.setSpaceState("house", "private-room", { enabled: false });
