@@ -826,6 +826,40 @@ export interface TravelState {
   readonly replans: number;
 }
 
+export type PersistedTravelOptions =
+  Omit<RetainedTravelOptions, "anchorPredicate">;
+
+export type PersistedTravelPlan =
+  Omit<TravelPlan, "travelRevision">;
+
+export interface PersistedActiveTravelState {
+  entityId: EntityId;
+  target: TravelTarget;
+  plan: PersistedTravelPlan;
+  options: PersistedTravelOptions;
+  stepIndex: number;
+  localStarted: boolean;
+  portalEntered: boolean;
+  portalTransitionRemaining: number;
+  worldChangePolicy: "encounter" | "eager";
+  status: "active";
+  failureReason: null;
+  replans: number;
+  planStale: boolean;
+}
+
+export interface PersistedPendingTravel {
+  entityId: EntityId;
+  target: TravelTarget;
+  savedState: PersistedActiveTravelState & {
+    planStale: true;
+  };
+  restartError?: {
+    name: string;
+    message: string;
+  };
+}
+
 export interface DomainPathOptions {
   excludedPortalKeys?: Iterable<string>;
   excludedDomainPairs?: Iterable<string>;
@@ -967,8 +1001,8 @@ export interface PlaceCoreSnapshot {
     domainId: string;
     position: Vec2;
   }>;
-  activeTravels: any[];
-  pendingTravels: any[];
+  activeTravels: PersistedActiveTravelState[];
+  pendingTravels: PersistedPendingTravel[];
 }
 
 export const PLACE_CORE_SNAPSHOT_VERSION: number;
