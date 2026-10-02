@@ -406,8 +406,15 @@ export function deserializePlaceCore(snapshot, options = {}) {
 
   const occupancy = snapshot.occupancy;
   const active = snapshot.activeTravels ?? [];
+  const activeEntityKeys = new Set(
+    active.map((saved) =>
+      idKey(saved.entityId)
+    )
+  );
   const resumableEntities = new Map();
   const liveOccupancyEntities =
+    new Map();
+  const liveOccupancyLookupErrors =
     new Map();
 
   // Resume requires the restored world to match every selectively tracked
@@ -456,16 +463,31 @@ export function deserializePlaceCore(snapshot, options = {}) {
     // With a live bridge but without resume semantics, world-core is the
     // physical authority. Preserve only the selectively tracked identity set
     // from the snapshot and re-derive each surviving entity's current
-    // domain/position from the live world. Missing or temporarily unreadable
-    // entities must not become stale "ghost" occupancy.
+    // domain/position from the live world. Resolve every tracked identity
+    // exactly once so occupancy and travel restart observe one coherent world
+    // state. Missing entities disappear from occupancy. A lookup failure can
+    // be retained as a pending-travel error for active travel, but stationary
+    // tracked occupancy has no equivalent uncertainty state and must fail the
+    // restore rather than silently lose tracking.
     for (const saved of occupancy) {
       let entity;
       try {
         entity =
-          bridge.getEntity?.(
+          bridge.getEntity(
             saved.entityId
           );
-      } catch {
+      } catch (error) {
+        if (
+          !activeEntityKeys.has(
+            idKey(saved.entityId)
+          )
+        ) {
+          throw error;
+        }
+        liveOccupancyLookupErrors.set(
+          saved.entityId,
+          error
+        );
         continue;
       }
       if (!entity) continue;
@@ -603,10 +625,23 @@ export function deserializePlaceCore(snapshot, options = {}) {
   } else if (bridge && restartTravels) {
     for (const saved of active) {
       try {
-        const entity =
-          bridge.getEntity?.(
+        const lookupError =
+          liveOccupancyLookupErrors.get(
             saved.entityId
           );
+        if (lookupError) {
+          retainPending(
+            saved,
+            lookupError
+          );
+          continue;
+        }
+
+        const entity =
+          liveOccupancyEntities.get(
+            saved.entityId
+          ) ??
+          null;
         if (!entity) {
           retainPending(saved);
           continue;
