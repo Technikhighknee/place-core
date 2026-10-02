@@ -201,3 +201,84 @@ test("reactive occupancy events are deterministic across entity tracking order",
     run(["b", "a"])
   );
 });
+
+
+test("internal consistency covers occupancy spatial and membership indexes", () => {
+  const places = new PlaceRegistry();
+
+  places.registerDefinition({
+    id: "occupancy-consistency",
+    footprint: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 10,
+      maxY: 10
+    },
+    layers: [{ id: "inside" }],
+    spaces: [{
+      id: "room",
+      layerId: "inside",
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 10,
+        maxY: 10
+      }
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "occupancy-consistency",
+    placement: {
+      domainId: "street",
+      transform: {
+        x: 0,
+        y: 0,
+        rotation: 0
+      },
+      containment: "footprint"
+    }
+  });
+
+  places.updateEntityOccupancy({
+    id: "outside",
+    domainId: "street",
+    position: { x: 5, y: 5 }
+  });
+
+  places.updateEntityOccupancy({
+    id: "inside",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 5, y: 5 }
+  });
+
+  assert.doesNotThrow(
+    () =>
+      places.assertInternalConsistency()
+  );
+
+  places.updateEntityOccupancy({
+    id: "outside",
+    domainId: "street",
+    position: { x: 20, y: 20 }
+  });
+
+  assert.doesNotThrow(
+    () =>
+      places.assertInternalConsistency()
+  );
+
+  places.removeEntityOccupancy(
+    "inside"
+  );
+
+  assert.doesNotThrow(
+    () =>
+      places.assertInternalConsistency()
+  );
+});

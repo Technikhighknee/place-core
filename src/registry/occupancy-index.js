@@ -130,6 +130,161 @@ export class OccupancyIndex {
       ?.queryBounds(bounds) ?? [];
   }
 
+  assertConsistency() {
+    const expectedByPlace =
+      new Map();
+    const expectedBySpace =
+      new Map();
+    const expectedByDomain =
+      new Map();
+
+    const addExpected = (
+      map,
+      key,
+      entityId
+    ) => {
+      let entities = map.get(key);
+      if (!entities) {
+        entities = new Set();
+        map.set(key, entities);
+      }
+      entities.add(entityId);
+    };
+
+    for (const [entityId, location] of
+      this.#locations) {
+      addExpected(
+        expectedByDomain,
+        location.domainId,
+        entityId
+      );
+
+      const bounds =
+        this.#spatialIndexes
+          .get(location.domainId)
+          ?.getBounds(entityId);
+      if (
+        !bounds ||
+        bounds.minX !==
+          location.position.x ||
+        bounds.maxX !==
+          location.position.x ||
+        bounds.minY !==
+          location.position.y ||
+        bounds.maxY !==
+          location.position.y
+      ) {
+        throw new Error(
+          "occupancy spatial index drift"
+        );
+      }
+
+      for (const placeId of
+        location.semanticPlaces) {
+        addExpected(
+          expectedByPlace,
+          placeId,
+          entityId
+        );
+      }
+
+      for (const space of
+        location.spaces) {
+        addExpected(
+          expectedBySpace,
+          makeSpaceKey(
+            space.placeId,
+            space.spaceId
+          ),
+          entityId
+        );
+      }
+    }
+
+    const assertSetMap = (
+      actual,
+      expected,
+      label
+    ) => {
+      if (actual.size !== expected.size) {
+        throw new Error(
+          `${label} key count drift`
+        );
+      }
+
+      for (const [key, expectedSet] of
+        expected) {
+        const actualSet =
+          actual.get(key);
+        if (
+          !actualSet ||
+          actualSet.size !==
+            expectedSet.size
+        ) {
+          throw new Error(
+            `${label} membership count drift`
+          );
+        }
+        for (const entityId of
+          expectedSet) {
+          if (!actualSet.has(entityId)) {
+            throw new Error(
+              `${label} membership drift`
+            );
+          }
+        }
+      }
+    };
+
+    assertSetMap(
+      this.#entitiesByPlace,
+      expectedByPlace,
+      "occupancy place index"
+    );
+    assertSetMap(
+      this.#entitiesBySpace,
+      expectedBySpace,
+      "occupancy space index"
+    );
+
+    if (
+      this.#spatialIndexes.size !==
+      expectedByDomain.size
+    ) {
+      throw new Error(
+        "occupancy spatial domain count drift"
+      );
+    }
+
+    let indexedEntityCount = 0;
+    for (const [domainId, index] of
+      this.#spatialIndexes) {
+      const expected =
+        expectedByDomain.get(domainId);
+      if (
+        !expected ||
+        index.size !== expected.size
+      ) {
+        throw new Error(
+          "occupancy spatial domain membership drift"
+        );
+      }
+      indexedEntityCount +=
+        index.size;
+    }
+
+    if (
+      indexedEntityCount !==
+      this.#locations.size
+    ) {
+      throw new Error(
+        "occupancy spatial entity count drift"
+      );
+    }
+
+    return true;
+  }
+
   #sameLocation(a, b) {
     if (!a || !b || a.domainId !== b.domainId) {
       return false;

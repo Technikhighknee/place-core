@@ -2814,6 +2814,7 @@ export class PlaceRegistry {
 
     this.#semanticGraph.assertConsistency();
     this.#placementGraph.assertConsistency();
+    this.#occupancyIndex.assertConsistency();
 
     for (const [key, record] of this.#portalRecords) {
       if (!this.#instances.has(record.instanceId)) throw new Error(`portal record ${key} references missing instance`);
