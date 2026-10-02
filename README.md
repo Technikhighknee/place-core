@@ -340,7 +340,9 @@ validatePlaceCoreSnapshot(snapshot);
 const restored = deserializePlaceCore(snapshot);
 ```
 
-Each shared definition blueprint is stored **once per snapshot**, with its canonical content hash. Instances still store only their sparse state.
+Each shared definition blueprint is stored **once per snapshot**, with its canonical content hash. Instances still store only their sparse state. Selectively tracked occupancy is persisted as entity identity plus physical domain/position; semantic place/space memberships are rebuilt from the restored structure.
+
+Standalone restore uses that persisted occupancy directly. With a bridge and `resumeWorldCoreState: true`, the restored `world-core` entity state must match it exactly. With a bridge but without resume semantics, the saved identity set is preserved selectively while current domain/position is re-derived from live `world-core`; missing entities do not survive as ghost occupancy.
 
 Validation recompiles and hashes definitions before restore and checks:
 
