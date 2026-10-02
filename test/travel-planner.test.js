@@ -1150,3 +1150,135 @@ test("zero-cost local routes still produce movement steps when positions differ"
     { x: 5, y: 0 }
   );
 });
+
+
+test("planner considers every equally short domain path before choosing by cost", () => {
+  const places = new PlaceRegistry();
+
+  const layers = Array.from(
+    { length: 8 },
+    (_, index) => ({
+      id: `d${index}`
+    })
+  );
+
+  const portal = (
+    id,
+    from,
+    to,
+    transitionCost
+  ) => ({
+    id,
+    bidirectional: false,
+    transitionCost,
+    a: {
+      kind: "local",
+      layerId: `d${from}`,
+      position: { x: 0, y: 0 }
+    },
+    b: {
+      kind: "local",
+      layerId: `d${to}`,
+      position: { x: 0, y: 0 }
+    }
+  });
+
+  places.registerDefinition({
+    id: "five-shortest-paths",
+    layers,
+    portals: [
+      portal("p01", 0, 1, 100),
+      portal("p04", 0, 4, 100),
+      portal("p05", 0, 5, 0),
+      portal("p13", 1, 3, 0),
+      portal("p16", 1, 6, 0),
+      portal("p46", 4, 6, 0),
+      portal("p53", 5, 3, 100),
+      portal("p56", 5, 6, 0),
+      portal("p32", 3, 2, 0),
+      portal("p62", 6, 2, 0),
+      portal("p27", 2, 7, 0)
+    ],
+    anchors: [{
+      id: "target",
+      layerId: "d7",
+      position: { x: 0, y: 0 }
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "graph",
+    definitionId:
+      "five-shortest-paths"
+  });
+
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("d0"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const bridge = {
+    getEntity(id) {
+      return id === "hans"
+        ? entity
+        : null;
+    },
+    planLocalRoute() {
+      throw new Error(
+        "all portal endpoints share their local position"
+      );
+    },
+    startLocalJourney() {
+      return true;
+    },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "graph",
+      anchorId: "target"
+    }
+  );
+
+  assert.ok(plan);
+  assert.deepEqual(
+    plan.domainPath,
+    [
+      place.layerDomains.get("d0"),
+      place.layerDomains.get("d5"),
+      place.layerDomains.get("d6"),
+      place.layerDomains.get("d2"),
+      place.layerDomains.get("d7")
+    ]
+  );
+  assert.equal(
+    plan.estimatedSeconds,
+    0
+  );
+  assert.deepEqual(
+    plan.steps
+      .filter(
+        (step) =>
+          step.type ===
+          "traverse-portal"
+      )
+      .map(
+        (step) =>
+          step.portalId
+      ),
+    [
+      "p05",
+      "p56",
+      "p62",
+      "p27"
+    ]
+  );
+});

@@ -714,75 +714,196 @@ function shortestDomainPathCandidates(
   targetDomainId,
   options = {}
 ) {
-  const excludedPortalKeys = new Set(options.excludedPortalKeys ?? []);
-  const baseExcludedPairs = new Set(options.excludedDomainPairs ?? []);
-  const first = findDomainPortalPathInternal(
-    registry,
-    startDomainId,
-    targetDomainId,
-    { excludedPairs: baseExcludedPairs, excludedPortalKeys }
-  );
-  if (!first) return [];
+  const excludedPortalKeys =
+    new Set(
+      options.excludedPortalKeys ?? []
+    );
+  const excludedPairs =
+    new Set(
+      options.excludedDomainPairs ?? []
+    );
+  const searchOptions = {
+    excludedPortalKeys,
+    excludedPairs
+  };
+  const maxCandidates =
+    options.maxShortestDomainPaths;
 
-  const firstDomains = first.domains ?? [
-    startDomainId,
-    ...first.map((edge) => edge.to.domainId)
-  ];
-  const minimumHops = firstDomains.length - 1;
-  const maxCandidates = options.maxShortestDomainPaths;
+  if (startDomainId === targetDomainId) {
+    return [
+      Object.freeze([startDomainId])
+    ];
+  }
 
-  const pending = [{
-    domains: firstDomains,
-    excludedPairs: baseExcludedPairs
-  }];
-  const seenPaths = new Set();
-  const seenExclusions = new Set([exclusionSetKey(baseExcludedPairs)]);
-  const result = [];
+  const distance =
+    new Map([
+      [startDomainId, 0]
+    ]);
+  const predecessors =
+    new Map();
+  const queue = [startDomainId];
+  let cursor = 0;
+  let targetDistance = null;
 
-  while (pending.length > 0) {
-    pending.sort((a, b) => compareStrings(
-      domainPathKey(a.domains),
-      domainPathKey(b.domains)
-    ));
-    const current = pending.shift();
-    const pathKey = domainPathKey(current.domains);
-    if (seenPaths.has(pathKey)) continue;
-    seenPaths.add(pathKey);
-    result.push(Object.freeze([...current.domains]));
+  while (cursor < queue.length) {
+    const domainId =
+      queue[cursor++];
+    const depth =
+      distance.get(domainId);
 
-    for (let i = 0; i < current.domains.length - 1; i += 1) {
-      const excludedPairs = new Set(current.excludedPairs);
-      excludedPairs.add(pairKey(current.domains[i], current.domains[i + 1]));
-      const exclusionKey = exclusionSetKey(excludedPairs);
-      if (seenExclusions.has(exclusionKey)) continue;
-      seenExclusions.add(exclusionKey);
-
-      const alternate = findDomainPortalPathInternal(
-        registry,
-        startDomainId,
-        targetDomainId,
-        { excludedPairs, excludedPortalKeys }
-      );
-      if (!alternate) continue;
-
-      const domains = alternate.domains ?? [
-        startDomainId,
-        ...alternate.map((edge) => edge.to.domainId)
-      ];
-      if (domains.length - 1 !== minimumHops) continue;
-      if (!seenPaths.has(domainPathKey(domains))) {
-        pending.push({ domains, excludedPairs });
-      }
+    if (
+      targetDistance != null &&
+      depth >= targetDistance
+    ) {
+      continue;
     }
 
-    if (result.length >= maxCandidates) {
-      if (pending.length > 0 && options.allowPartialShortestPathSearch !== true) {
+    const neighbors = [
+      ...new Set(
+        transitionsFrom(
+          registry,
+          domainId,
+          searchOptions
+        ).map(
+          (edge) =>
+            edge.to.domainId
+        )
+      )
+    ].sort(compareStrings);
+
+    for (const neighbor of neighbors) {
+      const nextDepth = depth + 1;
+      const knownDepth =
+        distance.get(neighbor);
+
+      if (knownDepth == null) {
+        distance.set(
+          neighbor,
+          nextDepth
+        );
+        predecessors.set(
+          neighbor,
+          [domainId]
+        );
+        queue.push(neighbor);
+
+        if (
+          neighbor === targetDomainId
+        ) {
+          targetDistance =
+            nextDepth;
+        }
+      } else if (
+        knownDepth === nextDepth
+      ) {
+        const parents =
+          predecessors.get(neighbor);
+        if (
+          parents &&
+          !parents.includes(domainId)
+        ) {
+          parents.push(domainId);
+          parents.sort(compareStrings);
+        }
+      }
+    }
+  }
+
+  if (
+    !distance.has(targetDomainId)
+  ) {
+    return [];
+  }
+
+  const successors =
+    new Map();
+  for (const [child, parents] of
+    predecessors) {
+    for (const parent of parents) {
+      let children =
+        successors.get(parent);
+      if (!children) {
+        children = [];
+        successors.set(
+          parent,
+          children
+        );
+      }
+      if (!children.includes(child)) {
+        children.push(child);
+      }
+    }
+  }
+  for (const children of
+    successors.values()) {
+    children.sort(compareStrings);
+  }
+
+  const result = [];
+  const path = [startDomainId];
+  const stack = [{
+    domainId: startDomainId,
+    index: 0
+  }];
+
+  while (stack.length > 0) {
+    const frame =
+      stack[stack.length - 1];
+
+    if (
+      frame.domainId ===
+      targetDomainId
+    ) {
+      result.push(
+        Object.freeze([...path])
+      );
+
+      if (
+        result.length >
+        maxCandidates
+      ) {
+        if (
+          options
+            .allowPartialShortestPathSearch ===
+          true
+        ) {
+          return result.slice(
+            0,
+            maxCandidates
+          );
+        }
         throw new Error(
           `shortest semantic path count exceeds maxShortestDomainPaths (${maxCandidates})`
         );
       }
-      break;
+
+      stack.pop();
+      path.pop();
+      continue;
     }
+
+    const children =
+      successors.get(
+        frame.domainId
+      ) ?? [];
+
+    if (
+      frame.index >=
+      children.length
+    ) {
+      stack.pop();
+      path.pop();
+      continue;
+    }
+
+    const child =
+      children[frame.index++];
+
+    path.push(child);
+    stack.push({
+      domainId: child,
+      index: 0
+    });
   }
 
   return result;
