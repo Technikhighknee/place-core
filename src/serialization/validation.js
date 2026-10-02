@@ -427,18 +427,26 @@ function assertTravelPlan(
 }
 
 function assertAttachment(value, label) {
+  const requiredAttachmentFields = [
+    "domainId",
+    "position",
+    "nodeId",
+    "placeId",
+    "spaceId",
+    "metadata"
+  ];
   assertOnlyKeys(
     value,
-    [
-      "domainId",
-      "position",
-      "nodeId",
-      "placeId",
-      "spaceId",
-      "metadata"
-    ],
+    requiredAttachmentFields,
     label
   );
+  for (const key of requiredAttachmentFields) {
+    if (!Object.hasOwn(value, key)) {
+      throw new Error(
+        `${label} is missing required field ${key}`
+      );
+    }
+  }
   assertStringId(value.domainId, `${label}.domainId`);
   assertOnlyKeys(
     value.position,
@@ -449,9 +457,10 @@ function assertAttachment(value, label) {
   assertNullableString(value.nodeId, `${label}.nodeId`);
   if (value.placeId != null) assertId(value.placeId, `${label}.placeId`);
   assertNullableString(value.spaceId, `${label}.spaceId`);
-  if (value.metadata !== undefined) {
-    assertJsonSafe(value.metadata, `${label}.metadata`);
-  }
+  assertJsonSafe(
+    value.metadata,
+    `${label}.metadata`
+  );
 }
 
 function snapshotPortalTraversable(portal) {
