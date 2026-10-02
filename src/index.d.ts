@@ -289,6 +289,15 @@ export interface PlaceAttachment {
   metadata?: JsonValue;
 }
 
+export interface ResolvedPlaceAttachment {
+  domainId: string;
+  position: Vec2;
+  nodeId: string | null;
+  placeId: PlaceId | null;
+  spaceId: string | null;
+  metadata: JsonValue;
+}
+
 export type PlacePlacement =
   | {
       domainId: string;
@@ -349,7 +358,7 @@ export class PlaceInstance {
   readonly definitionId: string;
   readonly parentId: PlaceId | null;
   readonly layerDomains: ReadonlyMap<string, string>;
-  readonly attachments: ReadonlyMap<string, PlaceAttachment>;
+  readonly attachments: ReadonlyMap<string, ResolvedPlaceAttachment>;
   readonly placement: PlacePlacement | null;
   readonly metadata: JsonValue;
   readonly portalOverrides: ReadonlyMap<
@@ -495,7 +504,11 @@ export class PlaceRegistry {
   ): ResolvedPortal;
   setBoundaryState(instanceId: PlaceId, boundaryId: string, patch: { enabled?: boolean }): PlaceBoundaryInput & { enabled: boolean };
   setSpaceState(instanceId: PlaceId, spaceId: string, patch: { enabled?: boolean }): CompiledPlaceSpace & { enabled: boolean };
-  setAttachment(instanceId: PlaceId, slot: string, value: PlaceAttachment): PlaceAttachment;
+  setAttachment(
+    instanceId: PlaceId,
+    slot: string,
+    value: PlaceAttachment
+  ): ResolvedPlaceAttachment;
   clearAttachment(instanceId: PlaceId, slot: string): boolean;
   addPortal(instanceId: PlaceId, spec: DynamicPortalInput): ResolvedPortal;
   removePortal(instanceId: PlaceId, portalId: string): boolean;
@@ -892,7 +905,7 @@ export interface PlaceCoreSnapshot {
     parentId: PlaceId | null;
     memberships: PlaceMembership[];
     layerDomains: Record<string, string>;
-    attachments: Record<string, PlaceAttachment>;
+    attachments: Record<string, ResolvedPlaceAttachment>;
     placement: PlacePlacement | null;
     metadata: JsonValue;
     portalOverrides: Record<string, Record<string, boolean>>;

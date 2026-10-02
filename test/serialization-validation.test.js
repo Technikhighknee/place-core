@@ -172,6 +172,31 @@ test("snapshot validation requires the complete current version-1 schema", () =>
   }
 });
 
+test("snapshot validation requires canonical persisted attachment fields", () => {
+  for (const field of [
+    "nodeId",
+    "placeId",
+    "spaceId",
+    "metadata"
+  ]) {
+    const snapshot =
+      snapshotFixture();
+    delete snapshot.instances[0]
+      .attachments.street[field];
+
+    assert.throws(
+      () =>
+        validatePlaceCoreSnapshot(
+          snapshot
+        ),
+      new RegExp(
+        `attachment\\.street is missing required field ${field}`
+      )
+    );
+  }
+});
+
+
 test("snapshot validation rejects duplicate tracked occupancy identities", () => {
   const snapshot = snapshotFixture();
   snapshot.occupancy.push(
