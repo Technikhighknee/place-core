@@ -179,6 +179,84 @@ test("layer IDs that shadow Object.prototype still receive default domains", () 
   );
 });
 
+test("default domain IDs support lone surrogate place and layer IDs without collisions", () => {
+  const registry =
+    new PlaceRegistry();
+
+  registry.registerDefinition({
+    id: "surrogate-place-id",
+    layers: [{ id: "inside" }]
+  });
+
+  const lonePlace =
+    registry.createPlace({
+      id: "\uD800",
+      definitionId:
+        "surrogate-place-id"
+    });
+  const literalPlace =
+    registry.createPlace({
+      id: "%uD800",
+      definitionId:
+        "surrogate-place-id"
+    });
+
+  assert.equal(
+    lonePlace.layerDomains.get("inside"),
+    "%uD800:inside"
+  );
+  assert.equal(
+    literalPlace.layerDomains.get("inside"),
+    "%25uD800:inside"
+  );
+  assert.notEqual(
+    lonePlace.layerDomains.get("inside"),
+    literalPlace.layerDomains.get("inside")
+  );
+
+  registry.registerDefinition({
+    id: "surrogate-layer-id",
+    layers: [{ id: "\uDCFF" }]
+  });
+  const loneLayer =
+    registry.createPlace({
+      id: "house",
+      definitionId:
+        "surrogate-layer-id"
+    });
+
+  assert.equal(
+    loneLayer.layerDomains.get("\uDCFF"),
+    "house:%uDCFF"
+  );
+
+  const restored =
+    deserializePlaceCore(
+      JSON.parse(
+        JSON.stringify(
+          serializePlaceCore(registry)
+        )
+      )
+    );
+
+  assert.equal(
+    restored
+      .getPlace("\uD800")
+      .layerDomains
+      .get("inside"),
+    "%uD800:inside"
+  );
+  assert.equal(
+    restored
+      .getPlace("house")
+      .layerDomains
+      .get("\uDCFF"),
+    "house:%uDCFF"
+  );
+  restored.assertInternalConsistency();
+});
+
+
 test("semantic membership keys cannot collide on embedded separators", () => {
   const registry = new PlaceRegistry();
   registry.registerDefinition({

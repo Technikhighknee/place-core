@@ -326,7 +326,26 @@ export function placementEqual(a, b) {
 }
 
 function encodeDomainSegment(value) {
-  return encodeURIComponent(String(value));
+  const text = String(value);
+
+  try {
+    return encodeURIComponent(text);
+  } catch (error) {
+    if (!(error instanceof URIError)) {
+      throw error;
+    }
+
+    let encoded = "";
+    for (let i = 0; i < text.length; i += 1) {
+      encoded +=
+        `%u${text
+          .charCodeAt(i)
+          .toString(16)
+          .toUpperCase()
+          .padStart(4, "0")}`;
+    }
+    return encoded;
+  }
 }
 
 export function defaultLayerDomainId(placeId, layerId) {
