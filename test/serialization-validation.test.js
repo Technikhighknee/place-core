@@ -302,6 +302,97 @@ test("snapshot validation requires explicit canonical metadata values", () => {
 });
 
 
+test("snapshot validation requires serializer-defined canonical array order", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "a-def"
+  });
+  places.registerDefinition({
+    id: "b-def"
+  });
+  places.createPlace({
+    id: "a-place",
+    definitionId: "a-def"
+  });
+  places.createPlace({
+    id: "b-place",
+    definitionId: "b-def"
+  });
+  places.updateEntityOccupancy({
+    id: "a-entity",
+    domainId: "default",
+    position: { x: 0, y: 0 }
+  });
+  places.updateEntityOccupancy({
+    id: "b-entity",
+    domainId: "default",
+    position: { x: 1, y: 0 }
+  });
+
+  const base = serializePlaceCore(places);
+
+  for (const [field, pattern] of [
+    ["definitions", /snapshot\.definitions must be in canonical order/],
+    ["instances", /snapshot\.instances must be in canonical order/],
+    ["occupancy", /snapshot\.occupancy must be in canonical order/]
+  ]) {
+    const snapshot =
+      structuredClone(base);
+    snapshot[field].reverse();
+
+    assert.throws(
+      () =>
+        validatePlaceCoreSnapshot(
+          snapshot
+        ),
+      pattern
+    );
+  }
+
+  const memberships =
+    snapshotFixture();
+  memberships.instances[0]
+    .memberships = [
+      {
+        parentPlaceId: "z-parent",
+        kind: "member-of",
+        metadata: null
+      },
+      {
+        parentPlaceId: "a-parent",
+        kind: "member-of",
+        metadata: null
+      }
+    ];
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        memberships
+      ),
+    /memberships must be in canonical order/
+  );
+
+  const dynamic =
+    snapshotFixture();
+  dynamic.instances[0]
+    .dynamicPortals = [
+      canonicalDynamicPortal({
+        id: "z-portal"
+      }),
+      canonicalDynamicPortal({
+        id: "a-portal"
+      })
+    ];
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        dynamic
+      ),
+    /dynamicPortals must be in canonical order/
+  );
+});
+
+
 test("snapshot validation rejects duplicate tracked occupancy identities", () => {
   const snapshot = snapshotFixture();
   snapshot.occupancy.push(
