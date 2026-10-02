@@ -172,6 +172,57 @@ test("snapshot validation requires the complete current version-1 schema", () =>
   }
 });
 
+test("snapshot validation rejects explicit undefined in canonical instance state", () => {
+  const undefinedMemberships =
+    snapshotFixture();
+  undefinedMemberships.instances[0]
+    .memberships = undefined;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        undefinedMemberships
+      ),
+    /memberships must be an array/
+  );
+
+  const undefinedParent =
+    snapshotFixture();
+  undefinedParent.instances[0]
+    .parentId = undefined;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        undefinedParent
+      ),
+    /parentId must be an id or null/
+  );
+
+  const undefinedPlacement =
+    snapshotFixture();
+  undefinedPlacement.instances[0]
+    .placement = undefined;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        undefinedPlacement
+      ),
+    /placement must be an object/
+  );
+
+  const undefinedOverrides =
+    snapshotFixture();
+  undefinedOverrides.instances[0]
+    .portalOverrides = undefined;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        undefinedOverrides
+      ),
+    /portalOverrides must be an object/
+  );
+});
+
+
 test("snapshot validation requires canonical persisted attachment fields", () => {
   for (const field of [
     "nodeId",
@@ -1284,6 +1335,22 @@ test("versioned snapshots reject unknown envelope fields instead of dropping the
     /snapshot\.instances\[0\] contains unknown field attachements/
   );
 });
+
+test("canonical nullable snapshot fields reject explicit undefined", () => {
+  const attachment =
+    snapshotFixture();
+  attachment.instances[0]
+    .attachments.street.placeId =
+      undefined;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        attachment
+      ),
+    /placeId must be an id or null/
+  );
+});
+
 
 test("active travel snapshots reject ignored or contradictory plan state", () => {
   const places = new PlaceRegistry();

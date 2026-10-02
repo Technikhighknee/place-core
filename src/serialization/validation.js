@@ -63,8 +63,23 @@ function assertFiniteVec2(value, label) {
 }
 
 function assertNullableString(value, label) {
-  if (value == null) return;
+  if (value === null) return;
+  if (value === undefined) {
+    throw new TypeError(
+      `${label} must be a string or null`
+    );
+  }
   assertStringId(value, label);
+}
+
+function assertNullableId(value, label) {
+  if (value === null) return;
+  if (value === undefined) {
+    throw new TypeError(
+      `${label} must be an id or null`
+    );
+  }
+  assertId(value, label);
 }
 
 function assertJsonSafe(value, label) {
@@ -183,12 +198,10 @@ function assertTravelPlan(
     plan.resolvedTarget.nodeId,
     "active travel plan.resolvedTarget.nodeId"
   );
-  if (plan.resolvedTarget.placeId != null) {
-    assertId(
-      plan.resolvedTarget.placeId,
-      "active travel plan.resolvedTarget.placeId"
-    );
-  }
+  assertNullableId(
+    plan.resolvedTarget.placeId,
+    "active travel plan.resolvedTarget.placeId"
+  );
   assertNullableString(
     plan.resolvedTarget.anchorId,
     "active travel plan.resolvedTarget.anchorId"
@@ -469,7 +482,10 @@ function assertAttachment(value, label) {
   );
   assertFiniteVec2(value.position, `${label}.position`);
   assertNullableString(value.nodeId, `${label}.nodeId`);
-  if (value.placeId != null) assertId(value.placeId, `${label}.placeId`);
+  assertNullableId(
+    value.placeId,
+    `${label}.placeId`
+  );
   assertNullableString(value.spaceId, `${label}.spaceId`);
   assertJsonSafe(
     value.metadata,
@@ -785,12 +801,10 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
       endpoint.nodeId,
       `dynamic portal ${portal.id}.${side}.nodeId`
     );
-    if (endpoint.placeId != null) {
-      assertId(
-        endpoint.placeId,
-        `dynamic portal ${portal.id}.${side}.placeId`
-      );
-    }
+    assertNullableId(
+      endpoint.placeId,
+      `dynamic portal ${portal.id}.${side}.placeId`
+    );
     assertNullableString(
       endpoint.spaceId,
       `dynamic portal ${portal.id}.${side}.spaceId`
@@ -1201,17 +1215,18 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       item.definitionId,
       `snapshot.instances[${i}].definitionId`
     );
-    if (item.parentId != null) {
-      assertId(item.parentId, `snapshot.instances[${i}].parentId`);
-    }
+    assertNullableId(
+      item.parentId,
+      `snapshot.instances[${i}].parentId`
+    );
 
     assertArray(
-      item.memberships ?? [],
+      item.memberships,
       `snapshot.instances[${i}].memberships`
     );
 
     const membershipKeys = new Set();
-    for (let j = 0; j < (item.memberships ?? []).length; j += 1) {
+    for (let j = 0; j < item.memberships.length; j += 1) {
       const membership = item.memberships[j];
       const label =
         `snapshot.instances[${i}].memberships[${j}]`;
@@ -1297,10 +1312,10 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
     assertObject(item.layerDomains, `instance ${String(item.id)}.layerDomains`);
     assertObject(item.attachments, `instance ${String(item.id)}.attachments`);
-    assertObject(item.portalOverrides ?? {}, `instance ${String(item.id)}.portalOverrides`);
-    assertObject(item.boundaryOverrides ?? {}, `instance ${String(item.id)}.boundaryOverrides`);
-    assertObject(item.spaceOverrides ?? {}, `instance ${String(item.id)}.spaceOverrides`);
-    assertArray(item.dynamicPortals ?? [], `instance ${String(item.id)}.dynamicPortals`);
+    assertObject(item.portalOverrides, `instance ${String(item.id)}.portalOverrides`);
+    assertObject(item.boundaryOverrides, `instance ${String(item.id)}.boundaryOverrides`);
+    assertObject(item.spaceOverrides, `instance ${String(item.id)}.spaceOverrides`);
+    assertArray(item.dynamicPortals, `instance ${String(item.id)}.dynamicPortals`);
 
     const expectedLayerIds = new Set(
       definition.layers.map((layer) => layer.id)
@@ -1425,7 +1440,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     const dynamicIds = new Set();
     const thresholdRoadOwners = new Map();
 
-    for (const portal of item.dynamicPortals ?? []) {
+    for (const portal of item.dynamicPortals) {
       assertDynamicPortal(
         portal,
         definition,
@@ -1442,7 +1457,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
     for (const basePortal of definition.portals) {
       const override =
-        ownValue(item.portalOverrides ?? {}, basePortal.id) ??
+        ownValue(item.portalOverrides, basePortal.id) ??
         {};
       const resolved = {
         ...basePortal,
@@ -1485,7 +1500,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       }
     }
 
-    if (item.placement != null) {
+    if (item.placement !== null) {
       const placementLabel =
         `instance ${String(item.id)}.placement`;
       const requiredPlacementFields = [
