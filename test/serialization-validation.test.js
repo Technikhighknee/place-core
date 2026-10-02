@@ -79,6 +79,52 @@ test("self-contained snapshot preserves selective tracked occupancy", () => {
   );
 });
 
+test("snapshot validation requires the complete current version-1 schema", () => {
+  for (const field of [
+    "activeTravels",
+    "pendingTravels"
+  ]) {
+    const snapshot =
+      snapshotFixture();
+    delete snapshot[field];
+
+    assert.throws(
+      () =>
+        validatePlaceCoreSnapshot(
+          snapshot
+        ),
+      new RegExp(
+        `missing required field ${field}`
+      )
+    );
+  }
+
+  for (const field of [
+    "parentId",
+    "memberships",
+    "placement",
+    "metadata",
+    "portalOverrides",
+    "boundaryOverrides",
+    "spaceOverrides",
+    "dynamicPortals"
+  ]) {
+    const snapshot =
+      snapshotFixture();
+    delete snapshot.instances[0][field];
+
+    assert.throws(
+      () =>
+        validatePlaceCoreSnapshot(
+          snapshot
+        ),
+      new RegExp(
+        `instances\\[0\\].*missing required field ${field}`
+      )
+    );
+  }
+});
+
 test("snapshot validation rejects duplicate tracked occupancy identities", () => {
   const snapshot = snapshotFixture();
   snapshot.occupancy.push(
