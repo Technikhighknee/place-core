@@ -790,12 +790,8 @@ test("resume preserves eager stale-plan semantics across snapshots", () => {
     true
   );
 
-  // Version 1 snapshots created before planStale
-  // existed must conservatively revalidate after restore,
-  // while snapshot validation cannot claim the plan is fresh.
-  delete snapshot.activeTravels[0]
-    .planStale;
-
+  // A stale plan must remain stale across a current-schema
+  // snapshot/restore round trip so eager policy revalidates it.
   const restoredEntity = {
     ...entity,
     journey: null
