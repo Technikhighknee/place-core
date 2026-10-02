@@ -346,6 +346,25 @@ test("restored world journeys retain an in-progress same-domain portal lifecycle
     deserializeWorldCore(
       worldSnapshot
     );
+  const restoredEntity =
+    restoredWorld.world.getEntity(
+      "hans"
+    );
+  assert.equal(
+    restoredEntity.journey?.roadEntered,
+    true
+  );
+  const restoredLeg =
+    restoredEntity.journey?.prefixLeg ??
+    restoredEntity.journey?.route?.legs?.[
+      restoredEntity.journey?.legIndex
+    ] ??
+    null;
+  assert.equal(
+    restoredLeg?.roadId,
+    "room-threshold"
+  );
+
   const restoredBridge =
     new WorldCoreBridge({
       world: restoredWorld.world,
@@ -356,6 +375,17 @@ test("restored world journeys retain an in-progress same-domain portal lifecycle
       stopJourney,
       existingDomainPolicy: "adopt"
     });
+  const synchronizeRuntimeState =
+    restoredBridge.synchronizeRuntimeState
+      .bind(restoredBridge);
+  let synchronizedCrossings = null;
+  restoredBridge.synchronizeRuntimeState =
+    () => {
+      synchronizedCrossings =
+        synchronizeRuntimeState();
+      return synchronizedCrossings;
+    };
+
   const restoredPlaces =
     deserializePlaceCore(
       placeSnapshot,
@@ -364,6 +394,18 @@ test("restored world journeys retain an in-progress same-domain portal lifecycle
         resumeWorldCoreState: true
       }
     );
+
+  assert.equal(
+    restoredPlaces.getPortalsForRoad(
+      restoredEntity.domainId,
+      "room-threshold"
+    ).length,
+    1
+  );
+  assert.equal(
+    synchronizedCrossings,
+    1
+  );
 
   let ticks = 0;
   while (
