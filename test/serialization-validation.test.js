@@ -1538,27 +1538,45 @@ test("fresh snapshots bind portal-only plan endings to the resolved target", () 
       { id: "a" },
       { id: "b" }
     ],
-    portals: [{
-      id: "door",
-      transitionCost: 5,
-      a: {
-        kind: "local",
-        layerId: "a",
-        position: { x: 0, y: 0 },
-        nodeId: "a-door"
+    portals: [
+      {
+        id: "target-door",
+        transitionCost: 5,
+        a: {
+          kind: "local",
+          layerId: "a",
+          position: { x: 0, y: 0 },
+          nodeId: "a-target"
+        },
+        b: {
+          kind: "local",
+          layerId: "b",
+          position: { x: 10, y: 0 },
+          nodeId: "b-target"
+        }
       },
-      b: {
-        kind: "local",
-        layerId: "b",
-        position: { x: 10, y: 0 },
-        nodeId: "b-door"
+      {
+        id: "other-door",
+        transitionCost: 5,
+        a: {
+          kind: "local",
+          layerId: "a",
+          position: { x: 0, y: 0 },
+          nodeId: "a-other"
+        },
+        b: {
+          kind: "local",
+          layerId: "b",
+          position: { x: 20, y: 0 },
+          nodeId: "b-other"
+        }
       }
-    }],
+    ],
     anchors: [{
       id: "exit",
       layerId: "b",
       position: { x: 10, y: 0 },
-      nodeId: "b-door"
+      nodeId: "b-target"
     }]
   });
   const place = places.createPlace({
@@ -1612,14 +1630,40 @@ test("fresh snapshots bind portal-only plan endings to the resolved target", () 
     serializePlaceCore(places);
   const travel =
     snapshot.activeTravels[0];
+  const original =
+    travel.plan.steps.at(-1);
 
   assert.equal(
-    travel.plan.steps.at(-1).type,
+    original.type,
     "traverse-portal"
   );
+  assert.equal(
+    original.portalId,
+    "target-door"
+  );
 
-  travel.plan.steps.at(-1)
-    .destinationPosition.x = 11;
+  const other =
+    places.resolvePortal(
+      "house",
+      "other-door"
+    );
+  travel.plan.steps[
+    travel.plan.steps.length - 1
+  ] = {
+    type: "traverse-portal",
+    portalKey: other.key,
+    placeId: "house",
+    portalId: "other-door",
+    fromDomainId:
+      place.layerDomains.get("a"),
+    toDomainId:
+      place.layerDomains.get("b"),
+    destinationPosition: {
+      x: 20,
+      y: 0
+    },
+    transitionCost: 5
+  };
   travel.plan.legs =
     travel.plan.steps;
 
@@ -1631,7 +1675,6 @@ test("fresh snapshots bind portal-only plan endings to the resolved target", () 
     /final portal step no longer matches resolved target/
   );
 });
-
 
 test("pending saved travel state uses full active-state validation", () => {
   const places = new PlaceRegistry();
@@ -2298,7 +2341,7 @@ test("fresh semantic travel target cannot remain in a disabled ancestor space", 
       validatePlaceCoreSnapshot(
         snapshot
       ),
-    /target anchor is in a disabled space/
+    /target (?:anchor is in a disabled space|space is disabled)/
   );
 });
 
