@@ -158,16 +158,37 @@ export interface DynamicPortalInput {
   metadata?: JsonValue;
 }
 
-export interface PersistedResolvedPortalEndpoint
-  extends ResolvedPortalEndpoint {
+export interface PersistedResolvedPortalEndpoint {
   kind: "resolved";
+  domainId: string;
+  position: Vec2;
+  nodeId: string | null;
+  placeId: PlaceId | null;
+  layerId: string | null;
+  spaceId: string | null;
+  metadata: JsonValue;
 }
 
-export type PersistedDynamicPortal =
-  Omit<DynamicPortalInput, "a" | "b"> & {
-    a: PersistedResolvedPortalEndpoint;
-    b: PersistedResolvedPortalEndpoint;
-  };
+export interface PersistedDynamicPortal {
+  id: string;
+  kind: string;
+  tags: readonly string[];
+  a: PersistedResolvedPortalEndpoint;
+  b: PersistedResolvedPortalEndpoint;
+  bidirectional: boolean;
+  transitionCost: number;
+  enabled: boolean;
+  open: boolean;
+  locked: boolean;
+  blocked: boolean;
+  destroyed: boolean;
+  blocksWhenClosed: boolean;
+  roadBindings: readonly {
+    layerId: string;
+    roadId: string;
+  }[];
+  metadata: JsonValue;
+}
 
 export interface PlaceAnchorInput {
   id: string;
@@ -345,7 +366,7 @@ export class PlaceInstance {
   >;
   readonly dynamicPortals: ReadonlyMap<
     string,
-    Readonly<DynamicPortalInput>
+    Readonly<PersistedDynamicPortal>
   >;
   getMembership(
     parentPlaceId: PlaceId,
