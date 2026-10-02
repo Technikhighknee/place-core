@@ -441,6 +441,36 @@ test("snapshot validation rejects malformed pending travel identity", () => {
   );
 });
 
+test("snapshot validation requires canonical persisted definition blueprints", () => {
+  const missingTopLevelDefault =
+    snapshotFixture();
+  delete missingTopLevelDefault
+    .definitions[0]
+    .blueprint.tags;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        missingTopLevelDefault
+      ),
+    /definition blueprint for tavern is not in canonical persisted form/
+  );
+
+  const missingNestedDefault =
+    snapshotFixture();
+  delete missingNestedDefault
+    .definitions[0]
+    .blueprint.portals[0]
+    .locked;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        missingNestedDefault
+      ),
+    /definition blueprint for tavern is not in canonical persisted form/
+  );
+});
+
+
 test("snapshot validation rejects tampered definition content", () => {
   const snapshot = snapshotFixture();
   snapshot.definitions[0].blueprint.kind = "tampered";
