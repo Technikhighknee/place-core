@@ -55,6 +55,25 @@ function ownValue(object, key) {
     : undefined;
 }
 
+function assertCanonicalOrder(
+  values,
+  keyOf,
+  label
+) {
+  for (let i = 1; i < values.length; i += 1) {
+    if (
+      compareStrings(
+        keyOf(values[i - 1]),
+        keyOf(values[i])
+      ) > 0
+    ) {
+      throw new Error(
+        `${label} must be in canonical order`
+      );
+    }
+  }
+}
+
 function assertFiniteVec2(value, label) {
   assertObject(value, label);
   if (!Number.isFinite(value.x) || !Number.isFinite(value.y)) {
@@ -1128,6 +1147,27 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   assertArray(snapshot.activeTravels, "snapshot.activeTravels");
   assertArray(snapshot.pendingTravels, "snapshot.pendingTravels");
 
+  assertCanonicalOrder(
+    snapshot.definitions,
+    (item) => item.id,
+    "snapshot.definitions"
+  );
+  assertCanonicalOrder(
+    snapshot.instances,
+    (item) => idKey(item.id),
+    "snapshot.instances"
+  );
+  assertCanonicalOrder(
+    snapshot.occupancy,
+    (item) => idKey(item.entityId),
+    "snapshot.occupancy"
+  );
+  assertCanonicalOrder(
+    snapshot.activeTravels,
+    (item) => idKey(item.entityId),
+    "snapshot.activeTravels"
+  );
+
   const definitions = new Map();
   for (let i = 0; i < snapshot.definitions.length; i += 1) {
     const ref = snapshot.definitions[i];
@@ -1224,6 +1264,12 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       item.memberships,
       `snapshot.instances[${i}].memberships`
     );
+    assertCanonicalOrder(
+      item.memberships,
+      (membership) =>
+        `${idKey(membership.parentPlaceId)}\u0000${membership.kind}`,
+      `snapshot.instances[${i}].memberships`
+    );
 
     const membershipKeys = new Set();
     for (let j = 0; j < item.memberships.length; j += 1) {
@@ -1316,6 +1362,11 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     assertObject(item.boundaryOverrides, `instance ${String(item.id)}.boundaryOverrides`);
     assertObject(item.spaceOverrides, `instance ${String(item.id)}.spaceOverrides`);
     assertArray(item.dynamicPortals, `instance ${String(item.id)}.dynamicPortals`);
+    assertCanonicalOrder(
+      item.dynamicPortals,
+      (portal) => portal.id,
+      `instance ${String(item.id)}.dynamicPortals`
+    );
 
     const expectedLayerIds = new Set(
       definition.layers.map((layer) => layer.id)
