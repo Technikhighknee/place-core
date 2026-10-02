@@ -359,6 +359,18 @@ export interface PlaceMembership {
   metadata: JsonValue;
 }
 
+export interface PortalStateOverride {
+  enabled?: boolean;
+  open?: boolean;
+  locked?: boolean;
+  blocked?: boolean;
+  destroyed?: boolean;
+}
+
+export interface EnabledStateOverride {
+  enabled: boolean;
+}
+
 export interface ResolvedPortal {
   key?: string;
   id: string;
@@ -392,15 +404,15 @@ export class PlaceInstance {
   readonly metadata: JsonValue;
   readonly portalOverrides: ReadonlyMap<
     string,
-    Readonly<Record<string, boolean>>
+    Readonly<PortalStateOverride>
   >;
   readonly boundaryOverrides: ReadonlyMap<
     string,
-    Readonly<{ enabled?: boolean }>
+    Readonly<EnabledStateOverride>
   >;
   readonly spaceOverrides: ReadonlyMap<
     string,
-    Readonly<{ enabled?: boolean }>
+    Readonly<EnabledStateOverride>
   >;
   readonly dynamicPortals: ReadonlyMap<
     string,
@@ -940,9 +952,9 @@ export interface PlaceCoreSnapshot {
     attachments: Record<string, ResolvedPlaceAttachment>;
     placement: NormalizedPlacePlacement | null;
     metadata: JsonValue;
-    portalOverrides: Record<string, Record<string, boolean>>;
-    boundaryOverrides: Record<string, { enabled?: boolean }>;
-    spaceOverrides: Record<string, { enabled?: boolean }>;
+    portalOverrides: Record<string, PortalStateOverride>;
+    boundaryOverrides: Record<string, EnabledStateOverride>;
+    spaceOverrides: Record<string, EnabledStateOverride>;
     dynamicPortals: PersistedDynamicPortal[];
   }>;
   occupancy: Array<{

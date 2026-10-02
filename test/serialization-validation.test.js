@@ -679,6 +679,74 @@ test("snapshot validation rejects malformed sparse overrides before restore", ()
   );
 });
 
+test("snapshot validation rejects non-canonical sparse state overrides", () => {
+  const emptyPortal =
+    snapshotFixture();
+  emptyPortal.instances[0]
+    .portalOverrides["front-door"] = {};
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        emptyPortal
+      ),
+    /must contain at least one state difference/
+  );
+
+  const redundantPortal =
+    snapshotFixture();
+  redundantPortal.instances[0]
+    .portalOverrides["front-door"]
+    .enabled = true;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        redundantPortal
+      ),
+    /enabled redundantly matches the definition state/
+  );
+
+  const emptyBoundary =
+    snapshotFixture();
+  emptyBoundary.instances[0]
+    .boundaryOverrides["taproom-wall"] = {};
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        emptyBoundary
+      ),
+    /boundaryOverrides\.taproom-wall must contain enabled/
+  );
+
+  const redundantBoundary =
+    snapshotFixture();
+  redundantBoundary.instances[0]
+    .boundaryOverrides["taproom-wall"] = {
+      enabled: true
+    };
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        redundantBoundary
+      ),
+    /boundaryOverrides\.taproom-wall\.enabled redundantly matches/
+  );
+
+  const redundantSpace =
+    snapshotFixture();
+  redundantSpace.instances[0]
+    .spaceOverrides.taproom = {
+      enabled: true
+    };
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        redundantSpace
+      ),
+    /spaceOverrides\.taproom\.enabled redundantly matches/
+  );
+});
+
+
 test("snapshot validation rejects invalid dynamic portal semantics", () => {
   const invalidCost = snapshotFixture();
   invalidCost.instances[0].dynamicPortals.push(
