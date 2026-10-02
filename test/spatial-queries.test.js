@@ -779,3 +779,55 @@ test("nearest boundary remains defined when squared distance would overflow", ()
   assert.equal(nearest.boundary.id, "wall");
   assert.equal(nearest.distance, 1e200);
 });
+
+
+test("placesInBounds filters broad-phase footprint false positives", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "round-place",
+    footprint: {
+      type: "circle",
+      center: { x: 0, y: 0 },
+      radius: 10
+    }
+  });
+  places.createPlace({
+    id: "round",
+    definitionId: "round-place",
+    placement: {
+      domainId: "street",
+      transform: {
+        x: 0,
+        y: 0,
+        rotation: 0
+      },
+      containment: "footprint"
+    }
+  });
+
+  assert.deepEqual(
+    places.placesInBounds(
+      "street",
+      {
+        minX: 9,
+        minY: 9,
+        maxX: 10,
+        maxY: 10
+      }
+    ),
+    []
+  );
+
+  assert.deepEqual(
+    places.placesInBounds(
+      "street",
+      {
+        minX: 9,
+        minY: -1,
+        maxX: 10,
+        maxY: 1
+      }
+    ).map((place) => place.id),
+    ["round"]
+  );
+});

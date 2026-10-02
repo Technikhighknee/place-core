@@ -4,6 +4,7 @@ import {
   geometryBounds,
   inverseTransformPoint,
   pointInGeometry,
+  transformPoint,
   squaredDistance,
   distancePointToSegment,
   segmentIntersectsBounds,
@@ -55,6 +56,100 @@ import {
 } from "./registry/support.js";
 
 export { PlaceInstance };
+
+function footprintIntersectsBounds(
+  footprint,
+  transform,
+  bounds
+) {
+  const boundsCorners = [
+    { x: bounds.minX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.maxY },
+    { x: bounds.minX, y: bounds.maxY }
+  ];
+
+  if (
+    boundsCorners.some((corner) =>
+      pointInGeometry(
+        inverseTransformPoint(
+          corner,
+          transform
+        ),
+        footprint
+      )
+    )
+  ) {
+    return true;
+  }
+
+  if (footprint.type === "circle") {
+    const center = transformPoint(
+      footprint.center,
+      transform
+    );
+    const radius =
+      footprint.radius * transform.scale;
+    const closest = {
+      x: Math.max(
+        bounds.minX,
+        Math.min(center.x, bounds.maxX)
+      ),
+      y: Math.max(
+        bounds.minY,
+        Math.min(center.y, bounds.maxY)
+      )
+    };
+
+    return Math.hypot(
+      closest.x - center.x,
+      closest.y - center.y
+    ) <= radius + 1e-9;
+  }
+
+  const localVertices =
+    footprint.type === "aabb"
+      ? [
+          {
+            x: footprint.minX,
+            y: footprint.minY
+          },
+          {
+            x: footprint.maxX,
+            y: footprint.minY
+          },
+          {
+            x: footprint.maxX,
+            y: footprint.maxY
+          },
+          {
+            x: footprint.minX,
+            y: footprint.maxY
+          }
+        ]
+      : footprint.points;
+
+  const vertices = localVertices.map(
+    (point) =>
+      transformPoint(point, transform)
+  );
+
+  for (let i = 0; i < vertices.length; i += 1) {
+    if (
+      segmentIntersectsBounds(
+        vertices[i],
+        vertices[
+          (i + 1) % vertices.length
+        ],
+        bounds
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 function nearestAnchorResult(candidates, position) {
   if (candidates.length === 0) return null;
@@ -882,6 +977,27 @@ export class PlaceRegistry {
     for (const instanceId of index.queryBounds(bounds)) {
       const instance = this.#instances.get(instanceId);
       if (!instance) continue;
+      const definition =
+        this.#definitions.get(
+          instance.definitionId
+        );
+      if (!definition?.footprint) continue;
+      const resolvedPlacement =
+        this.#placementGraph.resolve(
+          instance.id
+        );
+      if (
+        !resolvedPlacement ||
+        resolvedPlacement.domainId !==
+          domainId ||
+        !footprintIntersectsBounds(
+          definition.footprint,
+          resolvedPlacement.transform,
+          bounds
+        )
+      ) {
+        continue;
+      }
       result.push(instance);
     }
     result.sort((a, b) => compareStrings(typedIdKey(a.id), typedIdKey(b.id)));
