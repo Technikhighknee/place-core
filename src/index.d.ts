@@ -1031,12 +1031,29 @@ export function domainPairKey(
   toDomainId: string
 ): string;
 
+export interface DomainPortalTransition {
+  portal: ResolvedPortal & {
+    key: string;
+    a: ResolvedPortalEndpoint;
+    b: ResolvedPortalEndpoint;
+  };
+  portalKey: string;
+  side: "a" | "b";
+  from: ResolvedPortalEndpoint;
+  to: ResolvedPortalEndpoint;
+}
+
+export type DomainPortalPath =
+  DomainPortalTransition[] & {
+    readonly domains: readonly string[];
+  };
+
 export function findDomainPortalPath(
   registry: PlaceRegistry,
   startDomainId: string,
   targetDomainId: string,
   options?: DomainPathOptions
-): any[] | null;
+): DomainPortalPath | null;
 
 export function resolveTravelTarget(
   registry: PlaceRegistry,
