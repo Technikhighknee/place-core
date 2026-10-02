@@ -312,9 +312,38 @@ export type PlacePlacement =
       containment?: "none" | "footprint";
     };
 
+export type NormalizedPlacePlacement =
+  | {
+      domainId: string;
+      parentPlaceId: null;
+      transform: Required<
+        Pick<
+          Transform2D,
+          "x" | "y" | "rotation" | "scale"
+        >
+      >;
+      containment: "none" | "footprint";
+    }
+  | {
+      domainId: null;
+      parentPlaceId: PlaceId;
+      transform: Required<
+        Pick<
+          Transform2D,
+          "x" | "y" | "rotation" | "scale"
+        >
+      >;
+      containment: "none" | "footprint";
+    };
+
 export interface ResolvedPlacePlacement {
   domainId: string;
-  transform: Required<Pick<Transform2D, "x" | "y" | "rotation" | "scale">>;
+  transform: Required<
+    Pick<
+      Transform2D,
+      "x" | "y" | "rotation" | "scale"
+    >
+  >;
   containment: "none" | "footprint";
 }
 
@@ -359,7 +388,7 @@ export class PlaceInstance {
   readonly parentId: PlaceId | null;
   readonly layerDomains: ReadonlyMap<string, string>;
   readonly attachments: ReadonlyMap<string, ResolvedPlaceAttachment>;
-  readonly placement: PlacePlacement | null;
+  readonly placement: NormalizedPlacePlacement | null;
   readonly metadata: JsonValue;
   readonly portalOverrides: ReadonlyMap<
     string,
@@ -477,7 +506,10 @@ export class PlaceRegistry {
     instanceId: PlaceId,
     options?: { includeSelf?: boolean }
   ): PlaceId[];
-  setPlacement(instanceId: PlaceId, placement: PlacePlacement | null): PlacePlacement | null;
+  setPlacement(
+    instanceId: PlaceId,
+    placement: PlacePlacement | null
+  ): NormalizedPlacePlacement | null;
   getResolvedPlacement(instanceId: PlaceId): ResolvedPlacePlacement | null;
 
   getDomainBinding(
@@ -906,7 +938,7 @@ export interface PlaceCoreSnapshot {
     memberships: PlaceMembership[];
     layerDomains: Record<string, string>;
     attachments: Record<string, ResolvedPlaceAttachment>;
-    placement: PlacePlacement | null;
+    placement: NormalizedPlacePlacement | null;
     metadata: JsonValue;
     portalOverrides: Record<string, Record<string, boolean>>;
     boundaryOverrides: Record<string, { enabled?: boolean }>;

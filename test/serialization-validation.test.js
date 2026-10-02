@@ -743,6 +743,91 @@ test("snapshot validation rejects malformed active travel state", () => {
   );
 });
 
+test("snapshot validation requires canonical persisted placement fields", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "placement-schema",
+    footprint: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 1,
+      maxY: 1
+    }
+  });
+  places.createPlace({
+    id: "placed",
+    definitionId: "placement-schema",
+    placement: {
+      domainId: "street"
+    }
+  });
+  const snapshot =
+    serializePlaceCore(places);
+  const placement =
+    snapshot.instances[0].placement;
+
+  for (const field of [
+    "domainId",
+    "parentPlaceId",
+    "containment",
+    "transform"
+  ]) {
+    const invalid =
+      structuredClone(snapshot);
+    delete invalid.instances[0]
+      .placement[field];
+
+    assert.throws(
+      () =>
+        validatePlaceCoreSnapshot(
+          invalid
+        ),
+      new RegExp(
+        `placement is missing required field ${field}`
+      )
+    );
+  }
+
+  for (const field of [
+    "x",
+    "y",
+    "rotation",
+    "scale"
+  ]) {
+    const invalid =
+      structuredClone(snapshot);
+    delete invalid.instances[0]
+      .placement.transform[field];
+
+    assert.throws(
+      () =>
+        validatePlaceCoreSnapshot(
+          invalid
+        ),
+      new RegExp(
+        `placement\\.transform is missing required field ${field}`
+      )
+    );
+  }
+
+  assert.deepEqual(
+    placement,
+    {
+      domainId: "street",
+      parentPlaceId: null,
+      transform: {
+        x: 0,
+        y: 0,
+        rotation: 0,
+        scale: 1
+      },
+      containment: "none"
+    }
+  );
+});
+
+
 test("snapshot validation rejects invalid placement transforms", () => {
   const snapshot = snapshotFixture();
   snapshot.instances[0].placement = {
@@ -947,6 +1032,7 @@ test("snapshot validation rejects unknown nested runtime fields before restore",
   const badPlacement = snapshotFixture();
   badPlacement.instances[0].placement = {
     domainId: "street",
+    parentPlaceId: null,
     containment: "footprint",
     transform: {
       x: 0,
@@ -964,6 +1050,7 @@ test("snapshot validation rejects unknown nested runtime fields before restore",
   const badTransform = snapshotFixture();
   badTransform.instances[0].placement = {
     domainId: "street",
+    parentPlaceId: null,
     containment: "footprint",
     transform: {
       x: 0,
