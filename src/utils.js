@@ -125,7 +125,23 @@ function inspectJsonValue(value, path, mode) {
       );
   }
 
-  if (!Array.isArray(value) && !isPlainObject(value)) {
+  if (Array.isArray(value)) {
+    const keys = Object.keys(value);
+    const dense =
+      keys.length === value.length &&
+      keys.every(
+        (key, index) =>
+          key === String(index)
+      );
+
+    if (!dense) {
+      throw new TypeError(
+        mode === "canonical"
+          ? "sparse or extended arrays cannot be canonicalized"
+          : `${formatJsonPath(path)} contains a sparse or extended array, which is not JSON-safe`
+      );
+    }
+  } else if (!isPlainObject(value)) {
     const typeName =
       value?.constructor?.name ?? "object";
     throw new TypeError(

@@ -480,3 +480,49 @@ test("nearest boundary selection survives finite coordinate subtraction overflow
     "z-near"
   );
 });
+
+
+test("runtime metadata rejects sparse and extended arrays before cloning", () => {
+  const registry =
+    new PlaceRegistry();
+  registry.registerDefinition({
+    id: "json-array-shape"
+  });
+
+  const sparse =
+    new Array(1_000_000_000);
+
+  assert.throws(
+    () =>
+      registry.createPlace({
+        id: "sparse",
+        definitionId:
+          "json-array-shape",
+        metadata: {
+          values: sparse
+        }
+      }),
+    /sparse or extended array/
+  );
+
+  const extended = [1, 2];
+  extended.note = "not JSON";
+
+  assert.throws(
+    () =>
+      registry.createPlace({
+        id: "extended",
+        definitionId:
+          "json-array-shape",
+        metadata: {
+          values: extended
+        }
+      }),
+    /sparse or extended array/
+  );
+
+  assert.equal(
+    registry.instances.size,
+    0
+  );
+});
