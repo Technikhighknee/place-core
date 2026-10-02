@@ -12,6 +12,53 @@ import {
 } from "../src/index.js";
 import { tavernBlueprint } from "./fixtures.js";
 
+function canonicalDynamicPortal(overrides = {}) {
+  const {
+    a: aOverrides = {},
+    b: bOverrides = {},
+    ...portalOverrides
+  } = overrides;
+
+  return {
+    id: "breach",
+    kind: "portal",
+    tags: [],
+    a: {
+      kind: "resolved",
+      domainId: "inn:ground",
+      position: { x: 1, y: 0 },
+      nodeId: null,
+      placeId: null,
+      spaceId: null,
+      layerId: null,
+      metadata: null,
+      ...aOverrides
+    },
+    b: {
+      kind: "resolved",
+      domainId: "street",
+      position: { x: 0, y: 0 },
+      nodeId: null,
+      placeId: null,
+      spaceId: null,
+      layerId: null,
+      metadata: null,
+      ...bOverrides
+    },
+    bidirectional: true,
+    transitionCost: 0,
+    enabled: true,
+    open: true,
+    locked: false,
+    blocked: false,
+    destroyed: false,
+    blocksWhenClosed: false,
+    roadBindings: [],
+    metadata: null,
+    ...portalOverrides
+  };
+}
+
 function snapshotFixture() {
   const places = new PlaceRegistry();
   places.registerDefinition(tavernBlueprint());
@@ -341,14 +388,59 @@ test("snapshot validation rejects missing parents and malformed dynamic portals"
   assert.throws(() => validatePlaceCoreSnapshot(missingParent), /missing parent/);
 
   const malformed = snapshotFixture();
-  malformed.instances[0].dynamicPortals.push({
-    id: "breach",
-    a: { kind: "resolved", domainId: "inn:ground", position: { x: Number.NaN, y: 0 } },
-    b: { kind: "resolved", domainId: "street", position: { x: 0, y: 0 } }
-  });
+  malformed.instances[0].dynamicPortals.push(
+    canonicalDynamicPortal({
+      a: {
+        position: {
+          x: Number.NaN,
+          y: 0
+        }
+      }
+    })
+  );
   assert.throws(
     () => validatePlaceCoreSnapshot(malformed),
     /position must contain finite x\/y/
+  );
+});
+
+
+test("snapshot validation requires canonical persisted dynamic portal fields", () => {
+  const snapshot = snapshotFixture();
+  snapshot.instances[0].dynamicPortals.push(
+    canonicalDynamicPortal()
+  );
+  assert.equal(
+    validatePlaceCoreSnapshot(snapshot),
+    true
+  );
+
+  const missingPortalField =
+    structuredClone(snapshot);
+  delete missingPortalField
+    .instances[0]
+    .dynamicPortals[0]
+    .bidirectional;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        missingPortalField
+      ),
+    /dynamic portal is missing required field bidirectional/
+  );
+
+  const missingEndpointField =
+    structuredClone(snapshot);
+  delete missingEndpointField
+    .instances[0]
+    .dynamicPortals[0]
+    .a.metadata;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        missingEndpointField
+      ),
+    /portal breach\.a is missing required field metadata/
   );
 });
 
@@ -510,63 +602,42 @@ test("snapshot validation rejects malformed sparse overrides before restore", ()
 
 test("snapshot validation rejects invalid dynamic portal semantics", () => {
   const invalidCost = snapshotFixture();
-  invalidCost.instances[0].dynamicPortals.push({
-    id: "slow-breach",
-    a: {
-      kind: "resolved",
-      domainId: "inn:ground",
-      position: { x: 1, y: 0 }
-    },
-    b: {
-      kind: "resolved",
-      domainId: "street",
-      position: { x: 0, y: 0 }
-    },
-    transitionCost: -1
-  });
+  invalidCost.instances[0].dynamicPortals.push(
+    canonicalDynamicPortal({
+      id: "slow-breach",
+      transitionCost: -1
+    })
+  );
   assert.throws(
     () => validatePlaceCoreSnapshot(invalidCost),
     /transitionCost must be a finite number >= 0/
   );
 
   const invalidBoolean = snapshotFixture();
-  invalidBoolean.instances[0].dynamicPortals.push({
-    id: "weird-breach",
-    a: {
-      kind: "resolved",
-      domainId: "inn:ground",
-      position: { x: 1, y: 0 }
-    },
-    b: {
-      kind: "resolved",
-      domainId: "street",
-      position: { x: 0, y: 0 }
-    },
-    locked: "false"
-  });
+  invalidBoolean.instances[0].dynamicPortals.push(
+    canonicalDynamicPortal({
+      id: "weird-breach",
+      locked: "false"
+    })
+  );
   assert.throws(
     () => validatePlaceCoreSnapshot(invalidBoolean),
     /locked must be a boolean/
   );
 
   const invalidRoad = snapshotFixture();
-  invalidRoad.instances[0].dynamicPortals.push({
-    id: "bad-road",
-    a: {
-      kind: "resolved",
-      domainId: "inn:ground",
-      position: { x: 0, y: 0 }
-    },
-    b: {
-      kind: "resolved",
-      domainId: "street",
-      position: { x: 0, y: 0 }
-    },
-    roadBindings: [{
-      layerId: "ground",
-      roadId: "missing-road"
-    }]
-  });
+  invalidRoad.instances[0].dynamicPortals.push(
+    canonicalDynamicPortal({
+      id: "bad-road",
+      a: {
+        position: { x: 0, y: 0 }
+      },
+      roadBindings: [{
+        layerId: "ground",
+        roadId: "missing-road"
+      }]
+    })
+  );
   assert.throws(
     () => validatePlaceCoreSnapshot(invalidRoad),
     /unknown navigation road missing-road/
@@ -789,23 +860,23 @@ test("snapshot validation rejects dynamic threshold node mismatch", () => {
 
 test("snapshot validation requires topology-backed dynamic road bindings", () => {
   const snapshot = snapshotFixture();
-  snapshot.instances[0].dynamicPortals.push({
-    id: "bad-topology-binding",
-    a: {
-      kind: "resolved",
-      domainId: "street",
-      position: { x: 0, y: 0 }
-    },
-    b: {
-      kind: "resolved",
-      domainId: "other",
-      position: { x: 0, y: 0 }
-    },
-    roadBindings: [{
-      layerId: "cellar",
-      roadId: "imaginary"
-    }]
-  });
+  snapshot.instances[0].dynamicPortals.push(
+    canonicalDynamicPortal({
+      id: "bad-topology-binding",
+      a: {
+        domainId: "street",
+        position: { x: 0, y: 0 }
+      },
+      b: {
+        domainId: "other",
+        position: { x: 0, y: 0 }
+      },
+      roadBindings: [{
+        layerId: "cellar",
+        roadId: "imaginary"
+      }]
+    })
+  );
 
   const definition = snapshot.definitions[0].blueprint;
   const cellar = definition.layers.find((layer) => layer.id === "cellar");

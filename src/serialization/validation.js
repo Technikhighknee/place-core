@@ -649,27 +649,35 @@ function resolveSnapshotPortalEndpoint(endpoint, item) {
 }
 
 function assertDynamicPortal(portal, definition, item, dynamicIds) {
+  const requiredPortalFields = [
+    "id",
+    "kind",
+    "tags",
+    "a",
+    "b",
+    "bidirectional",
+    "transitionCost",
+    "enabled",
+    "open",
+    "locked",
+    "blocked",
+    "destroyed",
+    "blocksWhenClosed",
+    "roadBindings",
+    "metadata"
+  ];
   assertOnlyKeys(
     portal,
-    [
-      "id",
-      "kind",
-      "tags",
-      "a",
-      "b",
-      "bidirectional",
-      "transitionCost",
-      "enabled",
-      "open",
-      "locked",
-      "blocked",
-      "destroyed",
-      "blocksWhenClosed",
-      "roadBindings",
-      "metadata"
-    ],
+    requiredPortalFields,
     "dynamic portal"
   );
+  for (const key of requiredPortalFields) {
+    if (!Object.hasOwn(portal, key)) {
+      throw new Error(
+        `dynamic portal is missing required field ${key}`
+      );
+    }
+  }
   assertStringId(portal.id, "dynamic portal.id");
 
   if (dynamicIds.has(portal.id) || definition.getPortal(portal.id)) {
@@ -679,14 +687,13 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
   }
   dynamicIds.add(portal.id);
 
-  assertStringId(portal.kind ?? "portal", `dynamic portal ${portal.id}.kind`);
+  assertStringId(portal.kind, `dynamic portal ${portal.id}.kind`);
   normalizeStringList(
     portal.tags,
-    `dynamic portal ${portal.id}.tags`,
-    { defaultValue: [] }
+    `dynamic portal ${portal.id}.tags`
   );
 
-  const transitionCost = portal.transitionCost ?? 0;
+  const transitionCost = portal.transitionCost;
   if (!Number.isFinite(transitionCost) || transitionCost < 0) {
     throw new RangeError(
       `dynamic portal ${portal.id} transitionCost must be a finite number >= 0`
@@ -702,31 +709,37 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
     "destroyed",
     "blocksWhenClosed"
   ]) {
-    if (portal[key] !== undefined) {
-      normalizeBoolean(
-        portal[key],
-        `dynamic portal ${portal.id}.${key}`
-      );
-    }
+    normalizeBoolean(
+      portal[key],
+      `dynamic portal ${portal.id}.${key}`
+    );
   }
 
   for (const [side, endpoint] of [["a", portal.a], ["b", portal.b]]) {
     const endpointLabel =
       `dynamic portal ${portal.id}.${side}`;
+    const requiredEndpointFields = [
+      "kind",
+      "domainId",
+      "position",
+      "nodeId",
+      "placeId",
+      "spaceId",
+      "layerId",
+      "metadata"
+    ];
     assertOnlyKeys(
       endpoint,
-      [
-        "kind",
-        "domainId",
-        "position",
-        "nodeId",
-        "placeId",
-        "spaceId",
-        "layerId",
-        "metadata"
-      ],
+      requiredEndpointFields,
       endpointLabel
     );
+    for (const key of requiredEndpointFields) {
+      if (!Object.hasOwn(endpoint, key)) {
+        throw new Error(
+          `${endpointLabel} is missing required field ${key}`
+        );
+      }
+    }
     if (endpoint.kind !== "resolved") {
       throw new Error(
         `${endpointLabel}.kind must be "resolved"`
@@ -763,19 +776,17 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
       endpoint.layerId,
       `dynamic portal ${portal.id}.${side}.layerId`
     );
-    if (endpoint.metadata !== undefined) {
-      assertJsonSafe(
-        endpoint.metadata,
-        `dynamic portal ${portal.id}.${side}.metadata`
-      );
-    }
+    assertJsonSafe(
+      endpoint.metadata,
+      `dynamic portal ${portal.id}.${side}.metadata`
+    );
   }
 
   assertArray(
-    portal.roadBindings ?? [],
+    portal.roadBindings,
     `dynamic portal ${portal.id}.roadBindings`
   );
-  for (let i = 0; i < (portal.roadBindings ?? []).length; i += 1) {
+  for (let i = 0; i < portal.roadBindings.length; i += 1) {
     const binding = portal.roadBindings[i];
     assertOnlyKeys(
       binding,
@@ -809,9 +820,10 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
     }
   }
 
-  if (portal.metadata !== undefined) {
-    assertJsonSafe(portal.metadata, `dynamic portal ${portal.id}.metadata`);
-  }
+  assertJsonSafe(
+    portal.metadata,
+    `dynamic portal ${portal.id}.metadata`
+  );
 
   assertSnapshotResolvedPortalPhysical(
     portal,
