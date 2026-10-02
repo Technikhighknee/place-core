@@ -353,6 +353,10 @@ export class PlaceRegistry {
     );
   }
 
+  _snapshotOccupancy() {
+    return this.#occupancyIndex.snapshot();
+  }
+
   #assertTravelMutationToken(token) {
     if (token !== PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN) {
       throw new Error(

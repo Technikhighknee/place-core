@@ -29,7 +29,7 @@ export {
   validatePlaceCoreSnapshot
 };
 
-function assertResumableWorldEntity(
+function assertRestoredWorldEntityLocation(
   entity,
   expectedId
 ) {
@@ -56,9 +56,46 @@ function assertResumableWorldEntity(
     );
   }
 
+  return entity;
+}
+
+function assertResumableWorldEntity(
+  entity,
+  expectedId
+) {
+  assertRestoredWorldEntityLocation(
+    entity,
+    expectedId
+  );
+
   if (!entity.mobility) {
     throw new Error(
       `restored world entity ${String(entity.id)} has no mobility profile`
+    );
+  }
+
+  return entity;
+}
+
+function assertMatchingRestoredOccupancy(
+  entity,
+  saved
+) {
+  assertRestoredWorldEntityLocation(
+    entity,
+    saved.entityId
+  );
+
+  const domainId =
+    entity.domainId ?? "default";
+
+  if (
+    domainId !== saved.domainId ||
+    entity.position.x !== saved.position.x ||
+    entity.position.y !== saved.position.y
+  ) {
+    throw new Error(
+      `resumeWorldCoreState tracked entity ${String(saved.entityId)} does not match saved occupancy`
     );
   }
 
@@ -208,6 +245,8 @@ export function serializePlaceCore(registry) {
           .sort((a, b) => compareStrings(a.id, b.id))
       }))
       .sort((a, b) => compareStrings(idKey(a.id), idKey(b.id))),
+    occupancy: registry._snapshotOccupancy()
+      .map(canonicalClone),
     activeTravels: [...registry.activeTravels.values()]
       .filter((state) => state.status === "active")
       .map((state) =>
@@ -353,14 +392,37 @@ export function deserializePlaceCore(snapshot, options = {}) {
   }
 
 
+  const occupancy = snapshot.occupancy;
   const active = snapshot.activeTravels ?? [];
   const resumableEntities = new Map();
 
-  // Resume requires a matching restored world. Verify entity coverage before
-  // materializing any place state into that world.
+  // Resume requires the restored world to match every selectively tracked
+  // place-core entity, not only entities that happen to be travelling.
+  // Verify this before materializing any place state into that world.
   if (bridge && resumeWorldCoreState) {
+    for (const saved of occupancy) {
+      const entity =
+        bridge.getEntity?.(saved.entityId);
+      if (!entity) {
+        throw new Error(
+          `resumeWorldCoreState is missing tracked world entity ${String(saved.entityId)}`
+        );
+      }
+      assertMatchingRestoredOccupancy(
+        entity,
+        saved
+      );
+      resumableEntities.set(
+        saved.entityId,
+        entity
+      );
+    }
+
     for (const saved of active) {
       const entity =
+        resumableEntities.get(
+          saved.entityId
+        ) ??
         bridge.getEntity?.(saved.entityId);
       if (!entity) {
         throw new Error(
@@ -376,6 +438,19 @@ export function deserializePlaceCore(snapshot, options = {}) {
         entity
       );
     }
+  }
+
+  // Occupancy is place-core state. Persist only the tracked entity's
+  // identity/domain/position and rebuild semantic memberships on restore.
+  for (const saved of occupancy) {
+    registry.updateEntityOccupancy({
+      id: saved.entityId,
+      domainId: saved.domainId,
+      position: {
+        x: saved.position.x,
+        y: saved.position.y
+      }
+    });
   }
 
   // Materialize the fully restored structural state in one late-attach
@@ -560,6 +635,7 @@ function canonicalStateForHash(registry) {
     version: snapshot.version,
     definitions: snapshot.definitions,
     instances: snapshot.instances,
+    occupancy: snapshot.occupancy,
     activeTravels: snapshot.activeTravels,
     pendingTravels: snapshot.pendingTravels
   };

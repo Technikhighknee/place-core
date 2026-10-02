@@ -1007,6 +1007,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       "version",
       "definitions",
       "instances",
+      "occupancy",
       "activeTravels",
       "pendingTravels"
     ],
@@ -1023,6 +1024,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
   assertArray(snapshot.definitions, "snapshot.definitions");
   assertArray(snapshot.instances, "snapshot.instances");
+  assertArray(snapshot.occupancy, "snapshot.occupancy");
   assertArray(snapshot.activeTravels ?? [], "snapshot.activeTravels");
   assertArray(snapshot.pendingTravels ?? [], "snapshot.pendingTravels");
 
@@ -1525,6 +1527,60 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         idKey(member.id)
       );
     }
+  }
+
+  const occupancyEntities = new Set();
+  for (let i = 0; i < snapshot.occupancy.length; i += 1) {
+    const item = snapshot.occupancy[i];
+    const label =
+      `snapshot.occupancy[${i}]`;
+
+    assertOnlyKeys(
+      item,
+      [
+        "entityId",
+        "domainId",
+        "position"
+      ],
+      label
+    );
+    for (const key of [
+      "entityId",
+      "domainId",
+      "position"
+    ]) {
+      if (!Object.hasOwn(item, key)) {
+        throw new Error(
+          `${label} is missing required field ${key}`
+        );
+      }
+    }
+
+    assertId(
+      item.entityId,
+      `${label}.entityId`
+    );
+    assertStringId(
+      item.domainId,
+      `${label}.domainId`
+    );
+    assertOnlyKeys(
+      item.position,
+      ["x", "y"],
+      `${label}.position`
+    );
+    assertFiniteVec2(
+      item.position,
+      `${label}.position`
+    );
+
+    const key = idKey(item.entityId);
+    if (occupancyEntities.has(key)) {
+      throw new Error(
+        `duplicate occupancy entity ${String(item.entityId)}`
+      );
+    }
+    occupancyEntities.add(key);
   }
 
   const assertFreshTravelReferences = (
@@ -2164,6 +2220,12 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       );
     }
     travelEntities.add(key);
+
+    if (!occupancyEntities.has(key)) {
+      throw new Error(
+        `active travel entity ${String(travel.entityId)} is missing from snapshot occupancy`
+      );
+    }
   }
 
   for (let i = 0; i < (snapshot.pendingTravels ?? []).length; i += 1) {
