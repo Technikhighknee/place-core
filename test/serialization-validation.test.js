@@ -195,6 +195,45 @@ test("resumeWorldCoreState verifies stationary tracked occupancy before attach",
   );
 });
 
+test("restore rebuild events do not consume or overflow the runtime event queue", () => {
+  const snapshot = snapshotFixture();
+
+  const restored =
+    deserializePlaceCore(
+      snapshot,
+      {
+        captureEvents: true,
+        eventQueueLimit: 1
+      }
+    );
+
+  assert.deepEqual(
+    restored.getEventQueueStats(),
+    {
+      size: 0,
+      limit: 1,
+      overflowPolicy: "drop-newest",
+      dropped: 0
+    }
+  );
+
+  restored.emit(
+    "runtime-event",
+    { value: 1 }
+  );
+
+  assert.deepEqual(
+    restored.peekEvents().map(
+      (event) => event.type
+    ),
+    ["runtime-event"]
+  );
+  assert.equal(
+    restored.getEventQueueStats().dropped,
+    0
+  );
+});
+
 test("snapshot validation rejects malformed pending travel identity", () => {
   const missing = snapshotFixture();
   missing.pendingTravels.push({});

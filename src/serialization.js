@@ -283,12 +283,13 @@ export function deserializePlaceCore(snapshot, options = {}) {
     );
   }
 
+  const captureEvents = normalizeBoolean(
+    options.captureEvents,
+    "deserialize captureEvents",
+    { defaultValue: false }
+  );
   const registry = new PlaceRegistry({
-    captureEvents: normalizeBoolean(
-      options.captureEvents,
-      "deserialize captureEvents",
-      { defaultValue: false }
-    ),
+    captureEvents: false,
     eventQueueLimit: options.eventQueueLimit,
     eventOverflowPolicy: options.eventOverflowPolicy
   });
@@ -624,6 +625,9 @@ export function deserializePlaceCore(snapshot, options = {}) {
   }
 
   registry.drainEvents();
+  registry.setEventCapture(
+    captureEvents
+  );
   registry.assertInternalConsistency();
   return registry;
 }
