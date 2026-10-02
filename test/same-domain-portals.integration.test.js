@@ -391,7 +391,8 @@ test("restored world journeys retain an in-progress same-domain portal lifecycle
       placeSnapshot,
       {
         bridge: restoredBridge,
-        resumeWorldCoreState: true
+        resumeWorldCoreState: true,
+        captureEvents: true
       }
     );
 
