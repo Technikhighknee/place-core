@@ -1013,6 +1013,22 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     ],
     "place-core snapshot"
   );
+  for (const key of [
+    "format",
+    "version",
+    "definitions",
+    "instances",
+    "occupancy",
+    "activeTravels",
+    "pendingTravels"
+  ]) {
+    if (!Object.hasOwn(snapshot, key)) {
+      throw new Error(
+        `place-core snapshot is missing required field ${key}`
+      );
+    }
+  }
+
   if (snapshot.format !== "place-core") {
     throw new Error(
       `invalid place-core snapshot format: ${snapshot.format}`
@@ -1025,8 +1041,8 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   assertArray(snapshot.definitions, "snapshot.definitions");
   assertArray(snapshot.instances, "snapshot.instances");
   assertArray(snapshot.occupancy, "snapshot.occupancy");
-  assertArray(snapshot.activeTravels ?? [], "snapshot.activeTravels");
-  assertArray(snapshot.pendingTravels ?? [], "snapshot.pendingTravels");
+  assertArray(snapshot.activeTravels, "snapshot.activeTravels");
+  assertArray(snapshot.pendingTravels, "snapshot.pendingTravels");
 
   const definitions = new Map();
   for (let i = 0; i < snapshot.definitions.length; i += 1) {
@@ -1072,24 +1088,32 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   for (let i = 0; i < snapshot.instances.length; i += 1) {
     const item = snapshot.instances[i];
     const itemLabel = `snapshot.instances[${i}]`;
+    const requiredInstanceFields = [
+      "id",
+      "definitionId",
+      "parentId",
+      "memberships",
+      "layerDomains",
+      "attachments",
+      "placement",
+      "metadata",
+      "portalOverrides",
+      "boundaryOverrides",
+      "spaceOverrides",
+      "dynamicPortals"
+    ];
     assertOnlyKeys(
       item,
-      [
-        "id",
-        "definitionId",
-        "parentId",
-        "memberships",
-        "layerDomains",
-        "attachments",
-        "placement",
-        "metadata",
-        "portalOverrides",
-        "boundaryOverrides",
-        "spaceOverrides",
-        "dynamicPortals"
-      ],
+      requiredInstanceFields,
       itemLabel
     );
+    for (const key of requiredInstanceFields) {
+      if (!Object.hasOwn(item, key)) {
+        throw new Error(
+          `${itemLabel} is missing required field ${key}`
+        );
+      }
+    }
     assertId(item.id, `${itemLabel}.id`);
     assertStringId(
       item.definitionId,
