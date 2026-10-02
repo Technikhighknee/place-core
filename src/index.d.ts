@@ -158,6 +158,17 @@ export interface DynamicPortalInput {
   metadata?: JsonValue;
 }
 
+export interface PersistedResolvedPortalEndpoint
+  extends ResolvedPortalEndpoint {
+  kind: "resolved";
+}
+
+export type PersistedDynamicPortal =
+  Omit<DynamicPortalInput, "a" | "b"> & {
+    a: PersistedResolvedPortalEndpoint;
+    b: PersistedResolvedPortalEndpoint;
+  };
+
 export interface PlaceAnchorInput {
   id: string;
   layerId: string;
@@ -866,7 +877,7 @@ export interface PlaceCoreSnapshot {
     portalOverrides: Record<string, Record<string, boolean>>;
     boundaryOverrides: Record<string, { enabled?: boolean }>;
     spaceOverrides: Record<string, { enabled?: boolean }>;
-    dynamicPortals: DynamicPortalInput[];
+    dynamicPortals: PersistedDynamicPortal[];
   }>;
   occupancy: Array<{
     entityId: EntityId;
