@@ -273,6 +273,28 @@ export class WorldCoreBridge {
     });
   }
 
+  #sameDomainCrossingMatches(left, right) {
+    if (!left || !right) return false;
+
+    const endpointMatches = (a, b) =>
+      a?.domainId === b?.domainId &&
+      (a?.nodeId ?? null) ===
+        (b?.nodeId ?? null) &&
+      (a?.spaceId ?? null) ===
+        (b?.spaceId ?? null) &&
+      a?.position?.x === b?.position?.x &&
+      a?.position?.y === b?.position?.y;
+
+    return (
+      left.portal?.key ===
+        right.portal?.key &&
+      left.domainId === right.domainId &&
+      left.roadId === right.roadId &&
+      endpointMatches(left.from, right.from) &&
+      endpointMatches(left.to, right.to)
+    );
+  }
+
   #handleWorldEvent(event) {
     if (!this.#registry || event?.entityId == null) {
       return;
@@ -380,15 +402,38 @@ export class WorldCoreBridge {
       return;
     }
 
+    const entity =
+      this.world.getEntity(event.entityId);
+    const currentCrossing =
+      this.#resolveSameDomainPortalCrossing(
+        entity,
+        event.roadId
+      );
+
+    if (
+      !this.#sameDomainCrossingMatches(
+        crossing,
+        currentCrossing
+      )
+    ) {
+      this.#emitSameDomainPortalEvent(
+        "portal-abort",
+        event.entityId,
+        crossing,
+        { reason: "portal-changed" }
+      );
+      return;
+    }
+
     this.#emitSameDomainPortalEvent(
       "portal-traverse",
       event.entityId,
-      crossing
+      currentCrossing
     );
     this.#emitSameDomainPortalEvent(
       "portal-exit",
       event.entityId,
-      crossing
+      currentCrossing
     );
   }
 

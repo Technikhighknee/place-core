@@ -516,3 +516,179 @@ test("external journey cancellation cannot falsely complete a local travel leg",
     event.reason === "no-route-after-world-change"
   ));
 });
+
+
+test("removing a same-domain dynamic portal mid-crossing aborts instead of emitting stale traversal", () => {
+  const world = new World();
+  const navigation = new NavigationRegistry();
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    Navigation,
+    startJourney,
+    stopJourney
+  });
+  const places = new PlaceRegistry({
+    bridge,
+    captureEvents: true
+  });
+
+  places.registerDefinition({
+    id: "dynamic-threshold-place",
+    layers: [{
+      id: "ground",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 4, y: 0 }
+        ],
+        roads: [{
+          id: "threshold",
+          from: "a",
+          to: "b"
+        }]
+      }
+    }],
+    spaces: [
+      {
+        id: "left",
+        layerId: "ground",
+        geometry: {
+          type: "aabb",
+          minX: -1,
+          minY: -1,
+          maxX: 2,
+          maxY: 1
+        }
+      },
+      {
+        id: "right",
+        layerId: "ground",
+        geometry: {
+          type: "aabb",
+          minX: 2,
+          minY: -1,
+          maxX: 5,
+          maxY: 1
+        }
+      }
+    ]
+  });
+
+  const place = places.createPlace({
+    id: "hall",
+    definitionId: "dynamic-threshold-place"
+  });
+  const domainId =
+    place.layerDomains.get("ground");
+
+  places.addPortal("hall", {
+    id: "temporary-door",
+    a: {
+      domainId,
+      position: { x: 0, y: 0 },
+      nodeId: "a",
+      placeId: "hall",
+      layerId: "ground",
+      spaceId: "left"
+    },
+    b: {
+      domainId,
+      position: { x: 4, y: 0 },
+      nodeId: "b",
+      placeId: "hall",
+      layerId: "ground",
+      spaceId: "right"
+    },
+    roadBindings: [{
+      layerId: "ground",
+      roadId: "threshold"
+    }]
+  });
+
+  world.addEntity({
+    id: "hans",
+    domainId,
+    position: { x: 0, y: 0 },
+    body: { radius: 0.25 },
+    mobility: {
+      speed: 1,
+      surfaceMultipliers: {},
+      requiredRoadWidth: 0,
+      requiredRoadTags: [],
+      blockedRoadTags: []
+    }
+  });
+
+  assert.equal(
+    bridge.startLocalJourney("hans", "b"),
+    true
+  );
+
+  let entered = false;
+  for (let i = 0; i < 20 && !entered; i += 1) {
+    stepSimulation(
+      world,
+      navigation,
+      0.05
+    );
+    entered = places.peekEvents().some(
+      (event) =>
+        event.type === "portal-enter" &&
+        event.portalId === "temporary-door"
+    );
+  }
+  assert.equal(entered, true);
+
+  assert.equal(
+    places.removePortal(
+      "hall",
+      "temporary-door"
+    ),
+    true
+  );
+
+  for (let i = 0; i < 200 && world.getEntity("hans").journey; i += 1) {
+    stepSimulation(
+      world,
+      navigation,
+      0.05
+    );
+  }
+
+  const portalEvents = places
+    .drainEvents()
+    .filter(
+      (event) =>
+        event.portalId ===
+          "temporary-door"
+    );
+
+  assert.deepEqual(
+    portalEvents.map((event) =>
+      event.type
+    ),
+    [
+      "portal-added",
+      "portal-enter",
+      "portal-removed",
+      "portal-abort"
+    ]
+  );
+  assert.equal(
+    portalEvents.at(-1).reason,
+    "portal-changed"
+  );
+  assert.equal(
+    portalEvents.some((event) =>
+      event.type === "portal-traverse"
+    ),
+    false
+  );
+  assert.equal(
+    portalEvents.some((event) =>
+      event.type === "portal-exit"
+    ),
+    false
+  );
+});
