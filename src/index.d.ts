@@ -991,6 +991,13 @@ export interface DomainPathOptions {
   excludedDomainPairs?: Iterable<string>;
 }
 
+export interface TravelEntityInput {
+  id: EntityId;
+  domainId?: string;
+  position: Vec2;
+  mobility: unknown;
+}
+
 export interface TravelPlanningOptions extends DomainPathOptions {
   bridge?: WorldCoreBridge;
   journeyOptions?: any;
@@ -1038,14 +1045,14 @@ export function resolveTravelTarget(
 
 export function planTravel(
   registry: PlaceRegistry,
-  entityOrId: EntityId | any,
+  entityOrId: EntityId | TravelEntityInput,
   target: TravelTarget,
   options?: TravelPlanningOptions
 ): TravelPlan | null;
 export function planTravel(
   registry: PlaceRegistry,
   bridge: WorldCoreBridge,
-  entityOrId: EntityId | any,
+  entityOrId: EntityId | TravelEntityInput,
   target: TravelTarget,
   options?: TravelPlanningOptions
 ): TravelPlan | null;
