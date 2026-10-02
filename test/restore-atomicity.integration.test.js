@@ -747,6 +747,13 @@ test("pending travel plans are marked stale before later structural mutations", 
 
   if (targetPlaceId != null) {
     assert.equal(
+      restored.removeEntityOccupancy(
+        restored.pendingTravels[0]
+          .entityId
+      ),
+      true
+    );
+    assert.equal(
       restored.removePlace(
         targetPlaceId
       ),

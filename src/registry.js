@@ -1260,9 +1260,25 @@ export class PlaceRegistry {
     }
 
     this.#touchState({ travel: true });
-    this.#occupancyIndex.refresh(
-      this.#collectTrackedEntitiesForIndexedPlaces([instance.id])
+
+    const affectedEntities = new Set(
+      this.#collectTrackedEntitiesForIndexedPlaces(
+        [instance.id]
+      )
     );
+    for (const domainId of
+      instance.layerDomains.values()) {
+      for (const entityId of
+        this.#occupancyIndex.entitiesInDomain(
+          domainId
+        )) {
+        affectedEntities.add(entityId);
+      }
+    }
+    this.#occupancyIndex.refresh(
+      affectedEntities
+    );
+
     this.emit("place-created", { placeId: instance.id, definitionId: definition.id });
     return instance;
   }

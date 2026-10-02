@@ -71,7 +71,10 @@ test("self-contained snapshot preserves selective tracked occupancy", () => {
       position: { x: 3, y: 4 },
       places: [],
       semanticPlaces: [],
-      spaces: []
+      spaces: [],
+      placeId: null,
+      layerId: null,
+      deepestSpace: null
     }
   );
 });

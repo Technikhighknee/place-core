@@ -64,6 +64,17 @@ export class OccupancyIndex {
     );
   }
 
+  entitiesInDomain(domainId) {
+    const result = new Set();
+    for (const [entityId, location] of
+      this.#locations) {
+      if (location.domainId === domainId) {
+        result.add(entityId);
+      }
+    }
+    return result;
+  }
+
   update(entityId, next) {
     const previous = this.#locations.get(entityId) ?? null;
 
