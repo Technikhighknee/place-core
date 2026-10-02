@@ -605,3 +605,69 @@ test("bound-domain location keeps singular place context coherent with overlappi
     "room"
   );
 });
+
+
+test("resolvedPortals never yields null when registry mutates between iterator steps", () => {
+  const registry =
+    new PlaceRegistry();
+
+  registry.registerDefinition({
+    id: "two-portals",
+    layers: [{ id: "inside" }],
+    portals: [
+      {
+        id: "a",
+        a: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 0, y: 0 }
+        },
+        b: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 1, y: 0 }
+        }
+      },
+      {
+        id: "b",
+        a: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 2, y: 0 }
+        },
+        b: {
+          kind: "local",
+          layerId: "inside",
+          position: { x: 3, y: 0 }
+        }
+      }
+    ]
+  });
+
+  registry.createPlace({
+    id: "house",
+    definitionId: "two-portals"
+  });
+
+  const iterator =
+    registry.resolvedPortals();
+
+  const first =
+    iterator.next();
+  assert.equal(first.done, false);
+  assert.equal(first.value.id, "a");
+
+  assert.equal(
+    registry.removePlace("house"),
+    true
+  );
+
+  const remaining = [
+    ...iterator
+  ];
+
+  assert.deepEqual(
+    remaining,
+    []
+  );
+});

@@ -176,20 +176,28 @@ export class PlaceRegistry extends CorePlaceRegistry {
         this.getDefinition(instance.definitionId);
 
       for (const portal of definition.portals) {
-        yield this.resolvePortal(
-          instance.id,
-          portal.id
-        );
+        const resolved =
+          this.resolvePortal(
+            instance.id,
+            portal.id
+          );
+        if (resolved) {
+          yield resolved;
+        }
       }
 
       const dynamicPortalIds = [
         ...instance.dynamicPortals.keys()
       ].sort(compareStrings);
       for (const portalId of dynamicPortalIds) {
-        yield this.resolvePortal(
-          instance.id,
-          portalId
-        );
+        const resolved =
+          this.resolvePortal(
+            instance.id,
+            portalId
+          );
+        if (resolved) {
+          yield resolved;
+        }
       }
     }
   }
