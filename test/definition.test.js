@@ -722,6 +722,55 @@ test("definition authoring collections must be arrays", () => {
   );
 });
 
+test("definition road bindings are canonical across input order", () => {
+  const make = (reverse) => compilePlace({
+    id: "binding-order",
+    layers: [{
+      id: "inside",
+      topologyId: "external-topology"
+    }],
+    boundaries: [{
+      id: "wall",
+      layerId: "inside",
+      a: { x: 0, y: 0 },
+      b: { x: 1, y: 0 },
+      roadBindings: reverse
+        ? [{ roadId: "z" }, { roadId: "a" }]
+        : [{ roadId: "a" }, { roadId: "z" }]
+    }],
+    portals: [{
+      id: "door",
+      a: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 }
+      },
+      b: {
+        kind: "external",
+        slot: "outside"
+      },
+      roadBindings: reverse
+        ? [
+            { layerId: "inside", roadId: "z" },
+            { layerId: "inside", roadId: "a" }
+          ]
+        : [
+            { layerId: "inside", roadId: "a" },
+            { layerId: "inside", roadId: "z" }
+          ]
+    }]
+  });
+
+  const a = make(false);
+  const b = make(true);
+  assert.equal(a.contentHash, b.contentHash);
+  assert.deepEqual(
+    a.getBlueprint(),
+    b.getBlueprint()
+  );
+});
+
+
 test("definition road bindings reject duplicates", () => {
   const boundary = tavernBlueprint();
   boundary.boundaries[0].roadBindings = [
