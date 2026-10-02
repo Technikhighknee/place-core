@@ -216,24 +216,135 @@ export interface PlaceDefinitionInput {
   metadata?: JsonValue;
 }
 
-export interface CompiledPlaceLayer extends PlaceLayerInput {
-  readonly topologyId: string | null;
-  readonly navigation: PlaceNavigationSpec | null;
+export interface CanonicalPlaceNavigationSpec {
+  options: {
+    spatialCellSize: number;
+    routeCacheSize: number;
+    routeCacheMaxLegs: number;
+    routeCacheMaxTotalLegs: number;
+    hierarchicalRouteCacheSize: number;
+    regionalRouteCacheSize: number;
+  };
+  regions: readonly { id: string }[];
+  nodes: readonly {
+    id: string;
+    x: number;
+    y: number;
+    junctionRadius: number;
+    regionId: string | null;
+  }[];
+  roads: readonly {
+    id: string;
+    from: string;
+    to: string;
+    shape: readonly Vec2[];
+    width: number;
+    surface: string;
+    bidirectional: boolean;
+    enabled: boolean;
+    allowedProfiles: readonly string[] | null;
+    blockedProfiles: readonly string[];
+    tags: readonly string[];
+  }[];
 }
 
-export interface CompiledPlaceSpace extends PlaceSpaceInput {
+export interface CompiledPlaceLayer {
+  readonly id: string;
   readonly kind: string;
   readonly tags: readonly string[];
+  readonly topologyId: string | null;
+  readonly navigation: CanonicalPlaceNavigationSpec | null;
+  readonly metadata: JsonValue;
+}
+
+export interface CompiledPlaceSpace {
+  readonly id: string;
+  readonly layerId: string;
+  readonly kind: string;
+  readonly tags: readonly string[];
+  readonly geometry: Geometry;
   readonly parentSpaceId: string | null;
   readonly defaultAnchorId: string | null;
   readonly priority: number;
+  readonly metadata: JsonValue;
 }
 
-export interface CompiledPlaceAnchor extends PlaceAnchorInput {
+export interface CompiledPlaceBoundary {
+  readonly id: string;
+  readonly layerId: string;
   readonly kind: string;
   readonly tags: readonly string[];
+  readonly a: Vec2;
+  readonly b: Vec2;
+  readonly enabled: boolean;
+  readonly roadBindings: readonly { roadId: string }[];
+  readonly metadata: JsonValue;
+}
+
+export interface CompiledLocalPortalEndpoint {
+  readonly kind: "local";
+  readonly layerId: string;
   readonly spaceId: string | null;
+  readonly position: Vec2;
   readonly nodeId: string | null;
+  readonly metadata: JsonValue;
+}
+
+export interface CompiledExternalPortalEndpoint {
+  readonly kind: "external";
+  readonly slot: string;
+  readonly metadata: JsonValue;
+}
+
+export type CompiledPortalEndpoint =
+  | CompiledLocalPortalEndpoint
+  | CompiledExternalPortalEndpoint;
+
+export interface CompiledPlacePortal {
+  readonly id: string;
+  readonly kind: string;
+  readonly tags: readonly string[];
+  readonly a: CompiledPortalEndpoint;
+  readonly b: CompiledPortalEndpoint;
+  readonly bidirectional: boolean;
+  readonly transitionCost: number;
+  readonly enabled: boolean;
+  readonly open: boolean;
+  readonly locked: boolean;
+  readonly blocked: boolean;
+  readonly destroyed: boolean;
+  readonly blocksWhenClosed: boolean;
+  readonly roadBindings: readonly {
+    layerId: string;
+    roadId: string;
+  }[];
+  readonly metadata: JsonValue;
+}
+
+export interface CompiledPlaceAnchor {
+  readonly id: string;
+  readonly layerId: string;
+  readonly spaceId: string | null;
+  readonly position: Vec2;
+  readonly nodeId: string | null;
+  readonly tags: readonly string[];
+  readonly kind: string;
+  readonly metadata: JsonValue;
+}
+
+export interface CanonicalPlaceDefinition {
+  id: string;
+  kind: string;
+  tags: readonly string[];
+  revision: number | string;
+  defaultAnchorId: string | null;
+  layers: readonly CompiledPlaceLayer[];
+  spaces: readonly CompiledPlaceSpace[];
+  boundaries: readonly CompiledPlaceBoundary[];
+  portals: readonly CompiledPlacePortal[];
+  anchors: readonly CompiledPlaceAnchor[];
+  footprint: Geometry | null;
+  metadata: JsonValue;
 }
 
 export class CompiledPlaceDefinition {
@@ -245,22 +356,22 @@ export class CompiledPlaceDefinition {
   readonly defaultAnchorId: string | null;
   readonly layers: readonly CompiledPlaceLayer[];
   readonly spaces: readonly CompiledPlaceSpace[];
-  readonly boundaries: readonly PlaceBoundaryInput[];
-  readonly portals: readonly PlacePortalInput[];
+  readonly boundaries: readonly CompiledPlaceBoundary[];
+  readonly portals: readonly CompiledPlacePortal[];
   readonly anchors: readonly CompiledPlaceAnchor[];
   readonly footprint: Geometry | null;
   readonly metadata: JsonValue;
 
   getLayer(id: string): CompiledPlaceLayer | null;
   getSpace(id: string): CompiledPlaceSpace | null;
-  getBoundary(id: string): PlaceBoundaryInput | null;
-  getPortal(id: string): PlacePortalInput | null;
+  getBoundary(id: string): CompiledPlaceBoundary | null;
+  getPortal(id: string): CompiledPlacePortal | null;
   getAnchor(id: string): CompiledPlaceAnchor | null;
   getSpaceDepth(id: string): number;
   getAnchorsForSpace(id: string): readonly CompiledPlaceAnchor[];
   getAnchorsByTag(tag: string): readonly CompiledPlaceAnchor[];
-  getPortalsForLayer(id: string): readonly PlacePortalInput[];
-  getBlueprint(): PlaceDefinitionInput;
+  getPortalsForLayer(id: string): readonly CompiledPlacePortal[];
+  getBlueprint(): CanonicalPlaceDefinition;
   locateSpaces(layerId: string, position: Vec2): CompiledPlaceSpace[];
   primarySpaceAt(layerId: string, position: Vec2): CompiledPlaceSpace | null;
   getDiagnostics(): {
@@ -532,7 +643,7 @@ export class PlaceRegistry {
   getLayerDomain(instanceId: PlaceId, layerId: string): string | null;
 
   getSpace(instanceId: PlaceId, spaceId: string): (CompiledPlaceSpace & { enabled: boolean }) | null;
-  resolveBoundary(instanceId: PlaceId, boundaryId: string): (PlaceBoundaryInput & { enabled: boolean }) | null;
+  resolveBoundary(instanceId: PlaceId, boundaryId: string): CompiledPlaceBoundary | null;
 
   resolvePortal(instanceId: PlaceId, portalId: string): ResolvedPortal | null;
   getPortalRecord(key: string): ResolvedPortal | null;
@@ -545,7 +656,7 @@ export class PlaceRegistry {
     portalId: string,
     patch: Partial<Pick<ResolvedPortal, "enabled" | "open" | "locked" | "blocked" | "destroyed">>
   ): ResolvedPortal;
-  setBoundaryState(instanceId: PlaceId, boundaryId: string, patch: { enabled?: boolean }): PlaceBoundaryInput & { enabled: boolean };
+  setBoundaryState(instanceId: PlaceId, boundaryId: string, patch: { enabled?: boolean }): CompiledPlaceBoundary;
   setSpaceState(instanceId: PlaceId, spaceId: string, patch: { enabled?: boolean }): CompiledPlaceSpace & { enabled: boolean };
   setAttachment(
     instanceId: PlaceId,
@@ -613,18 +724,18 @@ export class PlaceRegistry {
   getBoundariesForDomain(
     domainId: string,
     options?: { enabledOnly?: boolean; kind?: string; tag?: string }
-  ): Array<PlaceBoundaryInput & { enabled: boolean; placeId: PlaceId; domainId: string }>;
+  ): Array<CompiledPlaceBoundary & { placeId: PlaceId; domainId: string }>;
   boundariesIntersectingBounds(
     domainId: string,
     bounds: Bounds,
     options?: { enabledOnly?: boolean; kind?: string; tag?: string }
-  ): Array<PlaceBoundaryInput & { enabled: boolean; placeId: PlaceId; domainId: string }>;
+  ): Array<CompiledPlaceBoundary & { placeId: PlaceId; domainId: string }>;
   findNearestBoundary(
     domainId: string,
     position: Vec2,
     options?: { enabledOnly?: boolean; kind?: string; tag?: string }
   ): {
-    boundary: PlaceBoundaryInput & { enabled: boolean; placeId: PlaceId; domainId: string };
+    boundary: CompiledPlaceBoundary & { placeId: PlaceId; domainId: string };
     distance: number;
   } | null;
   placesInBounds(domainId: string, bounds: Bounds): PlaceInstance[];
@@ -679,7 +790,14 @@ export class PlaceRegistry {
   assertInternalConsistency(): ReturnType<PlaceRegistry["getDiagnostics"]>;
 }
 
-export function isPortalTraversable(portal: ResolvedPortal | PlacePortalInput): boolean;
+export function isPortalTraversable(portal: {
+  enabled?: boolean;
+  open?: boolean;
+  locked?: boolean;
+  blocked?: boolean;
+  destroyed?: boolean;
+  blocksWhenClosed?: boolean;
+}): boolean;
 
 export class WorldCoreBridge {
   constructor(input: {
@@ -707,8 +825,12 @@ export class WorldCoreBridge {
   ): boolean;
   unmaterializePlace(instance: PlaceInstance, definition: CompiledPlaceDefinition): void;
   ensureLayerTopology(definition: CompiledPlaceDefinition, layer: CompiledPlaceLayer): any;
-  syncBoundaryState(instance: PlaceInstance, boundary: PlaceBoundaryInput & { enabled?: boolean }): void;
-  syncPortalState(instance: PlaceInstance, portalDefinition: PlacePortalInput, resolvedPortal: ResolvedPortal): void;
+  syncBoundaryState(instance: PlaceInstance, boundary: CompiledPlaceBoundary): void;
+  syncPortalState(
+    instance: PlaceInstance,
+    portalDefinition: CompiledPlacePortal | PersistedDynamicPortal,
+    resolvedPortal: ResolvedPortal
+  ): void;
   getEntity(entityId: EntityId): any;
   navigationForDomain(domainId: string): any;
   planLocalRoute(input: {
@@ -979,7 +1101,7 @@ export interface PlaceCoreSnapshot {
     id: string;
     revision: number | string;
     contentHash: string;
-    blueprint: PlaceDefinitionInput;
+    blueprint: CanonicalPlaceDefinition;
   }>;
   instances: Array<{
     id: PlaceId;
