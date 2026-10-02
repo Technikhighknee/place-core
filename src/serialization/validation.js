@@ -1655,8 +1655,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
         const requestedSpaceId =
           travel.target?.domainId == null &&
-          travel.target?.kind == null &&
-          travel.target?.anchorId == null
+          travel.target?.kind == null
             ? travel.target?.spaceId ?? null
             : null;
 

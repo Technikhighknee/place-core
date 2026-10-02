@@ -1220,6 +1220,116 @@ test("snapshot validation rejects active travel portal identity drift", () => {
 });
 
 
+test("fresh snapshots accept explicit descendant anchors for parent space targets", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "explicit-descendant-target",
+    layers: [{
+      id: "inside",
+      navigation: {
+        nodes: [
+          { id: "start", x: 0, y: 0 },
+          { id: "counter", x: 1, y: 0 }
+        ],
+        roads: [{
+          id: "hall",
+          from: "start",
+          to: "counter"
+        }]
+      }
+    }],
+    spaces: [
+      {
+        id: "floor",
+        layerId: "inside",
+        geometry: {
+          type: "aabb",
+          minX: 0,
+          minY: -1,
+          maxX: 2,
+          maxY: 1
+        }
+      },
+      {
+        id: "room",
+        parentSpaceId: "floor",
+        layerId: "inside",
+        geometry: {
+          type: "aabb",
+          minX: 0.5,
+          minY: -1,
+          maxX: 2,
+          maxY: 1
+        }
+      }
+    ],
+    anchors: [{
+      id: "counter",
+      layerId: "inside",
+      spaceId: "room",
+      position: { x: 1, y: 0 },
+      nodeId: "counter"
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "explicit-descendant-target"
+  });
+
+  const entity = {
+    id: "hans",
+    domainId: place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 1 };
+    },
+    startLocalJourney(id, destinationNodeId) {
+      entity.journey = { destinationNodeId };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        spaceId: "floor",
+        anchorId: "counter"
+      }
+    )
+  );
+
+  const snapshot = serializePlaceCore(places);
+
+  assert.equal(
+    snapshot.activeTravels[0].plan.resolvedTarget.spaceId,
+    "floor"
+  );
+  assert.equal(
+    snapshot.activeTravels[0].plan.resolvedTarget.anchorId,
+    "counter"
+  );
+  assert.doesNotThrow(
+    () => validatePlaceCoreSnapshot(snapshot)
+  );
+});
+
 test("pending saved travel state uses full active-state validation", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
