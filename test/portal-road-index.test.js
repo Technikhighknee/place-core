@@ -143,6 +143,46 @@ test("dynamic same-domain portals cannot share an existing threshold road", () =
 });
 
 
+test("dynamic portal road bindings reject duplicates", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(definition());
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "road-index-place"
+  });
+  const domain =
+    place.layerDomains.get("inside");
+
+  assert.throws(
+    () =>
+      places.addPortal("house", {
+        id: "duplicate-binding",
+        a: {
+          domainId: domain,
+          position: { x: 0, y: 0 },
+          nodeId: "left"
+        },
+        b: {
+          domainId: domain,
+          position: { x: 1, y: 0 },
+          nodeId: "right"
+        },
+        roadBindings: [
+          {
+            layerId: "inside",
+            roadId: "threshold"
+          },
+          {
+            layerId: "inside",
+            roadId: "threshold"
+          }
+        ]
+      }),
+    /duplicate road binding/
+  );
+});
+
+
 test("distinct portal thresholds may share the same navigation node", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
