@@ -2053,6 +2053,29 @@ test("fresh travel snapshots cannot reference a missing target place", () => {
         stale
       )
   );
+
+  const pending =
+    serializePlaceCore(
+      deserializePlaceCore(
+        serializePlaceCore(places),
+        { restartTravels: false }
+      )
+    );
+  assert.equal(
+    pending.pendingTravels[0]
+      .savedState.planStale,
+    true
+  );
+  pending.pendingTravels[0]
+    .savedState.planStale = false;
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        pending
+      ),
+    /savedState\.planStale must be true/
+  );
 });
 
 
