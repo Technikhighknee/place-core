@@ -112,7 +112,7 @@ export interface ExternalPortalEndpointInput {
   metadata?: JsonValue;
 }
 
-export interface ResolvedPortalEndpoint {
+export interface ResolvedPortalEndpointInput {
   domainId: string;
   position: Vec2;
   nodeId?: string | null;
@@ -120,6 +120,17 @@ export interface ResolvedPortalEndpoint {
   layerId?: string | null;
   spaceId?: string | null;
   metadata?: JsonValue;
+}
+
+export interface ResolvedPortalEndpoint {
+  kind?: "resolved";
+  domainId: string;
+  position: Vec2;
+  nodeId: string | null;
+  placeId: PlaceId | null;
+  layerId: string | null;
+  spaceId: string | null;
+  metadata: JsonValue;
 }
 
 export interface PlacePortalInput {
@@ -144,8 +155,8 @@ export interface DynamicPortalInput {
   id: string;
   kind?: string;
   tags?: readonly string[];
-  a: ResolvedPortalEndpoint;
-  b: ResolvedPortalEndpoint;
+  a: ResolvedPortalEndpointInput;
+  b: ResolvedPortalEndpointInput;
   bidirectional?: boolean;
   transitionCost?: number;
   enabled?: boolean;
@@ -158,15 +169,9 @@ export interface DynamicPortalInput {
   metadata?: JsonValue;
 }
 
-export interface PersistedResolvedPortalEndpoint {
+export interface PersistedResolvedPortalEndpoint
+  extends ResolvedPortalEndpoint {
   kind: "resolved";
-  domainId: string;
-  position: Vec2;
-  nodeId: string | null;
-  placeId: PlaceId | null;
-  layerId: string | null;
-  spaceId: string | null;
-  metadata: JsonValue;
 }
 
 export interface PersistedDynamicPortal {
@@ -502,7 +507,7 @@ export interface ResolvedPortal {
   blocksWhenClosed: boolean;
   traversable: boolean;
   source: "definition" | "dynamic";
-  metadata?: JsonValue;
+  metadata: JsonValue;
 }
 
 export class PlaceInstance {
