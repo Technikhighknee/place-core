@@ -140,19 +140,32 @@ function assertTravelPlan(
     );
   }
 
+  const requiredResolvedTargetFields = [
+    "placeId",
+    "anchorId",
+    "spaceId",
+    "layerId",
+    "domainId",
+    "position",
+    "nodeId"
+  ];
   assertOnlyKeys(
     plan.resolvedTarget,
-    [
-      "placeId",
-      "anchorId",
-      "spaceId",
-      "layerId",
-      "domainId",
-      "position",
-      "nodeId"
-    ],
+    requiredResolvedTargetFields,
     "active travel plan.resolvedTarget"
   );
+  for (const key of requiredResolvedTargetFields) {
+    if (
+      !Object.hasOwn(
+        plan.resolvedTarget,
+        key
+      )
+    ) {
+      throw new Error(
+        `active travel plan.resolvedTarget is missing required field ${key}`
+      );
+    }
+  }
   assertOnlyKeys(
     plan.resolvedTarget.position,
     ["x", "y"],
@@ -848,25 +861,33 @@ function assertPersistedActiveTravelState(
   travel,
   label
 ) {
+  const requiredTravelFields = [
+    "entityId",
+    "target",
+    "plan",
+    "options",
+    "stepIndex",
+    "localStarted",
+    "portalEntered",
+    "portalTransitionRemaining",
+    "worldChangePolicy",
+    "status",
+    "failureReason",
+    "replans",
+    "planStale"
+  ];
   assertOnlyKeys(
     travel,
-    [
-      "entityId",
-      "target",
-      "plan",
-      "options",
-      "stepIndex",
-      "localStarted",
-      "portalEntered",
-      "portalTransitionRemaining",
-      "worldChangePolicy",
-      "status",
-      "failureReason",
-      "replans",
-      "planStale"
-    ],
+    requiredTravelFields,
     label
   );
+  for (const key of requiredTravelFields) {
+    if (!Object.hasOwn(travel, key)) {
+      throw new Error(
+        `${label} is missing required field ${key}`
+      );
+    }
+  }
   assertId(
     travel.entityId,
     `${label}.entityId`
