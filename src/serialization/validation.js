@@ -1120,6 +1120,18 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     assertObject(ref.blueprint, `definition ${ref.id}.blueprint`);
 
     const compiled = compilePlace(ref.blueprint);
+    if (
+      canonicalStringify(
+        ref.blueprint
+      ) !==
+      canonicalStringify(
+        compiled.getBlueprint()
+      )
+    ) {
+      throw new Error(
+        `definition blueprint for ${ref.id} is not in canonical persisted form`
+      );
+    }
     if (compiled.id !== ref.id) {
       throw new Error(`definition id mismatch for ${ref.id}`);
     }
