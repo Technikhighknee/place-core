@@ -402,8 +402,20 @@ export class WorldCoreBridge {
       return;
     }
 
-    const entity =
-      this.world.getEntity(event.entityId);
+    let entity;
+    try {
+      entity =
+        this.world.getEntity(event.entityId);
+    } catch (error) {
+      this.#emitSameDomainPortalEvent(
+        "portal-abort",
+        event.entityId,
+        crossing,
+        { reason: "world-state-error" }
+      );
+      throw error;
+    }
+
     const currentCrossing =
       this.#resolveSameDomainPortalCrossing(
         entity,

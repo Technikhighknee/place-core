@@ -692,3 +692,112 @@ test("removing a same-domain dynamic portal mid-crossing aborts instead of emitt
     false
   );
 });
+
+
+test("same-domain road exit read failure aborts an open portal lifecycle", () => {
+  const {
+    world,
+    navigation,
+    bridge,
+    places
+  } = setup();
+
+  const hans =
+    world.getEntity("hans");
+
+  assert.equal(
+    bridge.startLocalJourney(
+      "hans",
+      "target"
+    ),
+    true
+  );
+
+  let entered = false;
+  for (
+    let i = 0;
+    i < 100 && !entered;
+    i += 1
+  ) {
+    stepSimulation(
+      world,
+      navigation,
+      0.1
+    );
+    entered = places.peekEvents().some(
+      (event) =>
+        event.type === "portal-enter" &&
+        event.portalId === "kitchen-door"
+    );
+  }
+  assert.equal(entered, true);
+
+  const originalGetEntity =
+    world.getEntity.bind(world);
+  world.getEntity = () => {
+    throw new Error(
+      "synthetic road-exit world read failure"
+    );
+  };
+
+  for (
+    let i = 0;
+    i < 100 && hans.journey;
+    i += 1
+  ) {
+    stepSimulation(
+      world,
+      navigation,
+      0.1
+    );
+  }
+
+  world.getEntity =
+    originalGetEntity;
+
+  const events =
+    places.drainEvents();
+  const portalEvents =
+    events.filter(
+      (event) =>
+        event.portalId === "kitchen-door"
+    );
+
+  assert.deepEqual(
+    portalEvents.map((event) =>
+      event.type
+    ),
+    [
+      "portal-enter",
+      "portal-abort"
+    ]
+  );
+  assert.equal(
+    portalEvents[1].reason,
+    "world-state-error"
+  );
+  assert.equal(
+    portalEvents.some((event) =>
+      event.type === "portal-traverse"
+    ),
+    false
+  );
+  assert.equal(
+    portalEvents.some((event) =>
+      event.type === "portal-exit"
+    ),
+    false
+  );
+  assert.ok(
+    events.some(
+      (event) =>
+        event.type ===
+          "world-event-bridge-error" &&
+        event.worldEventType ===
+          "roadLeft" &&
+        /synthetic road-exit world read failure/.test(
+          event.message
+        )
+    )
+  );
+});
