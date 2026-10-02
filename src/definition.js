@@ -480,7 +480,9 @@ function normalizeBoundary(boundary, layersById) {
     }
     boundaryRoadIds.add(binding.roadId);
     return deepFreeze({ roadId: binding.roadId });
-  });
+  }).sort((a, b) =>
+    compareStrings(a.roadId, b.roadId)
+  );
   return deepFreeze({
     id: boundary.id,
     layerId: boundary.layerId,
@@ -635,7 +637,10 @@ function normalizePortal(portal, layersById, spacesById) {
     }
     portalRoadBindings.add(bindingKey);
     return deepFreeze({ layerId: binding.layerId, roadId: binding.roadId });
-  });
+  }).sort((a, b) =>
+    compareStrings(a.layerId, b.layerId) ||
+    compareStrings(a.roadId, b.roadId)
+  );
   return deepFreeze({
     id: portal.id,
     kind: normalizeKind(

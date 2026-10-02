@@ -842,6 +842,13 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
     portal.roadBindings,
     `dynamic portal ${portal.id}.roadBindings`
   );
+  assertCanonicalOrder(
+    portal.roadBindings,
+    (a, b) =>
+      compareStrings(a.layerId, b.layerId) ||
+      compareStrings(a.roadId, b.roadId),
+    `dynamic portal ${portal.id}.roadBindings`
+  );
   const seenRoadBindings = new Set();
   for (let i = 0; i < portal.roadBindings.length; i += 1) {
     const binding = portal.roadBindings[i];

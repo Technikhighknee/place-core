@@ -2453,7 +2453,11 @@ export class PlaceRegistry {
           layerId: binding.layerId,
           roadId: binding.roadId
         };
-      });
+      })
+      .sort((a, b) =>
+        compareStrings(a.layerId, b.layerId) ||
+        compareStrings(a.roadId, b.roadId)
+      );
 
     const portal = {
       id: spec.id,
