@@ -550,7 +550,16 @@ function localRouteCostsToMany(
 }
 
 function appendJourney(steps, from, destination, route) {
-  if (!route || route.estimatedSeconds <= 0) return steps;
+  if (!route) return steps;
+  if (
+    squaredDistance(
+      from.position,
+      destination.position
+    ) <= POSITION_EPSILON_SQ
+  ) {
+    return steps;
+  }
+
   return [...steps, deepFreeze({
     type: "local-journey",
     domainId: from.domainId,

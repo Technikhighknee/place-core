@@ -1068,3 +1068,85 @@ test("planner rejects aggregate travel cost overflow", () => {
     /travel cost.*finite|cost.*overflow/i
   );
 });
+
+
+test("zero-cost local routes still produce movement steps when positions differ", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "zero-cost-route",
+    layers: [{ id: "inside" }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      position: { x: 5, y: 0 },
+      nodeId: "target"
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "zero-cost-route"
+  });
+
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const bridge = {
+    getEntity(id) {
+      return id === "hans"
+        ? entity
+        : null;
+    },
+    planLocalRoute({
+      destinationNodeId
+    }) {
+      assert.equal(
+        destinationNodeId,
+        "target"
+      );
+      return {
+        estimatedSeconds: 0
+      };
+    },
+    startLocalJourney() {
+      return true;
+    },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "house",
+      anchorId: "target"
+    }
+  );
+
+  assert.ok(plan);
+  assert.equal(
+    plan.estimatedSeconds,
+    0
+  );
+  assert.deepEqual(
+    plan.steps.map((step) =>
+      step.type
+    ),
+    ["local-journey"]
+  );
+  assert.equal(
+    plan.steps[0].destinationNodeId,
+    "target"
+  );
+  assert.deepEqual(
+    plan.steps[0].destinationPosition,
+    { x: 5, y: 0 }
+  );
+});
