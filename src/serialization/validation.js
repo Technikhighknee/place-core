@@ -1196,6 +1196,19 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       ),
     "snapshot.activeTravels"
   );
+  assertCanonicalOrder(
+    snapshot.pendingTravels,
+    (a, b) =>
+      compareStrings(
+        idKey(a.entityId),
+        idKey(b.entityId)
+      ) ||
+      compareStrings(
+        canonicalStringify(a),
+        canonicalStringify(b)
+      ),
+    "snapshot.pendingTravels"
+  );
 
   const definitions = new Map();
   for (let i = 0; i < snapshot.definitions.length; i += 1) {

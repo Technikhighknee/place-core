@@ -548,6 +548,135 @@ test("restore rebuild events do not consume or overflow the runtime event queue"
   );
 });
 
+test("pending travel snapshots remain canonical after active intents become pending", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "pending-order-place",
+    layers: [{ id: "inside" }],
+    anchors: [{
+      id: "target",
+      layerId: "inside",
+      position: { x: 5, y: 0 },
+      nodeId: "target"
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId: "pending-order-place"
+  });
+
+  const entities = new Map(
+    ["a", "z"].map((id) => [
+      id,
+      {
+        id,
+        domainId:
+          place.layerDomains.get("inside"),
+        position: { x: 0, y: 0 },
+        mobility: { speed: 1 },
+        journey: null
+      }
+    ])
+  );
+  const bridge = {
+    getEntity(id) {
+      return entities.get(id) ?? null;
+    },
+    planLocalRoute() {
+      return { estimatedSeconds: 5 };
+    },
+    startLocalJourney(id) {
+      entities.get(id).journey = {
+        destinationNodeId: "target"
+      };
+      return true;
+    },
+    stopLocalJourney(id) {
+      entities.get(id).journey = null;
+    },
+    transferEntity() {}
+  };
+
+  for (const id of ["z", "a"]) {
+    assert.ok(
+      startTravel(
+        places,
+        bridge,
+        id,
+        {
+          placeId: "house",
+          anchorId: "target"
+        }
+      )
+    );
+  }
+
+  const snapshot =
+    serializePlaceCore(places);
+  const a =
+    structuredClone(
+      snapshot.activeTravels.find(
+        (travel) => travel.entityId === "a"
+      )
+    );
+  const z =
+    structuredClone(
+      snapshot.activeTravels.find(
+        (travel) => travel.entityId === "z"
+      )
+    );
+
+  a.planStale = true;
+  snapshot.activeTravels = [z];
+  snapshot.pendingTravels = [{
+    entityId: "a",
+    target: structuredClone(a.target),
+    savedState: a
+  }];
+
+  assert.doesNotThrow(
+    () =>
+      validatePlaceCoreSnapshot(snapshot)
+  );
+
+  const restored =
+    deserializePlaceCore(snapshot);
+  assert.deepEqual(
+    restored.pendingTravels.map(
+      (pending) => pending.entityId
+    ),
+    ["z", "a"],
+    "runtime retained-intent order may reflect restore history"
+  );
+
+  const resnapshot =
+    serializePlaceCore(restored);
+  assert.deepEqual(
+    resnapshot.pendingTravels.map(
+      (pending) => pending.entityId
+    ),
+    ["a", "z"]
+  );
+  assert.doesNotThrow(
+    () =>
+      validatePlaceCoreSnapshot(
+        resnapshot
+      )
+  );
+
+  const nonCanonical =
+    structuredClone(resnapshot);
+  nonCanonical.pendingTravels.reverse();
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        nonCanonical
+      ),
+    /pendingTravels must be in canonical order/
+  );
+});
+
+
 test("snapshot validation rejects malformed pending travel identity", () => {
   const missing = snapshotFixture();
   missing.pendingTravels.push({});

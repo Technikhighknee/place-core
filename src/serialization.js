@@ -258,7 +258,18 @@ export function serializePlaceCore(registry) {
         )
       )
       .sort((a, b) => compareStrings(idKey(a.entityId), idKey(b.entityId))),
-    pendingTravels: registry.pendingTravels.map(canonicalClone)
+    pendingTravels: registry.pendingTravels
+      .map(canonicalClone)
+      .sort((a, b) =>
+        compareStrings(
+          idKey(a.entityId),
+          idKey(b.entityId)
+        ) ||
+        compareStrings(
+          canonicalStringify(a),
+          canonicalStringify(b)
+        )
+      )
   };
 }
 
