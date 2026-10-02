@@ -197,6 +197,60 @@ test("snapshot validation requires canonical persisted attachment fields", () =>
 });
 
 
+test("snapshot validation requires explicit canonical metadata values", () => {
+  const instanceMetadata =
+    snapshotFixture();
+  instanceMetadata.instances[0]
+    .metadata = undefined;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        instanceMetadata
+      ),
+    /metadata must be an explicit JSON value/
+  );
+
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "membership-metadata"
+  });
+  places.createPlace({
+    id: "parent",
+    definitionId:
+      "membership-metadata"
+  });
+  places.createPlace({
+    id: "child",
+    definitionId:
+      "membership-metadata",
+    memberships: [{
+      parentPlaceId: "parent"
+    }]
+  });
+  const membershipMetadata =
+    serializePlaceCore(places);
+  const child =
+    membershipMetadata.instances
+      .find((item) =>
+        item.id === "child"
+      );
+  assert.equal(
+    child.memberships[0].metadata,
+    null
+  );
+  delete child.memberships[0]
+    .metadata;
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        membershipMetadata
+      ),
+    /memberships\[0\].*missing required field metadata/
+  );
+});
+
+
 test("snapshot validation rejects duplicate tracked occupancy identities", () => {
   const snapshot = snapshotFixture();
   snapshot.occupancy.push(
