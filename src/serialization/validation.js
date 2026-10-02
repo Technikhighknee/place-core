@@ -1205,12 +1205,22 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         membership.kind,
         `${label}.kind`
       );
-      if (membership.metadata !== undefined) {
-        assertJsonSafe(
-          membership.metadata,
-          `${label}.metadata`
+      if (
+        !Object.hasOwn(
+          membership,
+          "metadata"
+        ) ||
+        membership.metadata ===
+          undefined
+      ) {
+        throw new Error(
+          `${label} is missing required field metadata`
         );
       }
+      assertJsonSafe(
+        membership.metadata,
+        `${label}.metadata`
+      );
 
       if (membership.parentPlaceId === item.id) {
         throw new Error(
@@ -1230,12 +1240,15 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       membershipKeys.add(membershipKey);
     }
 
-    if (item.metadata !== undefined) {
-      assertJsonSafe(
-        item.metadata,
-        `instance ${String(item.id)}.metadata`
+    if (item.metadata === undefined) {
+      throw new Error(
+        `instance ${String(item.id)}.metadata must be an explicit JSON value`
       );
     }
+    assertJsonSafe(
+      item.metadata,
+      `instance ${String(item.id)}.metadata`
+    );
 
     const key = idKey(item.id);
     if (instances.has(key)) {
