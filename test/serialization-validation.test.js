@@ -1649,10 +1649,18 @@ test("fresh snapshots bind portal-only plan endings to the resolved target", () 
   );
 
   const other =
-    places.resolvePortal(
-      "house",
-      "other-door"
-    );
+    places.findPortalEndpointsNear(
+      place.layerDomains.get("a"),
+      { x: 0, y: 0 },
+      0
+    ).find(
+      (match) =>
+        match.portal.id ===
+          "other-door"
+    )?.portal;
+
+  assert.ok(other?.key);
+
   travel.plan.steps[
     travel.plan.steps.length - 1
   ] = {
