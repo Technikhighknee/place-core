@@ -1449,10 +1449,7 @@ export function planTravel(registry, a, b, c, d) {
     );
     if (topological == null) break;
 
-    const domains = topological.domains ?? [
-      startDomainId,
-      ...topological.map((edge) => edge.to.domainId)
-    ];
+    const domains = topological.domains;
 
     const optimized = optimizeConcretePath(
       registry,
