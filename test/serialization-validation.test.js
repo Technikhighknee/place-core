@@ -2451,7 +2451,7 @@ test("fresh travel snapshots cannot reference a missing target place", () => {
       validatePlaceCoreSnapshot(
         missingPlanStale
       ),
-    /planStale must be a boolean/
+    /missing required field planStale/
   );
 
   const missingRejectedPairs =
