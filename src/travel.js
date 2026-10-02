@@ -2087,9 +2087,41 @@ export function stepTravel(registry, a, b, c) {
       );
     }
     const entity = live.entity;
+    const liveDomainId =
+      entity.domainId ?? "default";
 
-    if (entity.journey != null) {
-      return publicTravelState(state);
+    if (liveDomainId !== step.domainId) {
+      const next = replan(
+        registry,
+        bridge,
+        state,
+        effectiveOptions
+      );
+      if (next.status !== "active") {
+        return publicTravelState(next);
+      }
+    } else if (entity.journey != null) {
+      const liveDestinationNodeId =
+        entity.journey?.destinationNodeId ??
+        null;
+
+      if (
+        liveDestinationNodeId == null ||
+        liveDestinationNodeId ===
+          step.destinationNodeId
+      ) {
+        return publicTravelState(state);
+      }
+
+      const next = replan(
+        registry,
+        bridge,
+        state,
+        effectiveOptions
+      );
+      if (next.status !== "active") {
+        return publicTravelState(next);
+      }
     }
 
     const arrived =

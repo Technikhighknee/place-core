@@ -2050,3 +2050,101 @@ test("eager replan clears stale occupancy when entity disappears before replanni
     false
   );
 });
+
+
+test("active local travel replans immediately after an external domain change", () => {
+  const {
+    places,
+    place,
+    entity,
+    bridge,
+    started
+  } = twoLayerRuntime();
+
+  let travel = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "house",
+      anchorId: "target"
+    }
+  );
+
+  assert.ok(travel);
+  assert.equal(
+    entity.journey?.destinationNodeId,
+    "a-door"
+  );
+
+  entity.domainId =
+    place.layerDomains.get("b");
+  entity.position = { x: 0, y: 0 };
+
+  travel = stepTravel(
+    places,
+    bridge,
+    "hans"
+  );
+
+  assert.equal(travel.replans, 1);
+  assert.equal(travel.status, "active");
+  assert.equal(
+    entity.journey?.destinationNodeId,
+    "target"
+  );
+  assert.deepEqual(
+    started.map((entry) =>
+      entry.destinationNodeId
+    ),
+    ["a-door", "target"]
+  );
+});
+
+test("active local travel replans when its world journey is replaced", () => {
+  const {
+    places,
+    entity,
+    bridge,
+    started
+  } = twoLayerRuntime();
+
+  let travel = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "house",
+      anchorId: "target"
+    }
+  );
+
+  assert.ok(travel);
+  assert.equal(
+    entity.journey?.destinationNodeId,
+    "a-door"
+  );
+
+  entity.journey = {
+    destinationNodeId: "foreign-node"
+  };
+
+  travel = stepTravel(
+    places,
+    bridge,
+    "hans"
+  );
+
+  assert.equal(travel.replans, 1);
+  assert.equal(travel.status, "active");
+  assert.equal(
+    entity.journey?.destinationNodeId,
+    "a-door"
+  );
+  assert.deepEqual(
+    started.map((entry) =>
+      entry.destinationNodeId
+    ),
+    ["a-door", "a-door"]
+  );
+});
