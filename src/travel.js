@@ -616,6 +616,9 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
           route.estimatedSeconds,
           edge.portal.transitionCost ?? 0
         );
+        if (cost > options.maxCost) {
+          continue;
+        }
         const key = transitionKey(edge);
         const existing = nextByEndpoint.get(key);
         if (existing && existing.cost <= cost) continue;
@@ -673,6 +676,9 @@ function optimizeConcretePath(registry, bridge, entity, domains, resolvedTarget,
       state.cost,
       route.estimatedSeconds
     );
+    if (cost > options.maxCost) {
+      continue;
+    }
     const steps = appendJourney(state.steps, state, resolvedTarget, route);
     if (!best || cost < best.cost || (cost === best.cost && state.key < best.key)) {
       best = { key: state.key, cost, steps };

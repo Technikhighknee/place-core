@@ -1437,3 +1437,182 @@ test("partial shortest path search truncates deterministically instead of throwi
     ]
   );
 });
+
+
+test("explicit target planning respects maxCost and can choose a longer hop detour within budget", () => {
+  const places = new PlaceRegistry();
+
+  places.registerDefinition({
+    id: "budget-paths",
+    layers: [
+      { id: "start" },
+      { id: "fast" },
+      { id: "cheap-a" },
+      { id: "cheap-b" },
+      { id: "target" }
+    ],
+    portals: [
+      {
+        id: "expensive-1",
+        bidirectional: false,
+        transitionCost: 10,
+        a: {
+          kind: "local",
+          layerId: "start",
+          position: { x: 0, y: 0 }
+        },
+        b: {
+          kind: "local",
+          layerId: "fast",
+          position: { x: 0, y: 0 }
+        }
+      },
+      {
+        id: "expensive-2",
+        bidirectional: false,
+        transitionCost: 10,
+        a: {
+          kind: "local",
+          layerId: "fast",
+          position: { x: 0, y: 0 }
+        },
+        b: {
+          kind: "local",
+          layerId: "target",
+          position: { x: 0, y: 0 }
+        }
+      },
+      {
+        id: "cheap-1",
+        bidirectional: false,
+        transitionCost: 1,
+        a: {
+          kind: "local",
+          layerId: "start",
+          position: { x: 0, y: 0 }
+        },
+        b: {
+          kind: "local",
+          layerId: "cheap-a",
+          position: { x: 0, y: 0 }
+        }
+      },
+      {
+        id: "cheap-2",
+        bidirectional: false,
+        transitionCost: 1,
+        a: {
+          kind: "local",
+          layerId: "cheap-a",
+          position: { x: 0, y: 0 }
+        },
+        b: {
+          kind: "local",
+          layerId: "cheap-b",
+          position: { x: 0, y: 0 }
+        }
+      },
+      {
+        id: "cheap-3",
+        bidirectional: false,
+        transitionCost: 1,
+        a: {
+          kind: "local",
+          layerId: "cheap-b",
+          position: { x: 0, y: 0 }
+        },
+        b: {
+          kind: "local",
+          layerId: "target",
+          position: { x: 0, y: 0 }
+        }
+      }
+    ],
+    anchors: [{
+      id: "goal",
+      layerId: "target",
+      position: { x: 0, y: 0 }
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "budget",
+    definitionId: "budget-paths"
+  });
+
+  const entity = {
+    id: "hans-budget",
+    domainId:
+      place.layerDomains.get("start"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const bridge = {
+    getEntity(id) {
+      return id === entity.id
+        ? entity
+        : null;
+    },
+    planLocalRoute() {
+      throw new Error(
+        "all endpoints are colocated"
+      );
+    },
+    startLocalJourney() {
+      return true;
+    },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const plan = planTravel(
+    places,
+    bridge,
+    entity.id,
+    {
+      placeId: place.id,
+      anchorId: "goal"
+    },
+    {
+      maxCost: 5
+    }
+  );
+
+  assert.ok(plan);
+  assert.equal(
+    plan.estimatedSeconds,
+    3
+  );
+  assert.deepEqual(
+    plan.domainPath,
+    [
+      place.layerDomains.get("start"),
+      place.layerDomains.get("cheap-a"),
+      place.layerDomains.get("cheap-b"),
+      place.layerDomains.get("target")
+    ]
+  );
+});
+
+test("explicit target planning returns null when every route exceeds maxCost", () => {
+  const {
+    places,
+    bridge
+  } = buildPlannerFixture();
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "inn",
+      anchorId: "target"
+    },
+    {
+      maxCost: 1
+    }
+  );
+
+  assert.equal(plan, null);
+});
