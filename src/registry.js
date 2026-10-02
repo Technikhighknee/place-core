@@ -526,6 +526,8 @@ export class PlaceRegistry {
           }
         }
       }
+
+      bridge.synchronizeRuntimeState?.();
     } catch (error) {
       const rollbackErrors = [];
       for (const {
