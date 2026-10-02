@@ -2290,6 +2290,14 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       pending.savedState,
       `${pendingLabel}.savedState`
     );
+    if (
+      pending.savedState.planStale !==
+      true
+    ) {
+      throw new Error(
+        `${pendingLabel}.savedState.planStale must be true for retained pending travel`
+      );
+    }
     assertFreshTravelReferences(
       pending.savedState,
       `${pendingLabel}.savedState`
