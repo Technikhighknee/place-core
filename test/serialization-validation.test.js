@@ -970,11 +970,11 @@ test("snapshot validation rejects duplicate dynamic portal road bindings", () =>
     roadBindings: [
       {
         layerId: "ground",
-        roadId: "same-road"
+        roadId: "g-main"
       },
       {
         layerId: "ground",
-        roadId: "same-road"
+        roadId: "g-main"
       }
     ]
   });
