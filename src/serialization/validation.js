@@ -15,6 +15,7 @@ import {
   validateTravelTarget
 } from "../travel/input.js";
 import {
+  PORTAL_STATE_KEYS,
   portalTraversableState
 } from "../registry/support.js";
 import {
@@ -1301,48 +1302,91 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     }
 
     for (const [portalId, patch] of Object.entries(
-      item.portalOverrides ?? {}
+      item.portalOverrides
     )) {
-      if (!definition.getPortal(portalId)) {
+      const basePortal =
+        definition.getPortal(portalId);
+      if (!basePortal) {
         throw new Error(
           `instance ${String(item.id)} has orphan portal override ${portalId}`
         );
       }
+      const label =
+        `instance ${String(item.id)}.portalOverrides.${portalId}`;
       assertBooleanPatch(
         patch,
-        ["enabled", "open", "locked", "blocked", "destroyed"],
-        `instance ${String(item.id)}.portalOverrides.${portalId}`
+        PORTAL_STATE_KEYS,
+        label
       );
+      const keys = Object.keys(patch);
+      if (keys.length === 0) {
+        throw new Error(
+          `${label} must contain at least one state difference`
+        );
+      }
+      for (const key of keys) {
+        if (patch[key] === basePortal[key]) {
+          throw new Error(
+            `${label}.${key} redundantly matches the definition state`
+          );
+        }
+      }
     }
 
     for (const [boundaryId, patch] of Object.entries(
-      item.boundaryOverrides ?? {}
+      item.boundaryOverrides
     )) {
-      if (!definition.getBoundary(boundaryId)) {
+      const boundary =
+        definition.getBoundary(boundaryId);
+      if (!boundary) {
         throw new Error(
           `instance ${String(item.id)} has orphan boundary override ${boundaryId}`
         );
       }
+      const label =
+        `instance ${String(item.id)}.boundaryOverrides.${boundaryId}`;
       assertBooleanPatch(
         patch,
         ["enabled"],
-        `instance ${String(item.id)}.boundaryOverrides.${boundaryId}`
+        label
       );
+      if (!Object.hasOwn(patch, "enabled")) {
+        throw new Error(
+          `${label} must contain enabled`
+        );
+      }
+      if (patch.enabled === boundary.enabled) {
+        throw new Error(
+          `${label}.enabled redundantly matches the definition state`
+        );
+      }
     }
 
     for (const [spaceId, patch] of Object.entries(
-      item.spaceOverrides ?? {}
+      item.spaceOverrides
     )) {
       if (!definition.getSpace(spaceId)) {
         throw new Error(
           `instance ${String(item.id)} has orphan space override ${spaceId}`
         );
       }
+      const label =
+        `instance ${String(item.id)}.spaceOverrides.${spaceId}`;
       assertBooleanPatch(
         patch,
         ["enabled"],
-        `instance ${String(item.id)}.spaceOverrides.${spaceId}`
+        label
       );
+      if (!Object.hasOwn(patch, "enabled")) {
+        throw new Error(
+          `${label} must contain enabled`
+        );
+      }
+      if (patch.enabled !== false) {
+        throw new Error(
+          `${label}.enabled redundantly matches the default enabled state`
+        );
+      }
     }
 
     const dynamicIds = new Set();
