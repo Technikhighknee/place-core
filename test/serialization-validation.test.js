@@ -1330,7 +1330,7 @@ test("fresh snapshots accept explicit descendant anchors for parent space target
   );
 });
 
-test("fresh snapshots bind resolved targets to the original semantic request", () => {
+test("fresh snapshots preserve deterministic implicit anchor selection", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "fresh-request-binding",
@@ -1367,14 +1367,9 @@ test("fresh snapshots bind resolved targets to the original semantic request", (
     getEntity() {
       return entity;
     },
-    planLocalRoute({
-      destinationNodeId
-    }) {
+    planLocalRoute() {
       return {
-        estimatedSeconds:
-          destinationNodeId === "alpha"
-            ? 5
-            : 6
+        estimatedSeconds: 5
       };
     },
     startLocalJourney(
@@ -1397,10 +1392,7 @@ test("fresh snapshots bind resolved targets to the original semantic request", (
       places,
       bridge,
       "hans",
-      {
-        placeId: "house",
-        anchorId: "alpha"
-      }
+      { placeId: "house" }
     )
   );
 
@@ -1408,6 +1400,11 @@ test("fresh snapshots bind resolved targets to the original semantic request", (
     serializePlaceCore(places);
   const travel =
     snapshot.activeTravels[0];
+
+  assert.equal(
+    travel.plan.resolvedTarget.anchorId,
+    "alpha"
+  );
 
   travel.plan.resolvedTarget = {
     placeId: "house",
@@ -1438,42 +1435,71 @@ test("fresh snapshots bind resolved targets to the original semantic request", (
       validatePlaceCoreSnapshot(
         snapshot
       ),
-    /resolved target no longer matches requested anchor alpha/
+    /implicit anchor selection/
   );
 });
 
 
-test("fresh direct snapshots bind resolved targets to the direct request", () => {
+test("fresh direct snapshots reject invented null-context fields", () => {
   const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "direct-portal-target",
+    layers: [
+      { id: "a" },
+      { id: "b" }
+    ],
+    portals: [{
+      id: "door",
+      transitionCost: 5,
+      a: {
+        kind: "local",
+        layerId: "a",
+        position: { x: 0, y: 0 },
+        nodeId: "a-door"
+      },
+      b: {
+        kind: "local",
+        layerId: "b",
+        position: { x: 10, y: 0 },
+        nodeId: "b-door"
+      }
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "direct-portal-target"
+  });
   const entity = {
     id: "hans",
-    domainId: "street",
+    domainId:
+      place.layerDomains.get("a"),
     position: { x: 0, y: 0 },
     mobility: { speed: 1 },
     journey: null
   };
+  const targetDomain =
+    place.layerDomains.get("b");
   const bridge = {
     getEntity() {
       return entity;
     },
     planLocalRoute() {
-      return {
-        estimatedSeconds: 5
-      };
+      throw new Error(
+        "zero-distance plan must not query local routing"
+      );
     },
-    startLocalJourney(
-      id,
-      destinationNodeId
-    ) {
-      entity.journey = {
-        destinationNodeId
-      };
-      return true;
+    startLocalJourney() {
+      throw new Error(
+        "portal-only plan must not start a local journey"
+      );
     },
-    stopLocalJourney() {
-      entity.journey = null;
-    },
-    transferEntity() {}
+    stopLocalJourney() {},
+    transferEntity() {
+      throw new Error(
+        "transition delay should keep travel before transfer"
+      );
+    }
   };
 
   assert.ok(
@@ -1482,9 +1508,8 @@ test("fresh direct snapshots bind resolved targets to the direct request", () =>
       bridge,
       "hans",
       {
-        domainId: "street",
-        position: { x: 5, y: 0 },
-        nodeId: "five"
+        domainId: targetDomain,
+        position: { x: 10, y: 0 }
       }
     )
   );
@@ -1492,14 +1517,8 @@ test("fresh direct snapshots bind resolved targets to the direct request", () =>
   const snapshot =
     serializePlaceCore(places);
   snapshot.activeTravels[0]
-    .plan.resolvedTarget.position.x = 6;
-  snapshot.activeTravels[0]
-    .plan.steps[0]
-    .destinationPosition.x = 6;
-  snapshot.activeTravels[0]
-    .plan.legs =
-      snapshot.activeTravels[0]
-        .plan.steps;
+    .plan.resolvedTarget.nodeId =
+      "invented-node";
 
   assert.throws(
     () =>
