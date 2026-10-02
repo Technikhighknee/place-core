@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   PlaceRegistry,
+  resolveTravelTarget,
   planTravel
 } from "../src/index.js";
 
@@ -232,6 +233,22 @@ test("planner chooses the cheapest among multiple equally short domain paths", (
   );
 });
 
+
+test("resolveTravelTarget rejects nearest targets that require route context", () => {
+  const places = new PlaceRegistry();
+
+  assert.throws(
+    () =>
+      resolveTravelTarget(
+        places,
+        {
+          kind: "nearest",
+          tag: "bed"
+        }
+      ),
+    /cannot resolve nearest targets.*use planTravel/i
+  );
+});
 
 test("nearest semantic target chooses the cheapest reachable anchor, not lexical order", () => {
   const places = new PlaceRegistry();
