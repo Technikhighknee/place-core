@@ -99,21 +99,29 @@ function assertTravelPlan(
   entityId,
   expectedTarget = null
 ) {
+  const requiredPlanFields = [
+    "entityId",
+    "target",
+    "resolvedTarget",
+    "startDomainId",
+    "domainPath",
+    "steps",
+    "legs",
+    "estimatedSeconds",
+    "rejectedDomainPairs"
+  ];
   assertOnlyKeys(
     plan,
-    [
-      "entityId",
-      "target",
-      "resolvedTarget",
-      "startDomainId",
-      "domainPath",
-      "steps",
-      "legs",
-      "estimatedSeconds",
-      "rejectedDomainPairs"
-    ],
+    requiredPlanFields,
     "active travel plan"
   );
+  for (const key of requiredPlanFields) {
+    if (!Object.hasOwn(plan, key)) {
+      throw new Error(
+        `active travel plan is missing required field ${key}`
+      );
+    }
+  }
   if (plan.entityId !== entityId) {
     throw new Error("active travel plan entityId mismatch");
   }
@@ -409,11 +417,11 @@ function assertTravelPlan(
   }
 
   assertArray(
-    plan.rejectedDomainPairs ?? [],
+    plan.rejectedDomainPairs,
     "active travel plan.rejectedDomainPairs"
   );
   normalizeStringList(
-    plan.rejectedDomainPairs ?? [],
+    plan.rejectedDomainPairs,
     "active travel plan.rejectedDomainPairs"
   );
 }
@@ -888,8 +896,12 @@ function assertPersistedActiveTravelState(
     );
   }
   if (
-    travel.planStale !== undefined &&
-    typeof travel.planStale !== "boolean"
+    !Object.hasOwn(
+      travel,
+      "planStale"
+    ) ||
+    typeof travel.planStale !==
+      "boolean"
   ) {
     throw new TypeError(
       `${label}.planStale must be a boolean`
@@ -915,6 +927,21 @@ function assertPersistedActiveTravelState(
     travel.options,
     `${label}.options`
   );
+  for (const key of [
+    "worldChangePolicy",
+    "portalEntryTolerance"
+  ]) {
+    if (
+      !Object.hasOwn(
+        travel.options,
+        key
+      )
+    ) {
+      throw new Error(
+        `${label}.options is missing required field ${key}`
+      );
+    }
+  }
   const optionPolicy =
     travel.options.worldChangePolicy ??
     travel.worldChangePolicy;
