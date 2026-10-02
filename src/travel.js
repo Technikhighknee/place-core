@@ -2100,6 +2100,14 @@ export function stepTravel(registry, a, b, c) {
       if (next.status !== "active") {
         return publicTravelState(next);
       }
+      return publicTravelState(
+        advance(
+          registry,
+          bridge,
+          next,
+          effectiveOptions
+        )
+      );
     } else if (entity.journey != null) {
       const liveDestinationNodeId =
         entity.journey?.destinationNodeId ??
@@ -2122,6 +2130,14 @@ export function stepTravel(registry, a, b, c) {
       if (next.status !== "active") {
         return publicTravelState(next);
       }
+      return publicTravelState(
+        advance(
+          registry,
+          bridge,
+          next,
+          effectiveOptions
+        )
+      );
     }
 
     const arrived =
