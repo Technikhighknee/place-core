@@ -1330,6 +1330,290 @@ test("fresh snapshots accept explicit descendant anchors for parent space target
   );
 });
 
+test("fresh snapshots bind resolved targets to the original semantic request", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "fresh-request-binding",
+    layers: [{ id: "inside" }],
+    anchors: [
+      {
+        id: "alpha",
+        layerId: "inside",
+        position: { x: 5, y: 0 },
+        nodeId: "alpha"
+      },
+      {
+        id: "beta",
+        layerId: "inside",
+        position: { x: 6, y: 0 },
+        nodeId: "beta"
+      }
+    ]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "fresh-request-binding"
+  });
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute({
+      destinationNodeId
+    }) {
+      return {
+        estimatedSeconds:
+          destinationNodeId === "alpha"
+            ? 5
+            : 6
+      };
+    },
+    startLocalJourney(
+      id,
+      destinationNodeId
+    ) {
+      entity.journey = {
+        destinationNodeId
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "alpha"
+      }
+    )
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+  const travel =
+    snapshot.activeTravels[0];
+
+  travel.plan.resolvedTarget = {
+    placeId: "house",
+    anchorId: "beta",
+    spaceId: null,
+    layerId: "inside",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 6, y: 0 },
+    nodeId: "beta"
+  };
+  travel.plan.steps[0] = {
+    type: "local-journey",
+    domainId:
+      place.layerDomains.get("inside"),
+    destinationNodeId: "beta",
+    destinationPosition: {
+      x: 6,
+      y: 0
+    },
+    estimatedSeconds: 5
+  };
+  travel.plan.legs =
+    travel.plan.steps;
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      ),
+    /resolved target no longer matches requested anchor alpha/
+  );
+});
+
+
+test("fresh direct snapshots bind resolved targets to the direct request", () => {
+  const places = new PlaceRegistry();
+  const entity = {
+    id: "hans",
+    domainId: "street",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      return {
+        estimatedSeconds: 5
+      };
+    },
+    startLocalJourney(
+      id,
+      destinationNodeId
+    ) {
+      entity.journey = {
+        destinationNodeId
+      };
+      return true;
+    },
+    stopLocalJourney() {
+      entity.journey = null;
+    },
+    transferEntity() {}
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        domainId: "street",
+        position: { x: 5, y: 0 },
+        nodeId: "five"
+      }
+    )
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+  snapshot.activeTravels[0]
+    .plan.resolvedTarget.position.x = 6;
+  snapshot.activeTravels[0]
+    .plan.steps[0]
+    .destinationPosition.x = 6;
+  snapshot.activeTravels[0]
+    .plan.legs =
+      snapshot.activeTravels[0]
+        .plan.steps;
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      ),
+    /resolved target no longer matches direct target/
+  );
+});
+
+
+test("fresh snapshots bind portal-only plan endings to the resolved target", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition({
+    id: "portal-exit-target",
+    layers: [
+      { id: "a" },
+      { id: "b" }
+    ],
+    portals: [{
+      id: "door",
+      transitionCost: 5,
+      a: {
+        kind: "local",
+        layerId: "a",
+        position: { x: 0, y: 0 },
+        nodeId: "a-door"
+      },
+      b: {
+        kind: "local",
+        layerId: "b",
+        position: { x: 10, y: 0 },
+        nodeId: "b-door"
+      }
+    }],
+    anchors: [{
+      id: "exit",
+      layerId: "b",
+      position: { x: 10, y: 0 },
+      nodeId: "b-door"
+    }]
+  });
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "portal-exit-target"
+  });
+  const entity = {
+    id: "hans",
+    domainId:
+      place.layerDomains.get("a"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 },
+    journey: null
+  };
+  const bridge = {
+    getEntity() {
+      return entity;
+    },
+    planLocalRoute() {
+      throw new Error(
+        "zero-distance plan must not query local routing"
+      );
+    },
+    startLocalJourney() {
+      throw new Error(
+        "portal-only plan must not start a local journey"
+      );
+    },
+    stopLocalJourney() {},
+    transferEntity() {
+      throw new Error(
+        "transition delay should keep travel before transfer"
+      );
+    }
+  };
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "exit"
+      }
+    )
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+  const travel =
+    snapshot.activeTravels[0];
+
+  assert.equal(
+    travel.plan.steps.at(-1).type,
+    "traverse-portal"
+  );
+
+  travel.plan.steps.at(-1)
+    .destinationPosition.x = 11;
+  travel.plan.legs =
+    travel.plan.steps;
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      ),
+    /final portal step no longer matches resolved target/
+  );
+});
+
+
 test("pending saved travel state uses full active-state validation", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({

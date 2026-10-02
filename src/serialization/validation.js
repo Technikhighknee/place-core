@@ -1540,6 +1540,33 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     const target =
       travel.plan.resolvedTarget;
 
+    if (!semanticTarget) {
+      const requested =
+        travel.target;
+      if (
+        target.domainId !==
+          requested.domainId ||
+        target.position.x !==
+          requested.position.x ||
+        target.position.y !==
+          requested.position.y ||
+        (target.nodeId ?? null) !==
+          (requested.nodeId ?? null) ||
+        (target.placeId ?? null) !==
+          (requested.placeId ?? null) ||
+        (target.anchorId ?? null) !==
+          (requested.anchorId ?? null) ||
+        (target.spaceId ?? null) !==
+          (requested.spaceId ?? null) ||
+        (target.layerId ?? null) !==
+          (requested.layerId ?? null)
+      ) {
+        throw new Error(
+          `${label} fresh plan resolved target no longer matches direct target`
+        );
+      }
+    }
+
     if (semanticTarget) {
       const targetPlaceId =
         target.placeId;
@@ -1630,6 +1657,52 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         return true;
       };
 
+      const requestedTarget =
+        travel.target;
+      const nearestTarget =
+        requestedTarget.kind === "nearest";
+
+      if (
+        nearestTarget &&
+        requestedTarget.placeId != null &&
+        target.placeId !==
+          requestedTarget.placeId
+      ) {
+        throw new Error(
+          `${label} fresh nearest target no longer matches requested place ${String(requestedTarget.placeId)}`
+        );
+      }
+
+      if (
+        !nearestTarget &&
+        target.placeId !==
+          requestedTarget.placeId
+      ) {
+        throw new Error(
+          `${label} fresh plan resolved target no longer matches requested place ${String(requestedTarget.placeId)}`
+        );
+      }
+
+      if (
+        target.spaceId != null &&
+        !spaceEnabled(target.spaceId)
+      ) {
+        throw new Error(
+          `${label} fresh plan target space is disabled`
+        );
+      }
+
+      if (
+        nearestTarget &&
+        requestedTarget.spaceId != null &&
+        target.spaceId !==
+          requestedTarget.spaceId
+      ) {
+        throw new Error(
+          `${label} fresh nearest target no longer matches requested space ${requestedTarget.spaceId}`
+        );
+      }
+
       const anchor =
         target.anchorId == null
           ? null
@@ -1641,6 +1714,137 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         throw new Error(
           `${label} fresh plan references missing target anchor ${String(target.anchorId)}`
         );
+      }
+
+      if (!nearestTarget) {
+        if (
+          requestedTarget.anchorId != null &&
+          target.anchorId !==
+            requestedTarget.anchorId
+        ) {
+          throw new Error(
+            `${label} fresh plan resolved target no longer matches requested anchor ${requestedTarget.anchorId}`
+          );
+        }
+
+        if (
+          requestedTarget.spaceId != null &&
+          target.spaceId !==
+            requestedTarget.spaceId
+        ) {
+          throw new Error(
+            `${label} fresh plan resolved target no longer matches requested space ${requestedTarget.spaceId}`
+          );
+        }
+
+        if (requestedTarget.anchorId == null) {
+          const anchorAvailable = (
+            candidate
+          ) =>
+            candidate != null &&
+            (
+              candidate.spaceId == null ||
+              spaceEnabled(
+                candidate.spaceId
+              )
+            );
+
+          let expectedAnchor = null;
+
+          if (
+            requestedTarget.spaceId != null
+          ) {
+            const requestedSpace =
+              definition.getSpace(
+                requestedTarget.spaceId
+              );
+            if (
+              !requestedSpace ||
+              !spaceEnabled(
+                requestedTarget.spaceId
+              )
+            ) {
+              throw new Error(
+                `${label} fresh plan requested target space is unavailable`
+              );
+            }
+
+            if (
+              requestedSpace.defaultAnchorId != null
+            ) {
+              const candidate =
+                definition.getAnchor(
+                  requestedSpace.defaultAnchorId
+                );
+              if (anchorAvailable(candidate)) {
+                expectedAnchor =
+                  candidate;
+              }
+            }
+
+            if (!expectedAnchor) {
+              expectedAnchor = [
+                ...definition.getAnchorsForSpace(
+                  requestedSpace.id
+                )
+              ]
+                .filter(anchorAvailable)
+                .sort((a, b) =>
+                  compareStrings(
+                    a.id,
+                    b.id
+                  )
+                )[0] ?? null;
+            }
+          } else {
+            if (
+              definition.defaultAnchorId != null
+            ) {
+              const candidate =
+                definition.getAnchor(
+                  definition.defaultAnchorId
+                );
+              if (anchorAvailable(candidate)) {
+                expectedAnchor =
+                  candidate;
+              }
+            }
+
+            if (!expectedAnchor) {
+              expectedAnchor = [
+                ...definition.getAnchorsByTag(
+                  "entry"
+                )
+              ]
+                .filter(anchorAvailable)
+                .sort((a, b) =>
+                  compareStrings(
+                    a.id,
+                    b.id
+                  )
+                )[0] ?? [
+                  ...definition.anchors
+                ]
+                  .filter(anchorAvailable)
+                  .sort((a, b) =>
+                    compareStrings(
+                      a.id,
+                      b.id
+                    )
+                  )[0] ?? null;
+            }
+          }
+
+          if (
+            !expectedAnchor ||
+            target.anchorId !==
+              expectedAnchor.id
+          ) {
+            throw new Error(
+              `${label} fresh plan resolved target no longer matches implicit anchor selection`
+            );
+          }
+        }
       }
 
       const targetSpaceMatchesAnchor = (() => {
@@ -1733,6 +1937,15 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       }
 
       if (travel.target.kind === "nearest") {
+        if (
+          travel.target.spaceId != null &&
+          anchor.spaceId !==
+            travel.target.spaceId
+        ) {
+          throw new Error(
+            `${label} fresh nearest target anchor no longer matches space ${travel.target.spaceId}`
+          );
+        }
         if (
           !anchor.tags.includes(
             travel.target.tag
@@ -1913,6 +2126,22 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     ) {
       throw new Error(
         `${label} fresh plan final local step no longer matches resolved target`
+      );
+    }
+    if (
+      finalStep?.type ===
+      "traverse-portal" &&
+      (
+        finalStep.toDomainId !==
+          travel.plan.resolvedTarget.domainId ||
+        finalStep.destinationPosition.x !==
+          travel.plan.resolvedTarget.position.x ||
+        finalStep.destinationPosition.y !==
+          travel.plan.resolvedTarget.position.y
+      )
+    ) {
+      throw new Error(
+        `${label} fresh plan final portal step no longer matches resolved target`
       );
     }
   };
