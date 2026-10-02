@@ -443,6 +443,7 @@ test("restart mode retains travel intent when route planning throws", () => {
     journey: null
   };
 
+  let entityLookups = 0;
   const bridge = {
     registry: null,
     attachRegistry(registry, onDispose) {
@@ -457,6 +458,12 @@ test("restart mode retains travel intent when route planning throws", () => {
     syncPortalState() {},
     syncDynamicPortal() {},
     getEntity(id) {
+      entityLookups += 1;
+      if (entityLookups > 1) {
+        throw new Error(
+          "entity lookup must be stable within one restore"
+        );
+      }
       return id === "hans"
         ? entity
         : null;
@@ -508,6 +515,11 @@ test("restart mode retains travel intent when route planning throws", () => {
       "hans"
     ).places,
     ["first"]
+  );
+  assert.equal(
+    entityLookups,
+    1,
+    "occupancy reconciliation and travel restart must share one world lookup"
   );
 });
 
@@ -585,6 +597,44 @@ test("restart mode retains travel intent when entity lookup throws", () => {
     "unreadable live entities must not retain stale snapshot occupancy"
   );
   restored.assertInternalConsistency();
+});
+
+
+test("stationary occupancy lookup failure aborts before bridge attachment", () => {
+  const places = new PlaceRegistry();
+  places.updateEntityOccupancy({
+    id: "idle",
+    domainId: "snapshot-domain",
+    position: { x: 1, y: 2 }
+  });
+  const snapshot =
+    serializePlaceCore(places);
+
+  let attached = false;
+  const bridge = {
+    attachRegistry() {
+      attached = true;
+    },
+    getEntity() {
+      throw new Error(
+        "synthetic stationary lookup failure"
+      );
+    }
+  };
+
+  assert.throws(
+    () =>
+      deserializePlaceCore(
+        snapshot,
+        { bridge }
+      ),
+    /synthetic stationary lookup failure/
+  );
+  assert.equal(
+    attached,
+    false,
+    "failed stationary lookup must abort before bridge attachment"
+  );
 });
 
 
