@@ -1398,16 +1398,24 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     if (item.placement != null) {
       const placementLabel =
         `instance ${String(item.id)}.placement`;
+      const requiredPlacementFields = [
+        "domainId",
+        "parentPlaceId",
+        "containment",
+        "transform"
+      ];
       assertOnlyKeys(
         item.placement,
-        [
-          "domainId",
-          "parentPlaceId",
-          "containment",
-          "transform"
-        ],
+        requiredPlacementFields,
         placementLabel
       );
+      for (const key of requiredPlacementFields) {
+        if (!Object.hasOwn(item.placement, key)) {
+          throw new Error(
+            `${placementLabel} is missing required field ${key}`
+          );
+        }
+      }
       const hasDomain = item.placement.domainId != null;
       const hasParent = item.placement.parentPlaceId != null;
       if (hasDomain === hasParent) {
@@ -1442,12 +1450,30 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         );
       }
 
+      const requiredTransformFields = [
+        "x",
+        "y",
+        "rotation",
+        "scale"
+      ];
       assertOnlyKeys(
         item.placement.transform,
-        ["x", "y", "rotation", "scale"],
+        requiredTransformFields,
         `instance ${String(item.id)}.placement.transform`
       );
-      for (const key of ["x", "y", "rotation", "scale"]) {
+      for (const key of requiredTransformFields) {
+        if (
+          !Object.hasOwn(
+            item.placement.transform,
+            key
+          )
+        ) {
+          throw new Error(
+            `instance ${String(item.id)}.placement.transform is missing required field ${key}`
+          );
+        }
+      }
+      for (const key of requiredTransformFields) {
         if (!Number.isFinite(item.placement.transform[key])) {
           throw new Error(
             `instance ${String(item.id)} placement transform ${key} must be finite`
