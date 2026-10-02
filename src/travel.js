@@ -260,10 +260,37 @@ export function resolveTravelTarget(registry, target) {
     });
   }
 
-  if (target.kind === "nearest") {
-    throw new TypeError(
-      "resolveTravelTarget cannot resolve nearest targets without entity and route context; use planTravel"
+  if (target.kind === "nearest" &&
+      typeof registry.findAnchors === "function") {
+    const candidates = registry.findAnchors({
+      tag: target.tag,
+      kind: target.anchorKind ?? null,
+      placeId: target.placeId ?? null,
+      spaceId: target.spaceId ?? null,
+      enabledOnly: true
+    });
+    if (!candidates.length) {
+      throw travelTargetUnavailable(
+        `no enabled anchor matches tag ${target.tag}`
+      );
+    }
+    candidates.sort((a, b) =>
+      compareStrings(
+        travelTargetIdKey(a.placeId),
+        travelTargetIdKey(b.placeId)
+      ) ||
+      compareStrings(a.id, b.id)
     );
+    const anchor = candidates[0];
+    return deepFreeze({
+      placeId: anchor.placeId,
+      anchorId: anchor.id,
+      spaceId: anchor.spaceId,
+      layerId: anchor.layerId,
+      domainId: anchor.domainId,
+      position: anchor.position,
+      nodeId: anchor.nodeId
+    });
   }
 
   const instance = registry.getPlace(target.placeId);
