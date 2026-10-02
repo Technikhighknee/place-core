@@ -1596,10 +1596,16 @@ test("fresh snapshots bind portal-only plan endings to the resolved target", () 
     getEntity() {
       return entity;
     },
-    planLocalRoute() {
-      throw new Error(
-        "zero-distance plan must not query local routing"
+    planLocalRoute({
+      destinationNodeId
+    }) {
+      assert.equal(
+        destinationNodeId,
+        "b-target"
       );
+      return {
+        estimatedSeconds: 10
+      };
     },
     startLocalJourney() {
       throw new Error(
