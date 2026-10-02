@@ -660,12 +660,31 @@ test("domain path API has its own strict exclusion-only option contract", () => 
   const b = place.layerDomains.get("b");
   const portal = places.getPortalsForDomain(a)[0];
 
-  assert.ok(
+  const directPath =
     findDomainPortalPath(
       places,
       a,
       b
-    )
+    );
+  assert.ok(directPath);
+  assert.deepEqual(
+    directPath.domains,
+    [a, b]
+  );
+
+  const trivialPath =
+    findDomainPortalPath(
+      places,
+      a,
+      a
+    );
+  assert.deepEqual(
+    trivialPath,
+    []
+  );
+  assert.deepEqual(
+    trivialPath.domains,
+    [a]
   );
 
   assert.equal(

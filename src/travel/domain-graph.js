@@ -141,6 +141,18 @@ function neighborDomains(edges, direction) {
   return [...set].sort();
 }
 
+function domainPathResult(edges, domains) {
+  Object.defineProperty(
+    edges,
+    "domains",
+    {
+      value: Object.freeze([...domains]),
+      enumerable: false
+    }
+  );
+  return edges;
+}
+
 export function findDomainPortalPath(
   registry,
   startDomainId,
@@ -164,7 +176,12 @@ export function findDomainPortalPathInternal(
   targetDomainId,
   options = {}
 ) {
-  if (startDomainId === targetDomainId) return [];
+  if (startDomainId === targetDomainId) {
+    return domainPathResult(
+      [],
+      [startDomainId]
+    );
+  }
 
   const forwardVisited = new Map([[startDomainId, null]]);
   const backwardVisited = new Map([[targetDomainId, null]]);
@@ -243,6 +260,8 @@ export function findDomainPortalPathInternal(
     if (!candidates.length) throw new Error("domain path references missing portal transition");
     edges.push(candidates[0]);
   }
-  Object.defineProperty(edges, "domains", { value: Object.freeze(domains), enumerable: false });
-  return edges;
+  return domainPathResult(
+    edges,
+    domains
+  );
 }
