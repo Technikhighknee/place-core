@@ -1548,10 +1548,13 @@ function finalizeFailedTravel(
 function liveTravelEntity(
   registry,
   bridge,
-  state
+  state,
+  resolvedEntity = undefined
 ) {
   const entity =
-    bridge.getEntity(state.entityId);
+    resolvedEntity === undefined
+      ? bridge.getEntity(state.entityId)
+      : resolvedEntity;
 
   if (!entity) {
     registry.removeEntityOccupancy(
@@ -1717,14 +1720,31 @@ function currentPortalDestination(portal, step) {
   return null;
 }
 
-function advance(registry, bridge, state, options = {}) {
+function advance(
+  registry,
+  bridge,
+  state,
+  options = {},
+  initialEntity = undefined
+) {
+  let pendingInitialEntity =
+    initialEntity;
+  const readLiveEntity = () => {
+    const resolved =
+      pendingInitialEntity;
+    pendingInitialEntity =
+      undefined;
+    return liveTravelEntity(
+      registry,
+      bridge,
+      state,
+      resolved
+    );
+  };
+
   while (state.status === "active") {
     if (state.stepIndex >= state.plan.steps.length) {
-      const live = liveTravelEntity(
-        registry,
-        bridge,
-        state
-      );
+      const live = readLiveEntity();
       if (live.failure) {
         return live.failure;
       }
@@ -1746,11 +1766,7 @@ function advance(registry, bridge, state, options = {}) {
     const step = state.plan.steps[state.stepIndex];
 
     if (step.type === "local-journey") {
-      const live = liveTravelEntity(
-        registry,
-        bridge,
-        state
-      );
+      const live = readLiveEntity();
       if (live.failure) {
         return live.failure;
       }
@@ -1799,11 +1815,7 @@ function advance(registry, bridge, state, options = {}) {
       const direction = currentPortalDestination(portal, step);
       if (!direction) return replan(registry, bridge, state, options);
 
-      const live = liveTravelEntity(
-        registry,
-        bridge,
-        state
-      );
+      const live = readLiveEntity();
       if (live.failure) {
         return live.failure;
       }
@@ -2015,10 +2027,14 @@ function advance(registry, bridge, state, options = {}) {
   return state;
 }
 
-export function startTravel(registry, a, b, c, d) {
-  const { bridge, entityId, target, options } = resolveStartCall(registry, a, b, c, d);
-  if (!bridge) throw new Error("startTravel requires a WorldCoreBridge");
-
+function startTravelCore(
+  registry,
+  bridge,
+  entityId,
+  target,
+  options,
+  resolvedEntity = undefined
+) {
   assertRegistryExecutionBridge(
     registry,
     bridge,
@@ -2043,11 +2059,20 @@ export function startTravel(registry, a, b, c, d) {
     "startTravel"
   );
 
+  if (resolvedEntity !== undefined) {
+    validateTravelEntity(
+      resolvedEntity,
+      entityId
+    );
+  }
+
   const capturedOptions = captureTravelOptions(options);
   const plan = planTravel(
     registry,
     bridge,
-    entityId,
+    resolvedEntity === undefined
+      ? entityId
+      : resolvedEntity,
     target,
     capturedOptions
   );
@@ -2101,7 +2126,8 @@ export function startTravel(registry, a, b, c, d) {
         registry,
         bridge,
         state,
-        capturedOptions
+        capturedOptions,
+        resolvedEntity
       )
     );
   } catch (error) {
@@ -2134,6 +2160,56 @@ export function startTravel(registry, a, b, c, d) {
     }
     throw error;
   }
+}
+
+export function _startTravelWithEntity(
+  registry,
+  bridge,
+  entityId,
+  entity,
+  target,
+  options = {}
+) {
+  if (!bridge) {
+    throw new Error(
+      "startTravel requires a WorldCoreBridge"
+    );
+  }
+  return startTravelCore(
+    registry,
+    bridge,
+    entityId,
+    target,
+    options,
+    entity
+  );
+}
+
+export function startTravel(registry, a, b, c, d) {
+  const {
+    bridge,
+    entityId,
+    target,
+    options
+  } = resolveStartCall(
+    registry,
+    a,
+    b,
+    c,
+    d
+  );
+  if (!bridge) {
+    throw new Error(
+      "startTravel requires a WorldCoreBridge"
+    );
+  }
+  return startTravelCore(
+    registry,
+    bridge,
+    entityId,
+    target,
+    options
+  );
 }
 
 function resolveStepCall(registry, a, b, c) {
