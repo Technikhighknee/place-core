@@ -284,6 +284,16 @@ export function deserializePlaceCore(snapshot, options = {}) {
     );
   }
 
+  if (
+    bridge &&
+    snapshot.occupancy.length > 0 &&
+    typeof bridge.getEntity !== "function"
+  ) {
+    throw new TypeError(
+      "bridge.getEntity must be a function when restoring tracked occupancy"
+    );
+  }
+
   const captureEvents = normalizeBoolean(
     options.captureEvents,
     "deserialize captureEvents",

@@ -132,6 +132,50 @@ test("bridge failure during late restore materialization rolls earlier places ba
   assert.equal(navigation.domainBindings.size, 0);
 });
 
+test("bridge-backed occupancy restore requires getEntity before materialization", () => {
+  const places = new PlaceRegistry();
+  const compiled = definition();
+  places.registerDefinition(compiled);
+  const instance = places.createPlace({
+    id: "first",
+    definitionId: compiled.id
+  });
+  places.updateEntityOccupancy({
+    id: "idle",
+    domainId:
+      instance.layerDomains.get(
+        "inside"
+      ),
+    position: { x: 0, y: 0 }
+  });
+  const snapshot =
+    serializePlaceCore(places);
+
+  let attached = false;
+  let materialized = 0;
+  const bridge = {
+    attachRegistry() {
+      attached = true;
+    },
+    materializePlace() {
+      materialized += 1;
+      return {};
+    }
+  };
+
+  assert.throws(
+    () =>
+      deserializePlaceCore(
+        snapshot,
+        { bridge }
+      ),
+    /bridge\.getEntity must be a function/
+  );
+  assert.equal(attached, false);
+  assert.equal(materialized, 0);
+});
+
+
 test("resumeWorldCoreState checks entity coverage before bridge materialization", () => {
   const { snapshot } = sourceSnapshot({ withTravel: true });
   const world = new World();
