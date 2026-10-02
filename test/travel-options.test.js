@@ -2148,3 +2148,49 @@ test("active local travel replans when its world journey is replaced", () => {
     ["a-door", "a-door"]
   );
 });
+
+
+test("internal consistency covers active and pending travel runtime state", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      }
+    )
+  );
+
+  assert.doesNotThrow(
+    () =>
+      places.assertInternalConsistency()
+  );
+
+  const snapshot = serializePlaceCore(
+    places
+  );
+
+  const restored =
+    deserializePlaceCore(
+      snapshot,
+      {
+        restartTravels: false
+      }
+    );
+
+  assert.equal(
+    restored.pendingTravels.length,
+    1
+  );
+  assert.doesNotThrow(
+    () =>
+      restored.assertInternalConsistency()
+  );
+});

@@ -2857,6 +2857,102 @@ export class PlaceRegistry {
     this.#placementGraph.assertConsistency();
     this.#occupancyIndex.assertConsistency();
 
+    for (const [entityId, state] of
+      this.#activeTravels) {
+      if (
+        state?.entityId !== entityId ||
+        state.status !== "active" ||
+        state.failureReason !== null
+      ) {
+        throw new Error(
+          "active travel registry state drift"
+        );
+      }
+
+      const steps =
+        state.plan?.steps;
+      if (
+        !Array.isArray(steps) ||
+        !Number.isInteger(
+          state.stepIndex
+        ) ||
+        state.stepIndex < 0 ||
+        state.stepIndex >=
+          steps.length
+      ) {
+        throw new Error(
+          "active travel step index drift"
+        );
+      }
+
+      const step =
+        steps[state.stepIndex];
+
+      if (
+        state.localStarted &&
+        step?.type !==
+          "local-journey"
+      ) {
+        throw new Error(
+          "active travel local state drift"
+        );
+      }
+
+      if (
+        state.portalEntered &&
+        step?.type !==
+          "traverse-portal"
+      ) {
+        throw new Error(
+          "active travel portal state drift"
+        );
+      }
+
+      if (
+        (
+          state.portalTransitionRemaining ??
+          0
+        ) > 0 &&
+        !state.portalEntered
+      ) {
+        throw new Error(
+          "active travel portal delay drift"
+        );
+      }
+
+      const runtimeBridge =
+        getTravelRuntimeBridge(state);
+      if (!runtimeBridge) {
+        throw new Error(
+          "active travel is missing its runtime bridge"
+        );
+      }
+      if (
+        this.#bridge &&
+        runtimeBridge !== this.#bridge
+      ) {
+        throw new Error(
+          "active travel runtime bridge disagrees with registry bridge"
+        );
+      }
+    }
+
+    for (const pending of
+      this.#pendingTravels) {
+      if (
+        pending?.savedState?.status !==
+          "active" ||
+        pending.savedState.entityId !==
+          pending.entityId ||
+        pending.savedState.planStale !==
+          true
+      ) {
+        throw new Error(
+          "pending travel state drift"
+        );
+      }
+    }
+
     for (const [key, record] of this.#portalRecords) {
       if (!this.#instances.has(record.instanceId)) throw new Error(`portal record ${key} references missing instance`);
       if (!record.connected || !record.a || !record.b) throw new Error(`portal record ${key} is disconnected`);
