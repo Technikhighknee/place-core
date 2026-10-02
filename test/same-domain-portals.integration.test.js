@@ -376,10 +376,10 @@ test("restored world journeys retain an in-progress same-domain portal lifecycle
       existingDomainPolicy: "adopt"
     });
   const synchronizeRuntimeState =
-    restoredBridge.synchronizeRuntimeState
+    restoredBridge._synchronizeRuntimeState
       .bind(restoredBridge);
   let synchronizedCrossings = null;
-  restoredBridge.synchronizeRuntimeState =
+  restoredBridge._synchronizeRuntimeState =
     () => {
       synchronizedCrossings =
         synchronizeRuntimeState();

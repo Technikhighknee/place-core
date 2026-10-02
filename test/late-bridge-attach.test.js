@@ -122,6 +122,33 @@ test("late bridge attach materializes existing places and sparse road effects", 
   places.assertInternalConsistency();
 });
 
+test("normal late bridge attach does not reconstruct snapshot-only runtime state", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(definition());
+  places.createPlace({
+    id: "house",
+    definitionId: "late-attach-place"
+  });
+
+  const { bridge } = makeBridge();
+  bridge._synchronizeRuntimeState = () => {
+    throw new Error(
+      "normal attach must not synchronize restored runtime state"
+    );
+  };
+
+  assert.doesNotThrow(
+    () =>
+      places.attachWorldCoreBridge(
+        bridge
+      )
+  );
+  assert.equal(
+    places.bridge,
+    bridge
+  );
+});
+
 test("late bridge attach rolls every materialized place back on failure", () => {
   const places = new PlaceRegistry();
   places.registerDefinition(definition());

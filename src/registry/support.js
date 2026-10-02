@@ -14,6 +14,8 @@ export const PLACE_INSTANCE_MUTATION_TOKEN =
   Symbol("place-core-instance-mutation");
 export const PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN =
   Symbol("place-core-bridge-attach");
+export const PLACE_REGISTRY_RESTORE_BRIDGE_TOKEN =
+  Symbol("place-core-restore-bridge");
 export const PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN =
   Symbol("place-core-travel-mutation");
 
