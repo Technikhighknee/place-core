@@ -132,6 +132,77 @@ test("moving exterior footprints refresh stationary tracked entities", () => {
   ));
 });
 
+test("creating a place refreshes tracked entities in newly bound layer domains", () => {
+  const places = new PlaceRegistry({
+    captureEvents: true
+  });
+
+  places.updateEntityOccupancy({
+    id: "hans",
+    domainId: "existing-inside",
+    position: { x: 5, y: 5 }
+  });
+  places.drainEvents();
+
+  assert.deepEqual(
+    places.getEntityLocation("hans").places,
+    []
+  );
+
+  places.registerDefinition({
+    id: "adopted-domain-place",
+    layers: [{ id: "inside" }],
+    spaces: [{
+      id: "room",
+      layerId: "inside",
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 10,
+        maxY: 10
+      }
+    }]
+  });
+
+  places.createPlace({
+    id: "house",
+    definitionId: "adopted-domain-place",
+    layerDomains: {
+      inside: "existing-inside"
+    }
+  });
+
+  assert.deepEqual(
+    places.getEntityLocation("hans").places,
+    ["house"]
+  );
+  assert.equal(
+    places.entitiesInPlace("house").has("hans"),
+    true
+  );
+  assert.equal(
+    places.entitiesInSpace(
+      "house",
+      "room"
+    ).has("hans"),
+    true
+  );
+
+  const events = places.drainEvents();
+  assert.ok(events.some((event) =>
+    event.type === "place-enter" &&
+    event.entityId === "hans" &&
+    event.placeId === "house"
+  ));
+  assert.ok(events.some((event) =>
+    event.type === "space-enter" &&
+    event.entityId === "hans" &&
+    event.placeId === "house" &&
+    event.spaceId === "room"
+  ));
+});
+
 test("same-location movement still updates the occupancy spatial point", () => {
   const places = new PlaceRegistry({ captureEvents: true });
   places.registerDefinition(definition());

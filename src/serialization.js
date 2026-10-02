@@ -405,7 +405,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
         bridge.getEntity?.(saved.entityId);
       if (!entity) {
         throw new Error(
-          `resumeWorldCoreState is missing tracked world entity ${String(saved.entityId)}`
+          `resumeWorldCoreState is missing world entity ${String(saved.entityId)}`
         );
       }
       assertMatchingRestoredOccupancy(
