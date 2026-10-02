@@ -484,9 +484,8 @@ export class PlaceRegistry {
     EntityId,
     Readonly<TravelState>
   >;
-  readonly pendingTravels: readonly Readonly<
-    Record<string, unknown>
-  >[];
+  readonly pendingTravels:
+    readonly Readonly<PersistedPendingTravel>[];
   readonly stateRevision: number;
   readonly travelRevision: number;
   readonly bridge: WorldCoreBridge | null;
