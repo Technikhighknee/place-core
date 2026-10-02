@@ -202,6 +202,28 @@ function availableAnchors(registry, placeId, anchors) {
   return [...anchors].filter((anchor) => anchorAvailable(registry, placeId, anchor));
 }
 
+function anchorBelongsToSpace(
+  definition,
+  anchor,
+  spaceId
+) {
+  let currentSpaceId =
+    anchor?.spaceId ?? null;
+
+  while (currentSpaceId != null) {
+    if (currentSpaceId === spaceId) {
+      return true;
+    }
+
+    currentSpaceId =
+      definition.getSpace(
+        currentSpaceId
+      )?.parentSpaceId ?? null;
+  }
+
+  return false;
+}
+
 export function resolveTravelTarget(registry, target) {
   validateTravelTarget(target);
 
@@ -269,8 +291,14 @@ export function resolveTravelTarget(registry, target) {
         `anchor ${target.anchorId} on place ${String(target.placeId)} is in a disabled space`
       );
     }
-    if (target.spaceId != null &&
-        anchor.spaceId !== target.spaceId) {
+    if (
+      target.spaceId != null &&
+      !anchorBelongsToSpace(
+        definition,
+        anchor,
+        target.spaceId
+      )
+    ) {
       throw travelTargetUnavailable(
         `anchor ${target.anchorId} is not in space ${target.spaceId} on place ${String(target.placeId)}`
       );

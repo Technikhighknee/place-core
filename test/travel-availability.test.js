@@ -201,6 +201,25 @@ test("space targets preserve the requested parent space when its default anchor 
     resolved.spaceId,
     "floor"
   );
+
+  const explicit =
+    resolveTravelTarget(
+      places,
+      {
+        placeId: "house",
+        spaceId: "floor",
+        anchorId: "counter"
+      }
+    );
+
+  assert.equal(
+    explicit.anchorId,
+    "counter"
+  );
+  assert.equal(
+    explicit.spaceId,
+    "floor"
+  );
 });
 
 test("explicit anchor targets reject disabled spaces", () => {
