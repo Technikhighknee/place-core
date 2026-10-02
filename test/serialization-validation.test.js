@@ -1336,6 +1336,31 @@ test("active travel snapshots reject ignored or contradictory plan state", () =>
     /active travel contains unknown field mystery/
   );
 
+  const missingBoolean =
+    serializePlaceCore(places);
+  delete missingBoolean.activeTravels[0]
+    .localStarted;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        missingBoolean
+      ),
+    /active travel is missing required field localStarted/
+  );
+
+  const missingResolvedField =
+    serializePlaceCore(places);
+  delete missingResolvedField
+    .activeTravels[0]
+    .plan.resolvedTarget.anchorId;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        missingResolvedField
+      ),
+    /resolvedTarget is missing required field anchorId/
+  );
+
   const planExtra = serializePlaceCore(places);
   planExtra.activeTravels[0].plan.debug = true;
   assert.throws(
