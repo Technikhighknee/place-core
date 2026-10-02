@@ -868,6 +868,11 @@ export interface PlaceCoreSnapshot {
     spaceOverrides: Record<string, { enabled?: boolean }>;
     dynamicPortals: DynamicPortalInput[];
   }>;
+  occupancy: Array<{
+    entityId: EntityId;
+    domainId: string;
+    position: Vec2;
+  }>;
   activeTravels: any[];
   pendingTravels: any[];
 }

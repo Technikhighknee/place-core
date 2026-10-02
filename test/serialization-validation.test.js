@@ -41,6 +41,157 @@ test("self-contained snapshot restores without external definitions", () => {
   );
 });
 
+test("self-contained snapshot preserves selective tracked occupancy", () => {
+  const places = new PlaceRegistry();
+  places.updateEntityOccupancy({
+    id: "idle",
+    domainId: "default",
+    position: { x: 3, y: 4 }
+  });
+
+  const snapshot = serializePlaceCore(places);
+  assert.deepEqual(
+    snapshot.occupancy,
+    [{
+      entityId: "idle",
+      domainId: "default",
+      position: { x: 3, y: 4 }
+    }]
+  );
+
+  const restored =
+    deserializePlaceCore(
+      structuredClone(snapshot)
+    );
+
+  assert.deepEqual(
+    restored.getEntityLocation("idle"),
+    {
+      domainId: "default",
+      position: { x: 3, y: 4 },
+      places: [],
+      semanticPlaces: [],
+      spaces: []
+    }
+  );
+});
+
+test("snapshot validation rejects duplicate tracked occupancy identities", () => {
+  const snapshot = snapshotFixture();
+  snapshot.occupancy.push(
+    {
+      entityId: "idle",
+      domainId: "default",
+      position: { x: 1, y: 2 }
+    },
+    {
+      entityId: "idle",
+      domainId: "default",
+      position: { x: 2, y: 3 }
+    }
+  );
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      ),
+    /duplicate occupancy entity idle/
+  );
+});
+
+test("state hash includes selective tracked occupancy", () => {
+  const empty = new PlaceRegistry();
+  const tracked = new PlaceRegistry();
+  tracked.updateEntityOccupancy({
+    id: "idle",
+    domainId: "default",
+    position: { x: 3, y: 4 }
+  });
+
+  assert.notEqual(
+    computePlaceCoreStateHash(empty),
+    computePlaceCoreStateHash(tracked)
+  );
+});
+
+test("resumeWorldCoreState verifies stationary tracked occupancy before attach", () => {
+  const places = new PlaceRegistry();
+  places.updateEntityOccupancy({
+    id: "idle",
+    domainId: "default",
+    position: { x: 3, y: 4 }
+  });
+  const snapshot =
+    serializePlaceCore(places);
+
+  const matchingEntity = {
+    id: "idle",
+    domainId: "default",
+    position: { x: 3, y: 4 }
+  };
+  let attached = null;
+  const bridge = {
+    getEntity(entityId) {
+      return entityId === "idle"
+        ? matchingEntity
+        : null;
+    },
+    attachRegistry(registry) {
+      attached = registry;
+      return this;
+    }
+  };
+
+  const restored =
+    deserializePlaceCore(
+      structuredClone(snapshot),
+      {
+        bridge,
+        resumeWorldCoreState: true
+      }
+    );
+
+  assert.equal(attached, restored);
+  assert.deepEqual(
+    restored.getEntityLocation("idle")
+      ?.position,
+    { x: 3, y: 4 }
+  );
+
+  let mismatchedAttached = false;
+  const mismatchedBridge = {
+    getEntity(entityId) {
+      return entityId === "idle"
+        ? {
+            ...matchingEntity,
+            position: { x: 9, y: 4 }
+          }
+        : null;
+    },
+    attachRegistry() {
+      mismatchedAttached = true;
+      return this;
+    }
+  };
+
+  assert.throws(
+    () =>
+      deserializePlaceCore(
+        structuredClone(snapshot),
+        {
+          bridge: mismatchedBridge,
+          resumeWorldCoreState: true
+        }
+      ),
+    /does not match saved occupancy/
+  );
+  assert.equal(
+    mismatchedAttached,
+    false
+  );
+});
+
 test("snapshot validation rejects malformed pending travel identity", () => {
   const missing = snapshotFixture();
   missing.pendingTravels.push({});

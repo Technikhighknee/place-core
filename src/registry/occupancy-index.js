@@ -26,6 +26,24 @@ export class OccupancyIndex {
     return this.#spatialIndexes.size;
   }
 
+  snapshot() {
+    return [...this.#locations.entries()]
+      .map(([entityId, location]) => ({
+        entityId,
+        domainId: location.domainId,
+        position: {
+          x: location.position.x,
+          y: location.position.y
+        }
+      }))
+      .sort((a, b) =>
+        compareStrings(
+          typedIdKey(a.entityId),
+          typedIdKey(b.entityId)
+        )
+      );
+  }
+
   hasInPlace(instanceId) {
     return (this.#entitiesByPlace.get(instanceId)?.size ?? 0) > 0;
   }
