@@ -526,3 +526,82 @@ test("runtime metadata rejects sparse and extended arrays before cloning", () =>
     0
   );
 });
+
+
+test("bound-domain location keeps singular place context coherent with overlapping exterior footprints", () => {
+  const registry = new PlaceRegistry();
+
+  registry.registerDefinition({
+    id: "interior",
+    layers: [{ id: "inside" }],
+    spaces: [{
+      id: "room",
+      layerId: "inside",
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 10,
+        maxY: 10
+      }
+    }]
+  });
+
+  registry.registerDefinition({
+    id: "overlay",
+    footprint: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 10,
+      maxY: 10
+    }
+  });
+
+  const interior = registry.createPlace({
+    id: "house",
+    definitionId: "interior"
+  });
+  const domainId =
+    interior.layerDomains.get("inside");
+
+  registry.createPlace({
+    id: "overlay",
+    definitionId: "overlay",
+    placement: {
+      domainId,
+      transform: {
+        x: 0,
+        y: 0,
+        rotation: 0
+      },
+      containment: "footprint"
+    }
+  });
+
+  const location = registry.locate(
+    domainId,
+    { x: 5, y: 5 }
+  );
+
+  assert.deepEqual(
+    location.places,
+    ["house", "overlay"]
+  );
+  assert.equal(
+    location.placeId,
+    "house"
+  );
+  assert.equal(
+    location.layerId,
+    "inside"
+  );
+  assert.equal(
+    location.deepestSpace?.placeId,
+    "house"
+  );
+  assert.equal(
+    location.deepestSpace?.id,
+    "room"
+  );
+});

@@ -33,7 +33,13 @@ export class PlaceRegistry extends CorePlaceRegistry {
     return deepFreeze({
       ...location,
       spaces,
-      placeId: location.places.length ? location.places[location.places.length - 1] : null,
+      placeId:
+        binding?.instanceId ??
+        (location.places.length
+          ? location.places[
+              location.places.length - 1
+            ]
+          : null),
       layerId: binding?.layerId ?? null,
       deepestSpace
     });
