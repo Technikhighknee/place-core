@@ -779,10 +779,7 @@ export function findDomainPortalPath(
 
 export function resolveTravelTarget(
   registry: PlaceRegistry,
-  target: Exclude<
-    TravelTarget,
-    { kind: "nearest" }
-  >
+  target: TravelTarget
 ): TravelPlan["resolvedTarget"];
 
 export function planTravel(
