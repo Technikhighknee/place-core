@@ -5,6 +5,7 @@ import {
   canonicalStringify,
   cloneJson,
   deepFreeze,
+  encodeIdSegment,
   tupleKey
 } from "../utils.js";
 
@@ -325,34 +326,12 @@ export function placementEqual(a, b) {
     a.transform.scale === b.transform.scale;
 }
 
-function encodeDomainSegment(value) {
-  const text = String(value);
-
-  try {
-    return encodeURIComponent(text);
-  } catch (error) {
-    if (!(error instanceof URIError)) {
-      throw error;
-    }
-
-    let encoded = "";
-    for (let i = 0; i < text.length; i += 1) {
-      encoded +=
-        `%u${text
-          .charCodeAt(i)
-          .toString(16)
-          .toUpperCase()
-          .padStart(4, "0")}`;
-    }
-    return encoded;
-  }
-}
 
 export function defaultLayerDomainId(placeId, layerId) {
   const placeSegment = typeof placeId === "number"
-    ? `~n:${encodeDomainSegment(placeId)}`
-    : encodeDomainSegment(placeId);
-  return `${placeSegment}:${encodeDomainSegment(layerId)}`;
+    ? `~n:${encodeIdSegment(placeId)}`
+    : encodeIdSegment(placeId);
+  return `${placeSegment}:${encodeIdSegment(layerId)}`;
 }
 
 export function typedIdKey(id) {

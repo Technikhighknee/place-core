@@ -1166,3 +1166,64 @@ test("deep space containment does not depend on the JavaScript call stack", () =
     depth - 1
   );
 });
+
+
+test("default topology IDs support lone surrogate definition and layer IDs", () => {
+  const definition = compilePlace({
+    id: "\uD800",
+    layers: [{
+      id: "\uDCFF",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 }
+        ],
+        roads: [{
+          id: "road",
+          from: "a",
+          to: "b"
+        }]
+      }
+    }]
+  });
+
+  assert.equal(
+    definition
+      .getLayer("\uDCFF")
+      .topologyId,
+    "%uD800:%uDCFF"
+  );
+
+  const literal = compilePlace({
+    id: "%uD800",
+    layers: [{
+      id: "%uDCFF",
+      navigation: {
+        nodes: [
+          { id: "a", x: 0, y: 0 },
+          { id: "b", x: 1, y: 0 }
+        ],
+        roads: [{
+          id: "road",
+          from: "a",
+          to: "b"
+        }]
+      }
+    }]
+  });
+
+  assert.equal(
+    literal
+      .getLayer("%uDCFF")
+      .topologyId,
+    "%25uD800:%25uDCFF"
+  );
+  assert.notEqual(
+    definition
+      .getLayer("\uDCFF")
+      .topologyId,
+    literal
+      .getLayer("%uDCFF")
+      .topologyId
+  );
+});

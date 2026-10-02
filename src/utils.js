@@ -30,6 +30,29 @@ export function tupleKey(...parts) {
   return key;
 }
 
+export function encodeIdSegment(value) {
+  const text = String(value);
+
+  try {
+    return encodeURIComponent(text);
+  } catch (error) {
+    if (!(error instanceof URIError)) {
+      throw error;
+    }
+
+    let encoded = "";
+    for (let i = 0; i < text.length; i += 1) {
+      encoded +=
+        `%u${text
+          .charCodeAt(i)
+          .toString(16)
+          .toUpperCase()
+          .padStart(4, "0")}`;
+    }
+    return encoded;
+  }
+}
+
 function isPlainObject(value) {
   if (!value || typeof value !== "object") return false;
   const prototype = Object.getPrototypeOf(value);

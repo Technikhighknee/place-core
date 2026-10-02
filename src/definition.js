@@ -12,6 +12,7 @@ import {
   cloneJson,
   compareStrings,
   deepFreeze,
+  encodeIdSegment,
   normalizeBoolean,
   normalizeStringList,
   sha256,
@@ -333,7 +334,7 @@ function normalizeDefinitionRevision(value) {
 }
 
 function defaultTopologyId(definitionId, layerId) {
-  return `${encodeURIComponent(definitionId)}:${encodeURIComponent(layerId)}`;
+  return `${encodeIdSegment(definitionId)}:${encodeIdSegment(layerId)}`;
 }
 
 function normalizeLayer(layer, definitionId) {
