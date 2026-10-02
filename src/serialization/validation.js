@@ -1543,7 +1543,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       );
     }
 
-    for (const membership of item.memberships ?? []) {
+    for (const membership of item.memberships) {
       if (!instances.has(idKey(membership.parentPlaceId))) {
         throw new Error(
           `instance ${String(item.id)} references missing membership parent ${String(membership.parentPlaceId)}`
@@ -1657,7 +1657,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       );
     }
 
-    for (const membership of item.memberships ?? []) {
+    for (const membership of item.memberships) {
       parents.set(
         idKey(membership.parentPlaceId),
         membership.parentPlaceId
@@ -1949,7 +1949,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
         while (current) {
           if (
             ownValue(
-              item.spaceOverrides ?? {},
+              item.spaceOverrides,
               current.id
             )?.enabled === false
           ) {
@@ -2298,7 +2298,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       const definition =
         definitions.get(item.definitionId);
       const dynamic =
-        (item.dynamicPortals ?? [])
+        item.dynamicPortals
           .find((portal) =>
             portal.id === step.portalId
           ) ??
@@ -2320,7 +2320,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       const override =
         dynamic == null
           ? ownValue(
-              item.portalOverrides ?? {},
+              item.portalOverrides,
               step.portalId
             ) ?? {}
           : {};
@@ -2457,7 +2457,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
   };
 
   const travelEntities = new Set();
-  for (const travel of snapshot.activeTravels ?? []) {
+  for (const travel of snapshot.activeTravels) {
     assertPersistedActiveTravelState(
       travel,
       "active travel"
@@ -2482,7 +2482,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     }
   }
 
-  for (let i = 0; i < (snapshot.pendingTravels ?? []).length; i += 1) {
+  for (let i = 0; i < snapshot.pendingTravels.length; i += 1) {
     const pending = snapshot.pendingTravels[i];
     const pendingLabel =
       `snapshot.pendingTravels[${i}]`;

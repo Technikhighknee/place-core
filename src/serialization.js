@@ -348,7 +348,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
 
   // Additional semantic relations form the independent membership DAG.
   for (const item of orderedInstances) {
-    for (const membership of item.memberships ?? []) {
+    for (const membership of item.memberships) {
       registry.addMembership(
         item.id,
         membership
@@ -369,14 +369,14 @@ export function deserializePlaceCore(snapshot, options = {}) {
   // Structural sparse state is restored only after all graph identities and
   // coordinate-frame relationships exist.
   for (const item of orderedInstances) {
-    for (const portal of item.dynamicPortals ?? []) {
+    for (const portal of item.dynamicPortals) {
       registry.addPortal(
         item.id,
         dynamicPortalInputFromSnapshot(portal)
       );
     }
     for (const [portalId, patch] of Object.entries(
-      item.portalOverrides ?? {}
+      item.portalOverrides
     )) {
       registry.setPortalState(
         item.id,
@@ -385,7 +385,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
       );
     }
     for (const [boundaryId, patch] of Object.entries(
-      item.boundaryOverrides ?? {}
+      item.boundaryOverrides
     )) {
       registry.setBoundaryState(
         item.id,
@@ -394,7 +394,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
       );
     }
     for (const [spaceId, patch] of Object.entries(
-      item.spaceOverrides ?? {}
+      item.spaceOverrides
     )) {
       registry.setSpaceState(
         item.id,
@@ -406,7 +406,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
 
 
   const occupancy = snapshot.occupancy;
-  const active = snapshot.activeTravels ?? [];
+  const active = snapshot.activeTravels;
   const activeEntityKeys = new Set(
     active.map((saved) =>
       idKey(saved.entityId)
@@ -584,19 +584,13 @@ export function deserializePlaceCore(snapshot, options = {}) {
     for (const saved of active) {
       const state = cloneJson(saved);
       const planWasStale =
-        state.planStale !== false;
+        state.planStale;
       delete state.planStale;
-      state.worldChangePolicy ??= "encounter";
       state.options = Object.freeze({
-        ...(state.options ?? {}),
-        worldChangePolicy:
-          state.options?.worldChangePolicy ??
-          state.worldChangePolicy,
-        portalEntryTolerance:
-          state.options?.portalEntryTolerance ??
-          0.25
+        ...state.options
       });
-      state.worldChangePolicy = state.options.worldChangePolicy;
+      state.worldChangePolicy =
+        state.options.worldChangePolicy;
       const resumedTravelRevision =
         planWasStale
           ? (
@@ -662,10 +656,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
           saved.entityId,
           entity,
           saved.target,
-          saved.options ?? {
-            worldChangePolicy: saved.worldChangePolicy ?? "encounter",
-            portalEntryTolerance: 0.25
-          }
+          saved.options
         );
         if (!restarted) {
           retainPending(saved);
@@ -715,7 +706,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
     for (const saved of active) retainPending(saved);
   }
 
-  for (const pending of snapshot.pendingTravels ?? []) {
+  for (const pending of snapshot.pendingTravels) {
     registry._pushPendingTravel(
       PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
       pending
