@@ -487,7 +487,7 @@ test("failed place creation rolls semantic membership indexes back transactional
 });
 
 
-test("version-1 snapshots without memberships remain backward compatible", () => {
+test("version-1 snapshots require explicit memberships state", () => {
   const places = registry();
 
   add(places, "city");
@@ -500,28 +500,13 @@ test("version-1 snapshots without memberships remain backward compatible", () =>
     delete instance.memberships;
   }
 
-  assert.equal(
-    validatePlaceCoreSnapshot(snapshot),
-    true
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      ),
+    /missing required field memberships/
   );
-
-  const restored = deserializePlaceCore(
-    JSON.parse(JSON.stringify(snapshot))
-  );
-
-  assert.deepEqual(
-    restored.getMemberships("city"),
-    []
-  );
-  assert.deepEqual(
-    restored.getMemberships("tavern"),
-    []
-  );
-  assert.deepEqual(
-    restored.getSemanticAncestors("tavern"),
-    ["city"]
-  );
-  restored.assertInternalConsistency();
 });
 
 

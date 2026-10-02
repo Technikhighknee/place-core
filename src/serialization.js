@@ -16,6 +16,7 @@ import {
   sha256
 } from "./utils.js";
 import {
+  _startTravelWithEntity,
   startTravel,
   stopTravel
 } from "./travel.js";
@@ -655,10 +656,11 @@ export function deserializePlaceCore(snapshot, options = {}) {
           entity
         );
 
-        const restarted = startTravel(
+        const restarted = _startTravelWithEntity(
           registry,
           bridge,
           saved.entityId,
+          entity,
           saved.target,
           saved.options ?? {
             worldChangePolicy: saved.worldChangePolicy ?? "encounter",
