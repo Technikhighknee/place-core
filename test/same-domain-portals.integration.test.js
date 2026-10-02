@@ -8,14 +8,18 @@ import {
   mobilityProfile,
   startJourney,
   stopJourney,
-  stepSimulation
+  stepSimulation,
+  serializeWorldCore,
+  deserializeWorldCore
 } from "world-core";
 
 import {
   PlaceRegistry,
   WorldCoreBridge,
   startTravel,
-  stepPlaceSimulation
+  stepPlaceSimulation,
+  serializePlaceCore,
+  deserializePlaceCore
 } from "../src/index.js";
 
 function roomDoorDefinition() {
@@ -273,6 +277,133 @@ test("same-domain room doors emit semantic portal traversal events from world-co
   }
 
   assert.deepEqual(world.peekEvents(), []);
+});
+
+test("restored world journeys retain an in-progress same-domain portal lifecycle", () => {
+  const {
+    world,
+    navigation,
+    bridge,
+    places
+  } = setup();
+
+  const state = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "inn",
+      anchorId: "kitchen-target"
+    }
+  );
+  assert.ok(state);
+
+  let entered = false;
+  for (let i = 0; i < 100 && !entered; i += 1) {
+    stepSimulation(
+      world,
+      navigation,
+      0.1
+    );
+    stepPlaceSimulation(
+      places,
+      bridge,
+      0.1
+    );
+    entered = places.peekEvents().some(
+      (event) =>
+        event.type === "portal-enter" &&
+        event.portalId === "kitchen-door"
+    );
+  }
+
+  assert.equal(entered, true);
+  assert.equal(
+    places.peekEvents().some(
+      (event) =>
+        event.type === "portal-traverse" &&
+        event.portalId === "kitchen-door"
+    ),
+    false
+  );
+  assert.equal(
+    world.getEntity("hans")
+      .journey?.roadEntered,
+    true
+  );
+
+  const worldSnapshot =
+    serializeWorldCore(
+      world,
+      navigation
+    );
+  const placeSnapshot =
+    serializePlaceCore(
+      places
+    );
+
+  const restoredWorld =
+    deserializeWorldCore(
+      worldSnapshot
+    );
+  const restoredBridge =
+    new WorldCoreBridge({
+      world: restoredWorld.world,
+      navigation:
+        restoredWorld.navigation,
+      Navigation,
+      startJourney,
+      stopJourney,
+      existingDomainPolicy: "adopt"
+    });
+  const restoredPlaces =
+    deserializePlaceCore(
+      placeSnapshot,
+      {
+        bridge: restoredBridge,
+        resumeWorldCoreState: true
+      }
+    );
+
+  let ticks = 0;
+  while (
+    restoredPlaces.activeTravels.has(
+      "hans"
+    ) &&
+    ticks < 100
+  ) {
+    stepSimulation(
+      restoredWorld.world,
+      restoredWorld.navigation,
+      0.1
+    );
+    stepPlaceSimulation(
+      restoredPlaces,
+      restoredBridge,
+      0.1
+    );
+    ticks += 1;
+  }
+
+  assert.ok(ticks < 100);
+  const events =
+    restoredPlaces.drainEvents()
+      .filter(
+        (event) =>
+          event.portalId ===
+            "kitchen-door" &&
+          event.sameDomain === true
+      );
+
+  assert.deepEqual(
+    events.map((event) =>
+      event.type
+    ),
+    [
+      "portal-traverse",
+      "portal-exit"
+    ]
+  );
 });
 
 test("reverse same-domain room traversal reports reversed semantic direction", () => {

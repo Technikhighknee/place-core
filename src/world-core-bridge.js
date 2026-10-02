@@ -139,6 +139,62 @@ export class WorldCoreBridge {
     return this;
   }
 
+  synchronizeRuntimeState() {
+    if (!this.#registry) {
+      throw new Error(
+        "WorldCoreBridge must be attached before runtime state can be synchronized"
+      );
+    }
+
+    this.#sameDomainPortalCrossings.clear();
+
+    const moving =
+      this.world.movingEntities ??
+      this.world.entities;
+    if (
+      !moving ||
+      typeof moving.values !== "function"
+    ) {
+      return 0;
+    }
+
+    let restored = 0;
+    for (const entity of moving.values()) {
+      const journey = entity?.journey;
+      if (
+        !journey ||
+        journey.roadEntered !== true
+      ) {
+        continue;
+      }
+
+      const leg =
+        journey.prefixLeg ??
+        journey.route?.legs?.[
+          journey.legIndex
+        ] ??
+        null;
+      const roadId =
+        leg?.roadId ?? null;
+      if (roadId == null) continue;
+
+      const crossing =
+        this.#resolveSameDomainPortalCrossing(
+          entity,
+          roadId
+        );
+      if (!crossing) continue;
+
+      this.#sameDomainPortalCrossings.set(
+        entity.id,
+        crossing
+      );
+      restored += 1;
+    }
+
+    return restored;
+  }
+
   dispose() {
     if (this.#registry?.bridge === this) {
       if ((this.#registry.instances?.size ?? 0) > 0) {
