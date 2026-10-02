@@ -267,6 +267,11 @@ test("restart mode preserves missing-entity travel intent instead of dropping it
     restored.pendingTravels[0].target,
     { placeId: "first", anchorId: "target" }
   );
+  assert.equal(
+    restored.getEntityLocation("hans"),
+    null,
+    "missing world entities must not survive as snapshot ghost occupancy"
+  );
 });
 
 
@@ -530,7 +535,75 @@ test("restart mode retains travel intent when entity lookup throws", () => {
     bridge.registry,
     restored
   );
+  assert.equal(
+    restored.getEntityLocation("hans"),
+    null,
+    "unreadable live entities must not retain stale snapshot occupancy"
+  );
   restored.assertInternalConsistency();
+});
+
+
+test("bridge-backed restore re-derives selective occupancy from live world state", () => {
+  const places = new PlaceRegistry();
+  places.updateEntityOccupancy({
+    id: "idle",
+    domainId: "snapshot-domain",
+    position: { x: 1, y: 2 }
+  });
+  const snapshot =
+    serializePlaceCore(places);
+
+  const liveEntity = {
+    id: "idle",
+    domainId: "live-domain",
+    position: { x: 9, y: 4 }
+  };
+  const bridge = {
+    registry: null,
+    attachRegistry(registry) {
+      this.registry = registry;
+      return this;
+    },
+    getEntity(entityId) {
+      if (entityId === "idle") {
+        return liveEntity;
+      }
+      if (entityId === "untracked") {
+        return {
+          id: "untracked",
+          domainId: "live-domain",
+          position: { x: 0, y: 0 }
+        };
+      }
+      return null;
+    }
+  };
+
+  const restored =
+    deserializePlaceCore(
+      snapshot,
+      { bridge }
+    );
+
+  assert.deepEqual(
+    restored.getEntityLocation("idle"),
+    {
+      domainId: "live-domain",
+      position: { x: 9, y: 4 },
+      places: [],
+      semanticPlaces: [],
+      spaces: [],
+      placeId: null,
+      layerId: null,
+      deepestSpace: null
+    }
+  );
+  assert.equal(
+    restored.getEntityLocation("untracked"),
+    null,
+    "restore must not expand selective occupancy to all live entities"
+  );
 });
 
 

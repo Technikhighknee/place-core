@@ -396,6 +396,8 @@ export function deserializePlaceCore(snapshot, options = {}) {
   const occupancy = snapshot.occupancy;
   const active = snapshot.activeTravels ?? [];
   const resumableEntities = new Map();
+  const liveOccupancyEntities =
+    new Map();
 
   // Resume requires the restored world to match every selectively tracked
   // place-core entity, not only entities that happen to be travelling.
@@ -439,11 +441,52 @@ export function deserializePlaceCore(snapshot, options = {}) {
         entity
       );
     }
+  } else if (bridge) {
+    // With a live bridge but without resume semantics, world-core is the
+    // physical authority. Preserve only the selectively tracked identity set
+    // from the snapshot and re-derive each surviving entity's current
+    // domain/position from the live world. Missing or temporarily unreadable
+    // entities must not become stale "ghost" occupancy.
+    for (const saved of occupancy) {
+      let entity;
+      try {
+        entity =
+          bridge.getEntity?.(
+            saved.entityId
+          );
+      } catch {
+        continue;
+      }
+      if (!entity) continue;
+
+      assertRestoredWorldEntityLocation(
+        entity,
+        saved.entityId
+      );
+      liveOccupancyEntities.set(
+        saved.entityId,
+        entity
+      );
+    }
   }
 
-  // Occupancy is place-core state. Persist only the tracked entity's
-  // identity/domain/position and rebuild semantic memberships on restore.
+  // Occupancy is a selectively tracked place-core index over physical state.
+  // Standalone restore uses the snapshot; bridge-backed restore uses the live
+  // world unless resume semantics already proved both states identical.
   for (const saved of occupancy) {
+    if (bridge && !resumeWorldCoreState) {
+      const entity =
+        liveOccupancyEntities.get(
+          saved.entityId
+        );
+      if (entity) {
+        registry.updateEntityOccupancy(
+          entity
+        );
+      }
+      continue;
+    }
+
     registry.updateEntityOccupancy({
       id: saved.entityId,
       domainId: saved.domainId,
