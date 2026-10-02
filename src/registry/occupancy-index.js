@@ -182,6 +182,20 @@ export class OccupancyIndex {
 
     for (const [entityId, location] of
       this.#locations) {
+      const resolved =
+        this.#locate(
+          location.domainId,
+          location.position
+        );
+      if (!this.#sameLocation(
+        location,
+        resolved
+      )) {
+        throw new Error(
+          "occupancy location context drift"
+        );
+      }
+
       addExpected(
         expectedByDomain,
         location.domainId,
