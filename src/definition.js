@@ -462,6 +462,7 @@ function normalizeBoundary(boundary, layersById) {
     boundary.b,
     `boundary(${boundary.id}).b`
   );
+  const boundaryRoadIds = new Set();
   const roadBindings = requireArray(
     boundary.roadBindings,
     `boundary(${boundary.id}).roadBindings`
@@ -472,6 +473,12 @@ function normalizeBoundary(boundary, layersById) {
       `boundary(${boundary.id}).roadBindings[${index}]`
     );
     assertStringId(binding.roadId, `boundary(${boundary.id}).roadBindings[${index}].roadId`);
+    if (boundaryRoadIds.has(binding.roadId)) {
+      throw new Error(
+        `boundary ${boundary.id} has duplicate road binding ${binding.roadId}`
+      );
+    }
+    boundaryRoadIds.add(binding.roadId);
     return deepFreeze({ roadId: binding.roadId });
   });
   return deepFreeze({
@@ -602,6 +609,7 @@ function normalizePortal(portal, layersById, spacesById) {
   }
   const a = normalizeEndpoint(portal.a, portal.id, layersById, spacesById);
   const b = normalizeEndpoint(portal.b, portal.id, layersById, spacesById);
+  const portalRoadBindings = new Set();
   const roadBindings = requireArray(
     portal.roadBindings,
     `portal(${portal.id}).roadBindings`
@@ -618,6 +626,14 @@ function normalizePortal(portal, layersById, spacesById) {
         `portal ${portal.id} road binding references unknown layer ${binding.layerId}`
       );
     }
+    const bindingKey =
+      `${binding.layerId}\u0000${binding.roadId}`;
+    if (portalRoadBindings.has(bindingKey)) {
+      throw new Error(
+        `portal ${portal.id} has duplicate road binding ${binding.layerId}:${binding.roadId}`
+      );
+    }
+    portalRoadBindings.add(bindingKey);
     return deepFreeze({ layerId: binding.layerId, roadId: binding.roadId });
   });
   return deepFreeze({

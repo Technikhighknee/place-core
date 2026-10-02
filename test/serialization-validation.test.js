@@ -963,6 +963,34 @@ test("snapshot validation rejects invalid dynamic portal semantics", () => {
   );
 });
 
+test("snapshot validation rejects duplicate dynamic portal road bindings", () => {
+  const snapshot = snapshotFixture();
+  const portal = canonicalDynamicPortal({
+    id: "duplicate-binding",
+    roadBindings: [
+      {
+        layerId: "ground",
+        roadId: "same-road"
+      },
+      {
+        layerId: "ground",
+        roadId: "same-road"
+      }
+    ]
+  });
+  snapshot.instances[0]
+    .dynamicPortals.push(portal);
+
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        snapshot
+      ),
+    /duplicate road binding/
+  );
+});
+
+
 test("snapshot validation rejects malformed active travel state", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({

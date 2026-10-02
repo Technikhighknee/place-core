@@ -2420,6 +2420,7 @@ export class PlaceRegistry {
         "dynamic portal roadBindings must be an array"
       );
     }
+    const seenRoadBindings = new Set();
     const roadBindings =
       roadBindingsInput.map((binding, index) => {
         assertPatchKeys(
@@ -2440,6 +2441,14 @@ export class PlaceRegistry {
             `dynamic portal road binding references unknown layer ${binding.layerId}`
           );
         }
+        const bindingKey =
+          `${binding.layerId}\u0000${binding.roadId}`;
+        if (seenRoadBindings.has(bindingKey)) {
+          throw new Error(
+            `dynamic portal ${spec.id} has duplicate road binding ${binding.layerId}:${binding.roadId}`
+          );
+        }
+        seenRoadBindings.add(bindingKey);
         return {
           layerId: binding.layerId,
           roadId: binding.roadId

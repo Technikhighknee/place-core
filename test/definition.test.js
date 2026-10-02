@@ -722,6 +722,53 @@ test("definition authoring collections must be arrays", () => {
   );
 });
 
+test("definition road bindings reject duplicates", () => {
+  const boundary = tavernBlueprint();
+  boundary.boundaries[0].roadBindings = [
+    { roadId: "taproom-wall-road" },
+    { roadId: "taproom-wall-road" }
+  ];
+  assert.throws(
+    () => compilePlace(boundary),
+    /duplicate road binding/
+  );
+
+  const portal = {
+    id: "duplicate-portal-binding",
+    layers: [{
+      id: "inside",
+      topologyId: "external-topology"
+    }],
+    portals: [{
+      id: "door",
+      a: {
+        kind: "local",
+        layerId: "inside",
+        position: { x: 0, y: 0 }
+      },
+      b: {
+        kind: "external",
+        slot: "outside"
+      },
+      roadBindings: [
+        {
+          layerId: "inside",
+          roadId: "threshold"
+        },
+        {
+          layerId: "inside",
+          roadId: "threshold"
+        }
+      ]
+    }]
+  };
+  assert.throws(
+    () => compilePlace(portal),
+    /duplicate road binding/
+  );
+});
+
+
 test("all semantic kind fields require non-empty strings", () => {
   const mutations = [
     (blueprint) => { blueprint.layers[0].kind = 1; },
