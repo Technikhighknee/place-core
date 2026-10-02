@@ -2077,6 +2077,53 @@ test("fresh travel snapshots cannot reference a missing target place", () => {
     fresh.activeTravels[0].planStale,
     false
   );
+
+  const missingPlanStale =
+    structuredClone(fresh);
+  delete missingPlanStale
+    .activeTravels[0].planStale;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        missingPlanStale
+      ),
+    /planStale must be a boolean/
+  );
+
+  const missingRejectedPairs =
+    structuredClone(fresh);
+  delete missingRejectedPairs
+    .activeTravels[0]
+    .plan.rejectedDomainPairs;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        missingRejectedPairs
+      ),
+    /missing required field rejectedDomainPairs/
+  );
+
+  for (const field of [
+    "worldChangePolicy",
+    "portalEntryTolerance"
+  ]) {
+    const missingOption =
+      structuredClone(fresh);
+    delete missingOption
+      .activeTravels[0]
+      .options[field];
+
+    assert.throws(
+      () =>
+        validatePlaceCoreSnapshot(
+          missingOption
+        ),
+      new RegExp(
+        `options is missing required field ${field}`
+      )
+    );
+  }
+
   fresh.instances = [];
 
   assert.throws(
