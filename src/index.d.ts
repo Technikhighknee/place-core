@@ -769,15 +769,20 @@ export type TravelStep =
       transitionCost: number;
     };
 
+export interface ResolvedTravelTarget {
+  placeId: PlaceId | null;
+  anchorId: string | null;
+  spaceId: string | null;
+  layerId: string | null;
+  domainId: string;
+  position: Vec2;
+  nodeId: string | null;
+}
+
 export interface TravelPlan {
   entityId: EntityId;
   target: TravelTarget;
-  resolvedTarget: ResolvedPortalEndpoint & {
-    placeId?: PlaceId | null;
-    anchorId?: string | null;
-    spaceId?: string | null;
-    layerId?: string | null;
-  };
+  resolvedTarget: ResolvedTravelTarget;
   /** Revision of the travel-relevant place graph used by this plan. */
   travelRevision: number;
   startDomainId: string;
@@ -869,7 +874,7 @@ export function findDomainPortalPath(
 export function resolveTravelTarget(
   registry: PlaceRegistry,
   target: TravelTarget
-): TravelPlan["resolvedTarget"];
+): ResolvedTravelTarget;
 
 export function planTravel(
   registry: PlaceRegistry,
