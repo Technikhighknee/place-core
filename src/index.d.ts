@@ -607,7 +607,6 @@ export class WorldCoreBridge {
   readonly navigation: any;
   readonly existingDomainPolicy: "reject" | "adopt";
 
-  synchronizeRuntimeState(): number;
   dispose(): boolean;
   materializePlace(
     instance: PlaceInstance,

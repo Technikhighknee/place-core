@@ -30,6 +30,7 @@ import {
   PORTAL_STATE_KEYS,
   PLACE_INSTANCE_MUTATION_TOKEN,
   PLACE_REGISTRY_BRIDGE_ATTACH_TOKEN,
+  PLACE_REGISTRY_RESTORE_BRIDGE_TOKEN,
   PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
   abortEnteredTravelPortal,
   bindTravelRuntimeBridge,
@@ -459,7 +460,10 @@ export class PlaceRegistry {
     if (travel) this.#travelRevision += 1;
   }
 
-  attachWorldCoreBridge(bridge) {
+  attachWorldCoreBridge(
+    bridge,
+    restoreToken = null
+  ) {
     if (!bridge || typeof bridge !== "object") {
       throw new TypeError("bridge must be an object");
     }
@@ -527,7 +531,12 @@ export class PlaceRegistry {
         }
       }
 
-      bridge.synchronizeRuntimeState?.();
+      if (
+        restoreToken ===
+        PLACE_REGISTRY_RESTORE_BRIDGE_TOKEN
+      ) {
+        bridge._synchronizeRuntimeState?.();
+      }
     } catch (error) {
       const rollbackErrors = [];
       for (const {

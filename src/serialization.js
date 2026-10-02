@@ -1,5 +1,6 @@
 import { PlaceRegistry } from "./place-registry.js";
 import {
+  PLACE_REGISTRY_RESTORE_BRIDGE_TOKEN,
   PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
   bindTravelRuntimeBridge
 } from "./registry/support.js";
@@ -500,7 +501,14 @@ export function deserializePlaceCore(snapshot, options = {}) {
   // Materialize the fully restored structural state in one late-attach
   // transaction. PlaceRegistry.attachWorldCoreBridge rolls all earlier places back if
   // any later materialization/sync fails.
-  if (bridge) registry.attachWorldCoreBridge(bridge);
+  if (bridge) {
+    registry.attachWorldCoreBridge(
+      bridge,
+      resumeWorldCoreState
+        ? PLACE_REGISTRY_RESTORE_BRIDGE_TOKEN
+        : null
+    );
+  }
 
   if (bridge && resumeWorldCoreState) {
     for (const saved of active) {

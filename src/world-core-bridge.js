@@ -139,7 +139,7 @@ export class WorldCoreBridge {
     return this;
   }
 
-  synchronizeRuntimeState() {
+  _synchronizeRuntimeState() {
     if (!this.#registry) {
       throw new Error(
         "WorldCoreBridge must be attached before runtime state can be synchronized"
