@@ -503,7 +503,7 @@ function localRouteCostsToMany(
       bridge.planLocalRouteCostsToMany({
         domainId,
         position,
-        destinationNodeIds: ids,
+        destinationNodeIds: [...ids],
         mobility,
         options
       });

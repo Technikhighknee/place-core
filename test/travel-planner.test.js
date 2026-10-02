@@ -1616,3 +1616,108 @@ test("explicit target planning returns null when every route exceeds maxCost", (
 
   assert.equal(plan, null);
 });
+
+
+test("batch route-cost bridges cannot mutate the planner destination set", () => {
+  const places = new PlaceRegistry();
+
+  places.registerDefinition({
+    id: "batch-mutation-isolation",
+    layers: [{ id: "inside" }],
+    anchors: [
+      {
+        id: "near",
+        layerId: "inside",
+        position: { x: 1, y: 0 },
+        nodeId: "near-node",
+        tags: ["target"]
+      },
+      {
+        id: "far",
+        layerId: "inside",
+        position: { x: 2, y: 0 },
+        nodeId: "far-node",
+        tags: ["target"]
+      }
+    ]
+  });
+
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "batch-mutation-isolation"
+  });
+
+  const entity = {
+    id: "hans-batch",
+    domainId:
+      place.layerDomains.get("inside"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const bridge = {
+    getEntity(id) {
+      return id === entity.id
+        ? entity
+        : null;
+    },
+    planLocalRouteCostsToMany({
+      destinationNodeIds
+    }) {
+      const requested =
+        [...destinationNodeIds];
+      const result = new Map([
+        ["near-node", 1],
+        ["far-node", 2]
+      ]);
+
+      if (
+        Array.isArray(
+          destinationNodeIds
+        )
+      ) {
+        destinationNodeIds.length = 0;
+      }
+
+      assert.deepEqual(
+        requested,
+        [
+          "far-node",
+          "near-node"
+        ]
+      );
+      return result;
+    },
+    planLocalRoute() {
+      throw new Error(
+        "batch route-cost API should be used"
+      );
+    },
+    startLocalJourney() {
+      return true;
+    },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  const plan = planTravel(
+    places,
+    bridge,
+    entity.id,
+    {
+      kind: "nearest",
+      tag: "target"
+    }
+  );
+
+  assert.ok(plan);
+  assert.equal(
+    plan.resolvedTarget.anchorId,
+    "near"
+  );
+  assert.equal(
+    plan.estimatedSeconds,
+    1
+  );
+});
