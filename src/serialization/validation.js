@@ -57,14 +57,14 @@ function ownValue(object, key) {
 
 function assertCanonicalOrder(
   values,
-  keyOf,
+  compare,
   label
 ) {
   for (let i = 1; i < values.length; i += 1) {
     if (
-      compareStrings(
-        keyOf(values[i - 1]),
-        keyOf(values[i])
+      compare(
+        values[i - 1],
+        values[i]
       ) > 0
     ) {
       throw new Error(
@@ -1149,22 +1149,35 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
   assertCanonicalOrder(
     snapshot.definitions,
-    (item) => item.id,
+    (a, b) =>
+      compareStrings(a.id, b.id),
     "snapshot.definitions"
   );
   assertCanonicalOrder(
     snapshot.instances,
-    (item) => idKey(item.id),
+    (a, b) =>
+      compareStrings(
+        idKey(a.id),
+        idKey(b.id)
+      ),
     "snapshot.instances"
   );
   assertCanonicalOrder(
     snapshot.occupancy,
-    (item) => idKey(item.entityId),
+    (a, b) =>
+      compareStrings(
+        idKey(a.entityId),
+        idKey(b.entityId)
+      ),
     "snapshot.occupancy"
   );
   assertCanonicalOrder(
     snapshot.activeTravels,
-    (item) => idKey(item.entityId),
+    (a, b) =>
+      compareStrings(
+        idKey(a.entityId),
+        idKey(b.entityId)
+      ),
     "snapshot.activeTravels"
   );
 
@@ -1266,8 +1279,15 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     );
     assertCanonicalOrder(
       item.memberships,
-      (membership) =>
-        `${idKey(membership.parentPlaceId)}\u0000${membership.kind}`,
+      (a, b) =>
+        compareStrings(
+          idKey(a.parentPlaceId),
+          idKey(b.parentPlaceId)
+        ) ||
+        compareStrings(
+          a.kind,
+          b.kind
+        ),
       `snapshot.instances[${i}].memberships`
     );
 
@@ -1364,7 +1384,8 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     assertArray(item.dynamicPortals, `instance ${String(item.id)}.dynamicPortals`);
     assertCanonicalOrder(
       item.dynamicPortals,
-      (portal) => portal.id,
+      (a, b) =>
+        compareStrings(a.id, b.id),
       `instance ${String(item.id)}.dynamicPortals`
     );
 
