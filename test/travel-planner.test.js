@@ -1282,3 +1282,158 @@ test("planner considers every equally short domain path before choosing by cost"
     ]
   );
 });
+
+
+function buildFiveShortestPathFixture() {
+  const places = new PlaceRegistry();
+
+  const layers = Array.from(
+    { length: 8 },
+    (_, index) => ({
+      id: `d${index}`
+    })
+  );
+
+  const portal = (
+    id,
+    from,
+    to,
+    transitionCost = 0
+  ) => ({
+    id,
+    bidirectional: false,
+    transitionCost,
+    a: {
+      kind: "local",
+      layerId: `d${from}`,
+      position: { x: 0, y: 0 }
+    },
+    b: {
+      kind: "local",
+      layerId: `d${to}`,
+      position: { x: 0, y: 0 }
+    }
+  });
+
+  places.registerDefinition({
+    id: "five-path-limit",
+    layers,
+    portals: [
+      portal("p01", 0, 1),
+      portal("p04", 0, 4),
+      portal("p05", 0, 5),
+      portal("p13", 1, 3),
+      portal("p16", 1, 6),
+      portal("p46", 4, 6),
+      portal("p53", 5, 3),
+      portal("p56", 5, 6),
+      portal("p32", 3, 2),
+      portal("p62", 6, 2),
+      portal("p27", 2, 7)
+    ],
+    anchors: [{
+      id: "target",
+      layerId: "d7",
+      position: { x: 0, y: 0 }
+    }]
+  });
+
+  const place = places.createPlace({
+    id: "graph-limit",
+    definitionId:
+      "five-path-limit"
+  });
+
+  const entity = {
+    id: "hans-limit",
+    domainId:
+      place.layerDomains.get("d0"),
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  const bridge = {
+    getEntity(id) {
+      return id === entity.id
+        ? entity
+        : null;
+    },
+    planLocalRoute() {
+      throw new Error(
+        "all portal endpoints share their local position"
+      );
+    },
+    startLocalJourney() {
+      return true;
+    },
+    stopLocalJourney() {},
+    transferEntity() {}
+  };
+
+  return {
+    places,
+    bridge,
+    entity,
+    place
+  };
+}
+
+test("shortest path enumeration enforces maxShortestDomainPaths exactly", () => {
+  const {
+    places,
+    bridge
+  } =
+    buildFiveShortestPathFixture();
+
+  assert.throws(
+    () =>
+      planTravel(
+        places,
+        bridge,
+        "hans-limit",
+        {
+          placeId: "graph-limit",
+          anchorId: "target"
+        },
+        {
+          maxShortestDomainPaths: 4
+        }
+      ),
+    /shortest semantic path count exceeds maxShortestDomainPaths \(4\)/
+  );
+});
+
+test("partial shortest path search truncates deterministically instead of throwing", () => {
+  const {
+    places,
+    bridge
+  } =
+    buildFiveShortestPathFixture();
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "hans-limit",
+    {
+      placeId: "graph-limit",
+      anchorId: "target"
+    },
+    {
+      maxShortestDomainPaths: 4,
+      allowPartialShortestPathSearch:
+        true
+    }
+  );
+
+  assert.ok(plan);
+  assert.deepEqual(
+    plan.domainPath,
+    [
+      "graph-limit:d0",
+      "graph-limit:d1",
+      "graph-limit:d3",
+      "graph-limit:d2",
+      "graph-limit:d7"
+    ]
+  );
+});
