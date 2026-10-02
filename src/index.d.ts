@@ -510,6 +510,14 @@ export interface ResolvedPortal {
   metadata: JsonValue;
 }
 
+export interface IndexedResolvedPortal
+  extends ResolvedPortal {
+  key: string;
+  a: ResolvedPortalEndpoint;
+  b: ResolvedPortalEndpoint;
+  connected: true;
+}
+
 export class PlaceInstance {
   readonly id: PlaceId;
   readonly definitionId: string;
@@ -651,9 +659,9 @@ export class PlaceRegistry {
   resolveBoundary(instanceId: PlaceId, boundaryId: string): CompiledPlaceBoundary | null;
 
   resolvePortal(instanceId: PlaceId, portalId: string): ResolvedPortal | null;
-  getPortalRecord(key: string): ResolvedPortal | null;
-  getPortalsForDomain(domainId: string): ResolvedPortal[];
-  getPortalsForRoad(domainId: string, roadId: string): ResolvedPortal[];
+  getPortalRecord(key: string): IndexedResolvedPortal | null;
+  getPortalsForDomain(domainId: string): IndexedResolvedPortal[];
+  getPortalsForRoad(domainId: string, roadId: string): IndexedResolvedPortal[];
   resolvedPortals(placeId?: PlaceId | null): IterableIterator<ResolvedPortal>;
 
   setPortalState(
@@ -1032,11 +1040,7 @@ export function domainPairKey(
 ): string;
 
 export interface DomainPortalTransition {
-  portal: ResolvedPortal & {
-    key: string;
-    a: ResolvedPortalEndpoint;
-    b: ResolvedPortalEndpoint;
-  };
+  portal: IndexedResolvedPortal;
   portalKey: string;
   side: "a" | "b";
   from: ResolvedPortalEndpoint;
