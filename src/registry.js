@@ -2868,6 +2868,255 @@ export class PlaceRegistry {
       throw new Error("portal endpoint spatial record count drift");
     }
 
+    let expectedDomainAdjacencyCount = 0;
+    let expectedRoadBindingCount = 0;
+    let expectedInstancePortalKeyCount = 0;
+    let endpointIndexCount = 0;
+
+    for (const [instanceId, keys] of
+      this.#instancePortalKeys) {
+      if (!this.#instances.has(instanceId) ||
+          keys.size === 0) {
+        throw new Error(
+          "instance portal key index contains invalid entry"
+        );
+      }
+
+      for (const key of keys) {
+        const record =
+          this.#portalRecords.get(key);
+        if (!record ||
+            record.instanceId !== instanceId) {
+          throw new Error(
+            "instance portal key reverse index drift"
+          );
+        }
+        expectedInstancePortalKeyCount += 1;
+      }
+    }
+
+    if (
+      expectedInstancePortalKeyCount !==
+      this.#portalRecords.size
+    ) {
+      throw new Error(
+        "instance portal key count drift"
+      );
+    }
+
+    for (const [domainId, keys] of
+      this.#portalsByDomain) {
+      if (keys.size === 0) {
+        throw new Error(
+          "portal domain index contains empty entry"
+        );
+      }
+      for (const key of keys) {
+        const record =
+          this.#portalRecords.get(key);
+        if (
+          !record ||
+          (
+            record.a.domainId !== domainId &&
+            record.b.domainId !== domainId
+          )
+        ) {
+          throw new Error(
+            "portal domain reverse index drift"
+          );
+        }
+      }
+    }
+
+    for (const record of
+      this.#portalRecords.values()) {
+      expectedDomainAdjacencyCount +=
+        record.a.domainId ===
+          record.b.domainId
+          ? 1
+          : 2;
+    }
+
+    let actualDomainAdjacencyCount = 0;
+    for (const keys of
+      this.#portalsByDomain.values()) {
+      actualDomainAdjacencyCount +=
+        keys.size;
+    }
+    if (
+      actualDomainAdjacencyCount !==
+      expectedDomainAdjacencyCount
+    ) {
+      throw new Error(
+        "portal domain adjacency count drift"
+      );
+    }
+
+    for (const [domainId, roads] of
+      this.#portalsByRoad) {
+      if (roads.size === 0) {
+        throw new Error(
+          "portal road domain index contains empty entry"
+        );
+      }
+      for (const [roadId, keys] of roads) {
+        if (keys.size === 0) {
+          throw new Error(
+            "portal road index contains empty entry"
+          );
+        }
+        for (const key of keys) {
+          const record =
+            this.#portalRecords.get(key);
+          const instance =
+            record == null
+              ? null
+              : this.#instances.get(
+                  record.instanceId
+                );
+          const matches =
+            record?.roadBindings?.some(
+              (binding) =>
+                binding.roadId ===
+                  roadId &&
+                instance?.layerDomains.get(
+                  binding.layerId
+                ) === domainId
+            ) ?? false;
+          if (!matches) {
+            throw new Error(
+              "portal road reverse index drift"
+            );
+          }
+        }
+      }
+    }
+
+    const expectedRoadKeys =
+      new Set();
+    for (const [key, record] of
+      this.#portalRecords) {
+      const instance =
+        this.#instances.get(
+          record.instanceId
+        );
+      for (const binding of
+        record.roadBindings ?? []) {
+        const domainId =
+          instance?.layerDomains.get(
+            binding.layerId
+          );
+        if (domainId != null) {
+          expectedRoadKeys.add(
+            tupleKey(
+              domainId,
+              binding.roadId,
+              key
+            )
+          );
+        }
+      }
+    }
+    expectedRoadBindingCount =
+      expectedRoadKeys.size;
+
+    let actualRoadBindingCount = 0;
+    for (const roads of
+      this.#portalsByRoad.values()) {
+      for (const keys of roads.values()) {
+        actualRoadBindingCount +=
+          keys.size;
+      }
+    }
+    if (
+      actualRoadBindingCount !==
+      expectedRoadBindingCount
+    ) {
+      throw new Error(
+        "portal road binding count drift"
+      );
+    }
+
+    for (const [domainId, index] of
+      this.#portalEndpointIndexes) {
+      if (index.size === 0) {
+        throw new Error(
+          "portal endpoint index contains empty domain"
+        );
+      }
+      endpointIndexCount +=
+        index.size;
+    }
+    if (
+      endpointIndexCount !==
+      this.#portalEndpointRecords.size
+    ) {
+      throw new Error(
+        "portal endpoint spatial index count drift"
+      );
+    }
+
+    let indexedExteriorCount = 0;
+    for (const [instanceId, domainId] of
+      this.#indexedExteriorDomains) {
+      const instance =
+        this.#instances.get(instanceId);
+      const definition =
+        instance == null
+          ? null
+          : this.#definitions.get(
+              instance.definitionId
+            );
+      if (
+        !instance ||
+        !definition?.footprint ||
+        instance.placement?.containment !==
+          "footprint" ||
+        !this.#exteriorIndexes
+          .get(domainId)
+          ?.getBounds(instanceId)
+      ) {
+        throw new Error(
+          "exterior placement reverse index drift"
+        );
+      }
+      indexedExteriorCount += 1;
+    }
+
+    let exteriorIndexCount = 0;
+    for (const [domainId, index] of
+      this.#exteriorIndexes) {
+      if (index.size === 0) {
+        throw new Error(
+          "exterior spatial index contains empty domain"
+        );
+      }
+      exteriorIndexCount += index.size;
+
+      for (const instance of
+        this.#instances.values()) {
+        if (
+          this.#indexedExteriorDomains.get(
+            instance.id
+          ) === domainId &&
+          !index.getBounds(instance.id)
+        ) {
+          throw new Error(
+            "exterior spatial index missing mapped instance"
+          );
+        }
+      }
+    }
+
+    if (
+      exteriorIndexCount !==
+        indexedExteriorCount
+    ) {
+      throw new Error(
+        "exterior spatial index count drift"
+      );
+    }
+
     let traversableEndpointCount = 0;
     for (const index of this.#traversablePortalEndpointIndexes.values()) {
       traversableEndpointCount += index.size;
