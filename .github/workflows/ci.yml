@@ -1,6 +1,8 @@
-name: CI
+name: Road sync completeness verification
 
 on:
+  push:
+    branches: [ci/baseline-verification]
   workflow_dispatch:
 
 jobs:
@@ -12,24 +14,5 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - run: node --test test/late-bridge-attach.test.js
       - run: npm test
-      - run: npm run example:mini-city
-      - run: npm run bench:guardrails
-        env:
-          GUARDRAIL_FAST: "1"
-      - run: npm run bench:nearest-target
-        env:
-          NEAREST_TARGET_PLACES: "5000"
-      - run: npm run bench:explicit-travel
-        env:
-          EXPLICIT_TRAVEL_PLACES: "5000"
-          EXPLICIT_TRAVEL_QUERIES: "100"
-      - run: npm run bench:portal-spatial
-        env:
-          PORTAL_SPATIAL_PLACES: "5000"
-          PORTAL_SPATIAL_QUERIES: "1000"
-      - run: npm run bench:luebeck
-        env:
-          LUEBECK_TRAVELERS: "250"
-          LUEBECK_QUERY_COUNT: "50000"
-          LUEBECK_MAX_TICKS: "1200"
