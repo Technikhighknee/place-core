@@ -161,6 +161,19 @@ export class StaticGeometryIndex {
 
   queryPoint(point, predicate = null) {
     assertVec2(point);
+    if (arguments.length > 2) {
+      throw new TypeError(
+        "StaticGeometryIndex.queryPoint does not accept a query-specific geometry accessor"
+      );
+    }
+    if (
+      predicate != null &&
+      typeof predicate !== "function"
+    ) {
+      throw new TypeError(
+        "StaticGeometryIndex query predicate must be a function or null"
+      );
+    }
     const bucket =
       this.#cells.get(
         this.#key(point.x, point.y)
