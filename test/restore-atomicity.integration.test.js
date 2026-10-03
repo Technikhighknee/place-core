@@ -711,6 +711,67 @@ test("restart mode safely retains unprintable thrown values", () => {
 });
 
 
+test("restart mode safely retains throws whose prototype lookup fails", () => {
+  const { snapshot } =
+    sourceSnapshot({
+      withTravel: true
+    });
+
+  const thrown = new Proxy(
+    {},
+    {
+      getPrototypeOf() {
+        throw new Error(
+          "prototype lookup must not escape restart error retention"
+        );
+      }
+    }
+  );
+  const bridge = {
+    attachRegistry() {
+      return this;
+    },
+    materializePlace() {
+      return {};
+    },
+    syncBoundaryState() {},
+    syncPortalState() {},
+    syncDynamicPortal() {},
+    getEntity() {
+      throw thrown;
+    }
+  };
+
+  const restored =
+    deserializePlaceCore(
+      snapshot,
+      {
+        bridge,
+        restartTravels: true
+      }
+    );
+
+  assert.equal(
+    restored.pendingTravels.length,
+    1
+  );
+  assert.deepEqual(
+    restored.pendingTravels[0]
+      .restartError,
+    {
+      name: "Error",
+      message: "[object Object]"
+    }
+  );
+  assert.doesNotThrow(
+    () =>
+      validatePlaceCoreSnapshot(
+        serializePlaceCore(restored)
+      )
+  );
+});
+
+
 test("bridge-backed restore re-derives selective occupancy from live world state", () => {
   const places = new PlaceRegistry();
   places.updateEntityOccupancy({
