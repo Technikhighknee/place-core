@@ -2576,7 +2576,32 @@ export class WorldCoreBridge {
         mobility,
         options
       );
-      if (planned) result.set(destinationNodeId, planned.estimatedSeconds);
+      if (planned === null) continue;
+      if (
+        !planned ||
+        typeof planned !== "object" ||
+        Array.isArray(planned)
+      ) {
+        throw new TypeError(
+          "findRouteFromPosition must return a route object or null"
+        );
+      }
+      const estimatedSeconds =
+        planned.estimatedSeconds;
+      if (
+        !Number.isFinite(
+          estimatedSeconds
+        ) ||
+        estimatedSeconds < 0
+      ) {
+        throw new RangeError(
+          "route estimatedSeconds must be finite and non-negative"
+        );
+      }
+      result.set(
+        destinationNodeId,
+        estimatedSeconds
+      );
     }
     return result;
   }

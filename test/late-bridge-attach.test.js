@@ -558,6 +558,52 @@ test("disposing a bridge with active direct-domain travel is rejected", () => {
 });
 
 
+test("bulk route fallback rejects non-route sentinel values", () => {
+  for (const invalid of [
+    undefined,
+    false,
+    0,
+    "",
+    []
+  ]) {
+    const world = {
+      subscribeEvents() {
+        return () => {};
+      }
+    };
+    const navigation = {
+      findRouteFromPosition() {
+        return invalid;
+      }
+    };
+    const bridge =
+      new WorldCoreBridge({
+        world,
+        navigation,
+        startJourney() {},
+        stopJourney() {}
+      });
+
+    assert.throws(
+      () =>
+        bridge.planLocalRouteCostsToMany({
+          domainId: "domain",
+          position: {
+            x: 0,
+            y: 0
+          },
+          destinationNodeIds: [
+            "target"
+          ],
+          mobility: {},
+          options: {}
+        }),
+      /route object or null/
+    );
+  }
+});
+
+
 test("local journey stop must clear the live world journey", () => {
   const entity = {
     id: "hans",
