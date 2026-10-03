@@ -903,6 +903,72 @@ test("materialization rollback continues domain cleanup after override failure",
 });
 
 
+test("materialization rollback rejects unsuccessful topology removal", () => {
+  const topology = {};
+  const topologies = new Map([
+    ["place-topology", topology]
+  ]);
+  let removeCalls = 0;
+
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain() {
+      return undefined;
+    }
+  };
+  const navigation = {
+    topologies,
+    removeTopology(id) {
+      removeCalls += 1;
+      assert.equal(id, "place-topology");
+      return false;
+    }
+  };
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+
+  assert.throws(
+    () =>
+      bridge.rollbackMaterializePlace(
+        {
+          id: "house",
+          layerDomains: new Map(),
+          dynamicPortals: new Map()
+        },
+        {
+          id: "place",
+          layers: [],
+          portals: [],
+          boundaries: []
+        },
+        {
+          domains: [],
+          newTopologyIds: [
+            "place-topology"
+          ],
+          newTopologies: new Map([
+            ["place-topology", topology]
+          ])
+        }
+      ),
+    /failed to remove navigation topology place-topology/
+  );
+
+  assert.equal(removeCalls, 1);
+  assert.equal(
+    topologies.get("place-topology"),
+    topology
+  );
+});
+
+
 test("road-effect cleanup attempts every binding after individual failures", () => {
   const removed = [];
   const navigation = {

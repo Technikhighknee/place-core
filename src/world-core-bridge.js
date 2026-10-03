@@ -1244,9 +1244,15 @@ export class WorldCoreBridge {
           expected != null &&
           current === expected
         ) {
-          this.navigation.removeTopology(
-            topologyId
-          );
+          const didRemove =
+            this.navigation.removeTopology(
+              topologyId
+            );
+          if (didRemove !== true) {
+            throw new Error(
+              `failed to remove navigation topology ${topologyId}`
+            );
+          }
         }
 
         if (
