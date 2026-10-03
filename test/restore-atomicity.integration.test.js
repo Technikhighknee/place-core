@@ -547,9 +547,11 @@ test("restart mode retains travel intent when entity lookup throws", () => {
     syncPortalState() {},
     syncDynamicPortal() {},
     getEntity() {
-      throw new Error(
+      const error = new Error(
         "synthetic entity lookup failure"
       );
+      error.name = "";
+      throw error;
     },
     planLocalRoute() {
       throw new Error(
@@ -586,6 +588,18 @@ test("restart mode retains travel intent when entity lookup throws", () => {
     restored.pendingTravels[0]
       .restartError?.message,
     "synthetic entity lookup failure"
+  );
+  assert.equal(
+    restored.pendingTravels[0]
+      .restartError?.name,
+    "Error",
+    "retained restart errors must remain snapshot-valid"
+  );
+  assert.doesNotThrow(
+    () =>
+      validatePlaceCoreSnapshot(
+        serializePlaceCore(restored)
+      )
   );
   assert.equal(
     bridge.registry,

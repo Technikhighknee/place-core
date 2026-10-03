@@ -664,6 +664,18 @@ test("pending travel snapshots remain canonical after active intents become pend
       )
   );
 
+  const nullRestartError =
+    structuredClone(resnapshot);
+  nullRestartError.pendingTravels[0]
+    .restartError = null;
+  assert.throws(
+    () =>
+      validatePlaceCoreSnapshot(
+        nullRestartError
+      ),
+    /restartError must be an object/
+  );
+
   const nonCanonical =
     structuredClone(resnapshot);
   nonCanonical.pendingTravels.reverse();
