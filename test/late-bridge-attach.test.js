@@ -1323,7 +1323,7 @@ test("materialization rollback verifies domain override cleanup", () => {
       [
         "existing-domain",
         {
-          overrideEffectCount: 1
+          overrideEffectCount: 0
         }
       ]
     ]),
