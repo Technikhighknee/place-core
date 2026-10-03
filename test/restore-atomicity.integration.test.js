@@ -711,6 +711,59 @@ test("restart mode safely retains unprintable thrown values", () => {
 });
 
 
+test("restart mode retains falsy thrown values as restart errors", () => {
+  for (const [thrown, message] of [
+    [null, "null"],
+    [undefined, "undefined"],
+    [false, "false"],
+    [0, "0"],
+    ["", ""]
+  ]) {
+    const { snapshot } =
+      sourceSnapshot({
+        withTravel: true
+      });
+
+    const bridge = {
+      attachRegistry() {
+        return this;
+      },
+      materializePlace() {
+        return {};
+      },
+      syncBoundaryState() {},
+      syncPortalState() {},
+      syncDynamicPortal() {},
+      getEntity() {
+        throw thrown;
+      }
+    };
+
+    const restored =
+      deserializePlaceCore(
+        snapshot,
+        {
+          bridge,
+          restartTravels: true
+        }
+      );
+
+    assert.equal(
+      restored.pendingTravels.length,
+      1
+    );
+    assert.deepEqual(
+      restored.pendingTravels[0]
+        .restartError,
+      {
+        name: "Error",
+        message
+      }
+    );
+  }
+});
+
+
 test("restart mode safely retains throws whose prototype lookup fails", () => {
   const { snapshot } =
     sourceSnapshot({
