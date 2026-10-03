@@ -31,8 +31,6 @@ export {
   validatePlaceCoreSnapshot
 };
 
-const NO_RESTART_ERROR = Symbol("no-restart-error");
-
 function safeThrownString(value) {
   try {
     return String(value);
@@ -611,17 +609,17 @@ export function deserializePlaceCore(snapshot, options = {}) {
 
   const retainPending = (
     saved,
-    restartError = NO_RESTART_ERROR
+    ...restartErrors
   ) => {
     const pending = {
       entityId: saved.entityId,
       target: cloneJson(saved.target),
       savedState: cloneJson(saved)
     };
-    if (restartError !== NO_RESTART_ERROR) {
+    if (restartErrors.length > 0) {
       pending.restartError =
         serializeRestartError(
-          restartError
+          restartErrors[0]
         );
     }
     registry._pushPendingTravel(
