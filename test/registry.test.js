@@ -287,6 +287,110 @@ test("semantic membership keys cannot collide on embedded separators", () => {
 });
 
 
+test("numeric zero place IDs remain distinct and survive graph snapshot round-trip", () => {
+  const registry = new PlaceRegistry();
+  registry.registerDefinition({
+    id: "typed-zero-place",
+    layers: [{ id: "inside" }]
+  });
+
+  registry.createPlace({
+    id: "root",
+    definitionId: "typed-zero-place"
+  });
+  registry.createPlace({
+    id: 0,
+    definitionId: "typed-zero-place",
+    parentId: "root"
+  });
+  registry.createPlace({
+    id: "0",
+    definitionId: "typed-zero-place",
+    parentId: 0
+  });
+  registry.createPlace({
+    id: 1,
+    definitionId: "typed-zero-place",
+    memberships: [{
+      parentPlaceId: "0"
+    }],
+    placement: {
+      parentPlaceId: 0,
+      transform: {
+        x: 1,
+        y: 2
+      }
+    }
+  });
+
+  assert.notEqual(
+    registry.getPlace(0),
+    registry.getPlace("0")
+  );
+  assert.equal(
+    registry.getPlace(0).parentId,
+    "root"
+  );
+  assert.equal(
+    registry.getPlace("0").parentId,
+    0
+  );
+  assert.equal(
+    registry.getMemberships(1)[0]
+      .parentPlaceId,
+    "0"
+  );
+  assert.equal(
+    registry.getPlace(1)
+      .placement.parentPlaceId,
+    0
+  );
+
+  assert.throws(
+    () => registry.removePlace("root"),
+    /while child 0 exists/
+  );
+
+  const snapshot =
+    serializePlaceCore(registry);
+  assert.deepEqual(
+    snapshot.instances.map(
+      (instance) => instance.id
+    ),
+    [0, 1, "0", "root"]
+  );
+
+  const restored =
+    deserializePlaceCore(
+      JSON.parse(
+        JSON.stringify(snapshot)
+      )
+    );
+
+  assert.ok(restored.getPlace(0));
+  assert.ok(restored.getPlace("0"));
+  assert.equal(
+    restored.getPlace("0").parentId,
+    0
+  );
+  assert.equal(
+    restored.getMemberships(1)[0]
+      .parentPlaceId,
+    "0"
+  );
+  assert.equal(
+    restored.getPlace(1)
+      .placement.parentPlaceId,
+    0
+  );
+  assert.equal(
+    computePlaceCoreStateHash(restored),
+    computePlaceCoreStateHash(registry)
+  );
+  restored.assertInternalConsistency();
+});
+
+
 test("runtime nested place inputs reject unknown fields", () => {
   const make = () => {
     const registry = new PlaceRegistry();
