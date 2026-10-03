@@ -8,6 +8,43 @@ import {
 
 const MAX_INDEX_CELLS_PER_ITEM = 4096;
 
+function snapshotGeometry(geometry) {
+  geometryBounds(geometry);
+
+  if (geometry.type === "aabb") {
+    return Object.freeze({
+      type: "aabb",
+      minX: geometry.minX,
+      minY: geometry.minY,
+      maxX: geometry.maxX,
+      maxY: geometry.maxY
+    });
+  }
+
+  if (geometry.type === "circle") {
+    return Object.freeze({
+      type: "circle",
+      center: Object.freeze({
+        x: geometry.center.x,
+        y: geometry.center.y
+      }),
+      radius: geometry.radius
+    });
+  }
+
+  return Object.freeze({
+    type: "polygon",
+    points: Object.freeze(
+      geometry.points.map((point) =>
+        Object.freeze({
+          x: point.x,
+          y: point.y
+        })
+      )
+    )
+  });
+}
+
 function cellRangeForBounds(bounds, cellSize) {
   return {
     minX: Math.floor(bounds.minX / cellSize),
@@ -78,7 +115,7 @@ export class StaticGeometryIndex {
   #cells = new Map();
   #largeItems = [];
   #items;
-  #geometryOf;
+  #geometries;
 
   constructor(items, { cellSize = 8, geometryOf = (item) => item.geometry } = {}) {
     if (!Number.isFinite(cellSize) || cellSize <= 0) throw new RangeError("cellSize must be > 0");
@@ -86,11 +123,17 @@ export class StaticGeometryIndex {
       throw new TypeError("geometryOf must be a function");
     }
     this.#cellSize = cellSize;
-    this.#geometryOf = geometryOf;
     this.#items = Object.freeze([...items]);
+    this.#geometries = Object.freeze(
+      this.#items.map((item) =>
+        snapshotGeometry(
+          geometryOf(item)
+        )
+      )
+    );
     for (let index = 0; index < this.#items.length; index += 1) {
       const bounds = geometryBounds(
-        this.#geometryOf(this.#items[index])
+        this.#geometries[index]
       );
       const range = cellRangeForBounds(
         bounds,
@@ -130,7 +173,7 @@ export class StaticGeometryIndex {
         (!predicate || predicate(item)) &&
         pointInGeometry(
           point,
-          this.#geometryOf(item)
+          this.#geometries[index]
         )
       ) {
         result.push(item);
