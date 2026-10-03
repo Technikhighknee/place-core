@@ -1158,6 +1158,101 @@ test("materialization rollback continues domain cleanup after override failure",
 });
 
 
+test("materialization rollback removes topology installed before register failure", () => {
+  const domains = new Map();
+  const topologies = new Map();
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain(id) {
+      return domains.get(id);
+    },
+    addDomain({ id }) {
+      const domain = {
+        id,
+        entityCount: 0
+      };
+      domains.set(id, domain);
+      return domain;
+    },
+    removeDomain(id) {
+      return domains.delete(id);
+    }
+  };
+  const navigation = {
+    topologies,
+    domainBindings: new Map(),
+    registerTopology(id, topology) {
+      topologies.set(id, topology);
+      throw new Error(
+        "synthetic post-register failure"
+      );
+    },
+    removeTopology(id) {
+      return topologies.delete(id);
+    },
+    bindDomain() {
+      throw new Error(
+        "bindDomain must not run after register failure"
+      );
+    },
+    unbindDomain(id) {
+      return this.domainBindings.delete(id);
+    }
+  };
+
+  class NavigationStub {}
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    Navigation: NavigationStub,
+    startJourney,
+    stopJourney
+  });
+
+  assert.throws(
+    () =>
+      bridge.materializePlace(
+        {
+          id: "house",
+          layerDomains: new Map([
+            ["inside", "house:inside"]
+          ]),
+          dynamicPortals: new Map()
+        },
+        {
+          id: "place",
+          layers: [{
+            id: "inside",
+            topologyId: "place:inside",
+            navigation: {
+              options: {},
+              regions: [],
+              nodes: [],
+              roads: []
+            }
+          }],
+          portals: [],
+          boundaries: []
+        }
+      ),
+    /synthetic post-register failure/
+  );
+
+  assert.equal(
+    topologies.has("place:inside"),
+    false,
+    "rollback must remove a topology even if registerTopology threw after installing it"
+  );
+  assert.equal(
+    domains.size,
+    0
+  );
+});
+
+
 test("materialization rollback rejects unsuccessful topology removal", () => {
   const topology = {};
   const topologies = new Map([
