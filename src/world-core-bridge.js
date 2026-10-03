@@ -7,6 +7,39 @@ import { compareStrings } from "./utils.js";
 
 const NO_THROWN_VALUE = Symbol("no-thrown-value");
 
+function safeThrownString(value) {
+  try {
+    return String(value);
+  } catch {
+    return "[unprintable thrown value]";
+  }
+}
+
+function safeThrownMessage(value) {
+  let isError = false;
+  try {
+    isError = value instanceof Error;
+  } catch {}
+
+  if (isError) {
+    try {
+      if (typeof value.message === "string") {
+        return value.message;
+      }
+    } catch {}
+  }
+
+  return safeThrownString(value);
+}
+
+function safeWorldEventType(event) {
+  try {
+    return event?.type ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function sortedStrings(values) {
   if (values == null) return null;
   return [...values].sort();
@@ -123,11 +156,10 @@ export class WorldCoreBridge {
           registry.emit?.(
             "world-event-bridge-error",
             {
-              worldEventType: event?.type ?? null,
+              worldEventType:
+                safeWorldEventType(event),
               message:
-                error instanceof Error
-                  ? error.message
-                  : String(error)
+                safeThrownMessage(error)
             }
           );
         }

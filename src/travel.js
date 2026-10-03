@@ -33,6 +33,15 @@ export {
 
 const NO_THROWN_VALUE = Symbol("no-thrown-value");
 
+function safeThrownProperty(value, key) {
+  if (value == null) return undefined;
+  try {
+    return value[key];
+  } catch {
+    return undefined;
+  }
+}
+
 function assertRegistryExecutionBridge(
   registry,
   bridge,
@@ -1674,7 +1683,10 @@ function replan(registry, bridge, state, options) {
       planningOptions
     );
   } catch (error) {
-    if (error?.code === "PLACE_TRAVEL_TARGET_UNAVAILABLE") {
+    if (
+      safeThrownProperty(error, "code") ===
+      "PLACE_TRAVEL_TARGET_UNAVAILABLE"
+    ) {
       state.replans += 1;
       return finalizeFailedTravel(
         registry,

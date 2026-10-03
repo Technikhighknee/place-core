@@ -1315,6 +1315,80 @@ test("stopTravel preserves falsy cleanup throws", () => {
 });
 
 
+test("replan preserves hostile thrown values while finalizing failure", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  assert.ok(
+    startTravel(
+      places,
+      bridge,
+      "hans",
+      {
+        placeId: "house",
+        anchorId: "target"
+      },
+      {
+        worldChangePolicy: "eager"
+      }
+    )
+  );
+
+  places.setEventCapture(true);
+  places.drainEvents();
+  places.setPortalState(
+    "house",
+    "stairs",
+    { locked: true }
+  );
+
+  const thrown =
+    new Proxy(
+      {},
+      {
+        get(_target, key) {
+          if (key === "code") {
+            throw new Error(
+              "code lookup must not mask the original thrown value"
+            );
+          }
+          return undefined;
+        }
+      }
+    );
+
+  bridge.planLocalRoute = () => {
+    throw thrown;
+  };
+
+  let caught;
+  try {
+    stepTravel(
+      places,
+      bridge,
+      "hans"
+    );
+  } catch (error) {
+    caught = error;
+  }
+
+  assert.equal(caught, thrown);
+  assert.equal(
+    places.activeTravels.size,
+    0
+  );
+  assert.ok(
+    places.drainEvents().some(
+      (event) =>
+        event.type === "travel-failed" &&
+        event.reason === "replan-error"
+    )
+  );
+});
+
+
 test("replan cleanup failure does not leave travel active", () => {
   const {
     places,
