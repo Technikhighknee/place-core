@@ -1564,6 +1564,75 @@ test("topology registration must establish the requested topology", () => {
 });
 
 
+test("materialization rollback does not remove unattempted foreign topology", () => {
+  const foreignTopology = {};
+  const topologies = new Map([
+    [
+      "foreign-topology",
+      foreignTopology
+    ]
+  ]);
+  let removeCalls = 0;
+  const bridge = new WorldCoreBridge({
+    world: {
+      subscribeEvents() {
+        return () => {};
+      },
+      getDomain() {
+        return undefined;
+      }
+    },
+    navigation: {
+      topologies,
+      removeTopology(id) {
+        removeCalls += 1;
+        return topologies.delete(id);
+      }
+    },
+    startJourney,
+    stopJourney
+  });
+
+  assert.doesNotThrow(
+    () =>
+      bridge.rollbackMaterializePlace(
+        {
+          id: "house",
+          layerDomains: new Map(),
+          dynamicPortals: new Map()
+        },
+        {
+          id: "place",
+          layers: [],
+          portals: [],
+          boundaries: []
+        },
+        {
+          domains: [],
+          newTopologyIds: [
+            "foreign-topology"
+          ],
+          attemptedTopologyIds:
+            new Set(),
+          newTopologies:
+            new Map()
+        }
+      )
+  );
+
+  assert.equal(
+    removeCalls,
+    0
+  );
+  assert.equal(
+    topologies.get(
+      "foreign-topology"
+    ),
+    foreignTopology
+  );
+});
+
+
 test("materialization rollback removes topology installed before register failure", () => {
   const domains = new Map();
   const topologies = new Map();
