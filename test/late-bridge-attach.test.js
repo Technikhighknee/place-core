@@ -1599,6 +1599,105 @@ test("materialization rollback rejects unsuccessful topology removal", () => {
 });
 
 
+test("observable road-effect mutations must establish their postconditions", () => {
+  const world = new World({
+    domains: [{
+      id: "inside-domain"
+    }]
+  });
+  const topology =
+    new Navigation();
+  topology.addNode({
+    id: "a",
+    x: 0,
+    y: 0
+  });
+  topology.addNode({
+    id: "b",
+    x: 1,
+    y: 0
+  });
+  topology.addRoad({
+    id: "road",
+    from: "a",
+    to: "b",
+    width: 1
+  });
+
+  const navigation =
+    new NavigationRegistry();
+  navigation.registerTopology(
+    "inside-topology",
+    topology
+  );
+  navigation.bindDomain(
+    "inside-domain",
+    "inside-topology"
+  );
+
+  const bridge =
+    new WorldCoreBridge({
+      world,
+      navigation,
+      startJourney,
+      stopJourney
+    });
+  const instance = {
+    id: "house",
+    layerDomains: new Map([
+      ["inside", "inside-domain"]
+    ])
+  };
+  const portal = {
+    id: "door",
+    roadBindings: [{
+      layerId: "inside",
+      roadId: "road"
+    }]
+  };
+  const resolved = {
+    connected: false
+  };
+
+  const originalSet =
+    navigation.setDomainRoadEffect.bind(
+      navigation
+    );
+  navigation.setDomainRoadEffect =
+    () => null;
+
+  assert.throws(
+    () =>
+      bridge.syncPortalState(
+        instance,
+        portal,
+        resolved
+      ),
+    /failed to apply domain road effect/
+  );
+
+  navigation.setDomainRoadEffect =
+    originalSet;
+  bridge.syncPortalState(
+    instance,
+    portal,
+    resolved
+  );
+
+  navigation.removeDomainRoadEffect =
+    () => false;
+
+  assert.throws(
+    () =>
+      bridge.clearPortalEffects(
+        instance,
+        portal
+      ),
+    /failed to remove domain road effect/
+  );
+});
+
+
 test("road-effect cleanup attempts every binding after individual failures", () => {
   const removed = [];
   const navigation = {
