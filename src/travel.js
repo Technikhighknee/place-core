@@ -447,6 +447,12 @@ function pointDistance(a, b) {
   );
 }
 
+function cloneJourneyOptions(options) {
+  return options === undefined
+    ? undefined
+    : cloneJson(options);
+}
+
 function localRoute(bridge, mobility, from, destination, options, cache, cachePrefix) {
   if (from.domainId !== destination.domainId) return null;
   if (squaredDistance(from.position, destination.position) <= POSITION_EPSILON_SQ) {
@@ -466,7 +472,9 @@ function localRoute(bridge, mobility, from, destination, options, cache, cachePr
     position: from.position,
     destinationNodeId: destination.nodeId,
     mobility,
-    options: options.journeyOptions
+    options: cloneJourneyOptions(
+      options.journeyOptions
+    )
   });
   const result = plan
     ? {
@@ -505,7 +513,7 @@ function localRouteCostsToMany(
         position,
         destinationNodeIds: [...ids],
         mobility,
-        options
+        options: cloneJourneyOptions(options)
       });
     if (!(raw instanceof Map)) {
       throw new TypeError(
@@ -534,7 +542,7 @@ function localRouteCostsToMany(
       position,
       destinationNodeId,
       mobility,
-      options
+      options: cloneJourneyOptions(options)
     });
     if (planned) {
       result.set(
@@ -1775,11 +1783,9 @@ function advance(
 
       if (!state.localStarted) {
         const journeyOptions =
-          options.journeyOptions === undefined
-            ? undefined
-            : cloneJson(
-                options.journeyOptions
-              );
+          cloneJourneyOptions(
+            options.journeyOptions
+          );
         const ok = bridge.startLocalJourney(
           state.entityId,
           step.destinationNodeId,

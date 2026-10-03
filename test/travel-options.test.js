@@ -137,6 +137,50 @@ test("journey options survive portal transitions and later local legs", () => {
   assert.deepEqual(travel.options.journeyOptions, journeyOptions);
 });
 
+test("bridge planning option mutation cannot alter retained travel state", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  const planLocalRoute =
+    bridge.planLocalRoute.bind(bridge);
+
+  bridge.planLocalRoute = (input) => {
+    input.options.custom.avoid =
+      "water";
+    return planLocalRoute(input);
+  };
+
+  const travel = startTravel(
+    places,
+    bridge,
+    "hans",
+    {
+      placeId: "house",
+      anchorId: "target"
+    },
+    {
+      journeyOptions: {
+        custom: {
+          avoid: "mud"
+        }
+      }
+    }
+  );
+
+  assert.ok(travel);
+  assert.deepEqual(
+    travel.options.journeyOptions,
+    {
+      custom: {
+        avoid: "mud"
+      }
+    }
+  );
+});
+
+
 test("bridge journey option mutation cannot alter retained travel state", () => {
   const {
     places,
