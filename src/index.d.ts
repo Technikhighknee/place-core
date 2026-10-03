@@ -1196,8 +1196,7 @@ export class StaticGeometryIndex<T = any> {
   );
   queryPoint(
     point: Vec2,
-    predicate?: ((item: T) => boolean) | null,
-    geometryOf?: (item: T) => Geometry
+    predicate?: ((item: T) => boolean) | null
   ): T[];
   readonly cellCount: number;
   readonly largeItemCount: number;
