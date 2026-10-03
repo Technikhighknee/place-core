@@ -805,6 +805,104 @@ test("rollbackMaterializePlace does not hide missing cleanup capabilities", () =
 });
 
 
+test("materialization rollback continues domain cleanup after override failure", () => {
+  const domains = new Map([
+    ["new-domain", {
+      id: "new-domain",
+      entityCount: 0
+    }]
+  ]);
+  const bindings = new Map([
+    ["new-domain", "new-topology"]
+  ]);
+  const calls = [];
+
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain(id) {
+      return domains.get(id);
+    },
+    removeDomain(id) {
+      calls.push("remove-domain");
+      domains.delete(id);
+      return true;
+    }
+  };
+  const navigation = {
+    domainBindings: bindings,
+    clearDomainOverrides() {
+      calls.push("clear-overrides");
+      throw new Error(
+        "synthetic override cleanup failure"
+      );
+    },
+    unbindDomain(id) {
+      calls.push("unbind-domain");
+      bindings.delete(id);
+      return true;
+    }
+  };
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+
+  assert.throws(
+    () =>
+      bridge.rollbackMaterializePlace(
+        {
+          id: "house",
+          layerDomains: new Map(),
+          dynamicPortals: new Map()
+        },
+        {
+          id: "place",
+          layers: [],
+          portals: [{
+            roadBindings: [{
+              layerId: "inside",
+              roadId: "road"
+            }]
+          }],
+          boundaries: []
+        },
+        {
+          domains: [{
+            domainId: "new-domain",
+            existed: false,
+            previousBinding: null,
+            roadEffects: []
+          }],
+          newTopologyIds: []
+        }
+      ),
+    /synthetic override cleanup failure/
+  );
+
+  assert.deepEqual(
+    calls,
+    [
+      "clear-overrides",
+      "unbind-domain",
+      "remove-domain"
+    ]
+  );
+  assert.equal(
+    bindings.has("new-domain"),
+    false
+  );
+  assert.equal(
+    domains.has("new-domain"),
+    false
+  );
+});
+
+
 test("road-effect cleanup attempts every binding after individual failures", () => {
   const removed = [];
   const navigation = {
