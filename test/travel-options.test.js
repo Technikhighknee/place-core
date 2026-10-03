@@ -1343,6 +1343,11 @@ test("replan preserves hostile thrown values while finalizing failure", () => {
     "stairs",
     { locked: true }
   );
+  places.setPortalState(
+    "house",
+    "stairs",
+    { locked: false }
+  );
 
   const thrown =
     new Proxy(
