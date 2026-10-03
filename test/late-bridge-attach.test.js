@@ -366,6 +366,98 @@ test("one WorldCoreBridge cannot be silently hijacked by another registry", () =
 });
 
 
+test("world event error reporting tolerates hostile thrown values", () => {
+  let onError;
+
+  const world = {
+    subscribeEvents(_handler, options) {
+      onError = options.onError;
+      return () => true;
+    }
+  };
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation: {},
+    startJourney() {},
+    stopJourney() {}
+  });
+  const places = new PlaceRegistry({
+    captureEvents: true
+  });
+
+  places.attachWorldCoreBridge(
+    bridge
+  );
+
+  const thrown =
+    new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error(
+            "prototype lookup must not escape world event error reporting"
+          );
+        },
+        get(_target, key) {
+          if (
+            key === Symbol.toPrimitive ||
+            key === "toString" ||
+            key === "valueOf"
+          ) {
+            throw new Error(
+              "string conversion must not escape world event error reporting"
+            );
+          }
+          return undefined;
+        }
+      }
+    );
+
+  const hostileEvent =
+    new Proxy(
+      {},
+      {
+        get(_target, key) {
+          if (key === "type") {
+            throw new Error(
+              "event type lookup must not escape world event error reporting"
+            );
+          }
+          return undefined;
+        }
+      }
+    );
+
+  assert.doesNotThrow(
+    () => onError(
+      thrown,
+      hostileEvent
+    )
+  );
+
+  const events =
+    places.drainEvents();
+  assert.deepEqual(
+    events.map((event) => ({
+      type: event.type,
+      worldEventType:
+        event.worldEventType,
+      message: event.message
+    })),
+    [{
+      type:
+        "world-event-bridge-error",
+      worldEventType: null,
+      message:
+        "[unprintable thrown value]"
+    }]
+  );
+
+  bridge.dispose();
+});
+
+
 test("direct bridge attachment cannot bypass registry ownership", () => {
   const places = new PlaceRegistry();
   const { bridge } = makeBridge();
