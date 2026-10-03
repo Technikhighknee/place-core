@@ -1298,6 +1298,86 @@ test("rollbackMaterializePlace does not hide missing cleanup capabilities", () =
 });
 
 
+test("materialization rollback verifies domain override cleanup", () => {
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain(id) {
+      return id === "existing-domain"
+        ? {
+            id,
+            entityCount: 0
+          }
+        : undefined;
+    }
+  };
+  const navigation = {
+    domainBindings: new Map([
+      [
+        "existing-domain",
+        "existing-topology"
+      ]
+    ]),
+    domainInstances: new Map([
+      [
+        "existing-domain",
+        {
+          overrideEffectCount: 1
+        }
+      ]
+    ]),
+    clearDomainOverrides() {}
+  };
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+
+  assert.throws(
+    () =>
+      bridge.rollbackMaterializePlace(
+        {
+          id: "house",
+          layerDomains: new Map(),
+          dynamicPortals: new Map()
+        },
+        {
+          id: "place",
+          layers: [],
+          portals: [{
+            roadBindings: [{
+              layerId: "inside",
+              roadId: "road"
+            }]
+          }],
+          boundaries: []
+        },
+        {
+          domains: [{
+            domainId:
+              "existing-domain",
+            existed: true,
+            previousBinding:
+              "existing-topology",
+            roadEffects: []
+          }],
+          newTopologyIds: []
+        }
+      ),
+    /failed to clear domain navigation overrides for existing-domain/
+  );
+
+  assert.equal(
+    navigation.domainInstances
+      .has("existing-domain"),
+    true
+  );
+});
+
+
 test("materialization rollback continues domain cleanup after override failure", () => {
   const domains = new Map([
     ["new-domain", {

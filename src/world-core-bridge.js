@@ -334,6 +334,31 @@ export class WorldCoreBridge {
     return removed;
   }
 
+  #assertDomainOverridesCleared(domainId) {
+    if (
+      typeof this.navigation.domainInstances
+        ?.get !== "function"
+    ) {
+      return;
+    }
+
+    const instance =
+      this.navigation.domainInstances.get(
+        domainId
+      );
+    if (
+      instance != null &&
+      (
+        instance.overrideEffectCount == null ||
+        instance.overrideEffectCount !== 0
+      )
+    ) {
+      throw new Error(
+        `failed to clear domain navigation overrides for ${domainId}`
+      );
+    }
+  }
+
   #journeyLegForRoad(entity, roadId) {
     const journey = entity?.journey;
     if (!journey) return null;
@@ -1268,6 +1293,12 @@ export class WorldCoreBridge {
             );
           }
           this.navigation.clearDomainOverrides(
+            state.domainId
+          );
+          this.#assertDomainOverridesCleared(
+            state.domainId
+          );
+          this.#assertDomainOverridesCleared(
             state.domainId
           );
         });
