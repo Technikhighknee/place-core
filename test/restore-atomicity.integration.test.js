@@ -652,6 +652,65 @@ test("stationary occupancy lookup failure aborts before bridge attachment", () =
 });
 
 
+test("restart mode safely retains unprintable thrown values", () => {
+  const { snapshot } =
+    sourceSnapshot({
+      withTravel: true
+    });
+
+  const thrown = {
+    toString() {
+      throw new Error(
+        "toString must not escape restart error retention"
+      );
+    }
+  };
+  const bridge = {
+    attachRegistry() {
+      return this;
+    },
+    materializePlace() {
+      return {};
+    },
+    syncBoundaryState() {},
+    syncPortalState() {},
+    syncDynamicPortal() {},
+    getEntity() {
+      throw thrown;
+    }
+  };
+
+  const restored =
+    deserializePlaceCore(
+      snapshot,
+      {
+        bridge,
+        restartTravels: true
+      }
+    );
+
+  assert.equal(
+    restored.pendingTravels.length,
+    1
+  );
+  assert.deepEqual(
+    restored.pendingTravels[0]
+      .restartError,
+    {
+      name: "Error",
+      message:
+        "[unprintable thrown value]"
+    }
+  );
+  assert.doesNotThrow(
+    () =>
+      validatePlaceCoreSnapshot(
+        serializePlaceCore(restored)
+      )
+  );
+});
+
+
 test("bridge-backed restore re-derives selective occupancy from live world state", () => {
   const places = new PlaceRegistry();
   places.updateEntityOccupancy({

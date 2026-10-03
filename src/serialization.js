@@ -31,6 +31,44 @@ export {
   validatePlaceCoreSnapshot
 };
 
+function safeThrownString(value) {
+  try {
+    return String(value);
+  } catch {
+    return "[unprintable thrown value]";
+  }
+}
+
+function serializeRestartError(error) {
+  let name = "Error";
+  let message;
+
+  if (error instanceof Error) {
+    try {
+      if (
+        typeof error.name === "string" &&
+        error.name.length > 0
+      ) {
+        name = error.name;
+      }
+    } catch {}
+
+    try {
+      if (typeof error.message === "string") {
+        message = error.message;
+      }
+    } catch {}
+  }
+
+  return {
+    name,
+    message:
+      message === undefined
+        ? safeThrownString(error)
+        : message
+  };
+}
+
 function assertRestoredWorldEntityLocation(
   entity,
   expectedId
@@ -574,22 +612,10 @@ export function deserializePlaceCore(snapshot, options = {}) {
       savedState: cloneJson(saved)
     };
     if (restartError != null) {
-      const errorName =
-        restartError instanceof Error &&
-        typeof restartError.name === "string" &&
-        restartError.name.length > 0
-          ? restartError.name
-          : "Error";
-      const errorMessage =
-        restartError instanceof Error &&
-        typeof restartError.message === "string"
-          ? restartError.message
-          : String(restartError);
-
-      pending.restartError = {
-        name: errorName,
-        message: errorMessage
-      };
+      pending.restartError =
+        serializeRestartError(
+          restartError
+        );
     }
     registry._pushPendingTravel(
       PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
