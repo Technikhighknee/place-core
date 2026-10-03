@@ -618,6 +618,159 @@ test("road-bound bridge sync requires road-effect capabilities on demand", () =>
 });
 
 
+test("domain lifecycle requires observable world state before mutation", () => {
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    addDomain() {
+      throw new Error(
+        "addDomain must not run without getDomain"
+      );
+    },
+    removeDomain() {
+      throw new Error(
+        "removeDomain must not run without getDomain"
+      );
+    }
+  };
+  const navigation = {
+    topologies: new Map(),
+    domainBindings: new Map()
+  };
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+  const instance = {
+    id: "house",
+    layerDomains: new Map([
+      ["inside", "house:inside"]
+    ]),
+    dynamicPortals: new Map()
+  };
+  const placeDefinition = {
+    id: "place",
+    layers: [{
+      id: "inside",
+      topologyId: null,
+      navigation: null
+    }],
+    portals: [],
+    boundaries: []
+  };
+
+  assert.throws(
+    () =>
+      bridge.materializePlace(
+        instance,
+        placeDefinition
+      ),
+    /World\.getDomain.*materialize/
+  );
+
+  assert.throws(
+    () =>
+      bridge.unmaterializePlace(
+        instance,
+        placeDefinition
+      ),
+    /World\.getDomain.*unmaterialize/
+  );
+
+  assert.throws(
+    () =>
+      bridge.rollbackMaterializePlace(
+        instance,
+        placeDefinition,
+        {
+          domains: [{
+            domainId: "house:inside",
+            existed: false,
+            previousBinding: null,
+            roadEffects: []
+          }],
+          newTopologyIds: []
+        }
+      ),
+    /World\.getDomain.*roll back/
+  );
+});
+
+
+test("materialization preflights addDomain before topology mutation", () => {
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain() {
+      return undefined;
+    },
+    removeDomain() {
+      return true;
+    }
+  };
+  let registerCalls = 0;
+  const navigation = {
+    topologies: new Map(),
+    domainBindings: new Map(),
+    registerTopology() {
+      registerCalls += 1;
+    },
+    removeTopology() {
+      return true;
+    }
+  };
+
+  class NavigationStub {}
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    Navigation: NavigationStub,
+    startJourney,
+    stopJourney
+  });
+
+  assert.throws(
+    () =>
+      bridge.materializePlace(
+        {
+          id: "house",
+          layerDomains: new Map([
+            ["inside", "house:inside"]
+          ]),
+          dynamicPortals: new Map()
+        },
+        {
+          id: "place",
+          layers: [{
+            id: "inside",
+            topologyId: "place:inside",
+            navigation: {
+              options: {},
+              regions: [],
+              nodes: [],
+              roads: []
+            }
+          }],
+          portals: [],
+          boundaries: []
+        }
+      ),
+    /World\.addDomain.*materialize/
+  );
+
+  assert.equal(
+    registerCalls,
+    0,
+    "missing addDomain must fail before topology registration"
+  );
+});
+
+
 test("materialization preflights domain rollback capability before mutation", () => {
   const domains = new Map();
   const world = {

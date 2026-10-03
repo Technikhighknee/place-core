@@ -578,6 +578,15 @@ export class WorldCoreBridge {
   }
 
   materializePlace(instance, definition) {
+    if (
+      typeof this.world.getDomain !==
+        "function"
+    ) {
+      throw new Error(
+        "world-core World.getDomain is required to materialize place domains"
+      );
+    }
+
     const newTopologyIds = [
       ...new Set(
         definition.layers
@@ -620,6 +629,18 @@ export class WorldCoreBridge {
         state
       ])
     );
+
+    if (
+      receipt.domains.some(
+        (state) => !state.existed
+      ) &&
+      typeof this.world.addDomain !==
+        "function"
+    ) {
+      throw new Error(
+        "world-core World.addDomain is required to materialize place domains"
+      );
+    }
 
     if (
       receipt.domains.some(
@@ -1047,6 +1068,14 @@ export class WorldCoreBridge {
   }
 
   rollbackMaterializePlace(instance, definition, receipt) {
+    if (
+      typeof this.world.getDomain !==
+        "function"
+    ) {
+      throw new Error(
+        "world-core World.getDomain is required to roll back materialized place domains"
+      );
+    }
     if (!receipt?.domains) {
       throw new TypeError("materialization receipt is required");
     }
@@ -1683,6 +1712,15 @@ export class WorldCoreBridge {
   }
 
   unmaterializePlace(instance, definition) {
+    if (
+      typeof this.world.getDomain !==
+        "function"
+    ) {
+      throw new Error(
+        "world-core World.getDomain is required to unmaterialize place domains"
+      );
+    }
+
     const domains =
       [...instance.layerDomains.values()];
     for (const domainId of domains) {
