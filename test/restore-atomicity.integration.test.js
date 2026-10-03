@@ -888,6 +888,97 @@ test("bridge-backed restore re-derives selective occupancy from live world state
 });
 
 
+test("resume does not reread live entity location after bridge attachment", () => {
+  const { snapshot } =
+    sourceSnapshot({
+      withTravel: true
+    });
+
+  let attached = false;
+  const position = {
+    x: 0,
+    y: 0
+  };
+  const entity = {
+    id: "hans",
+    get domainId() {
+      if (attached) {
+        throw new Error(
+          "post-attach domain reread"
+        );
+      }
+      return "first:inside";
+    },
+    get position() {
+      if (attached) {
+        throw new Error(
+          "post-attach position reread"
+        );
+      }
+      return position;
+    },
+    mobility: {
+      speed: 1
+    },
+    journey: null
+  };
+
+  const bridge = {
+    registry: null,
+    attachRegistry(registry) {
+      this.registry = registry;
+      attached = true;
+      return this;
+    },
+    materializePlace() {
+      return {};
+    },
+    syncBoundaryState() {},
+    syncPortalState() {},
+    syncDynamicPortal() {},
+    getEntity(id) {
+      return id === "hans"
+        ? entity
+        : null;
+    }
+  };
+
+  const restored =
+    deserializePlaceCore(
+      snapshot,
+      {
+        bridge,
+        resumeWorldCoreState: true
+      }
+    );
+
+  assert.equal(
+    restored.bridge,
+    bridge
+  );
+  assert.equal(
+    restored.activeTravels.size,
+    1
+  );
+  assert.deepEqual(
+    restored.getEntityLocation("hans"),
+    {
+      domainId: "first:inside",
+      position: {
+        x: 0,
+        y: 0
+      },
+      places: ["first"],
+      semanticPlaces: ["first"],
+      spaces: [],
+      placeId: "first",
+      layerId: "inside",
+      deepestSpace: null
+    }
+  );
+});
+
+
 test("resume preserves eager stale-plan semantics across snapshots", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
