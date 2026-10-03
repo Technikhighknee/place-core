@@ -31,6 +31,8 @@ export {
   validatePlaceCoreSnapshot
 };
 
+const NO_RESTART_ERROR = Symbol("no-restart-error");
+
 function safeThrownString(value) {
   try {
     return String(value);
@@ -609,14 +611,14 @@ export function deserializePlaceCore(snapshot, options = {}) {
 
   const retainPending = (
     saved,
-    restartError = null
+    restartError = NO_RESTART_ERROR
   ) => {
     const pending = {
       entityId: saved.entityId,
       target: cloneJson(saved.target),
       savedState: cloneJson(saved)
     };
-    if (restartError != null) {
+    if (restartError !== NO_RESTART_ERROR) {
       pending.restartError =
         serializeRestartError(
           restartError
@@ -668,14 +670,16 @@ export function deserializePlaceCore(snapshot, options = {}) {
   } else if (bridge && restartTravels) {
     for (const saved of active) {
       try {
-        const lookupError =
-          liveOccupancyLookupErrors.get(
+        if (
+          liveOccupancyLookupErrors.has(
             saved.entityId
-          );
-        if (lookupError) {
+          )
+        ) {
           retainPending(
             saved,
-            lookupError
+            liveOccupancyLookupErrors.get(
+              saved.entityId
+            )
           );
           continue;
         }
