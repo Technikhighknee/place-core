@@ -1086,16 +1086,30 @@ export class WorldCoreBridge {
         }
         const domainId = instance.layerDomains.get(layer.id);
 
-        if (!this.world.getDomain?.(domainId)) {
+        if (!this.world.getDomain(domainId)) {
           this.world.addDomain({ id: domainId });
+          if (!this.world.getDomain(domainId)) {
+            throw new Error(
+              `failed to add world-core domain ${domainId}`
+            );
+          }
         }
 
         if (layer.topologyId != null) {
           const existingBinding =
-            this.navigation.domainBindings?.get?.(domainId) ??
+            this.navigation.domainBindings.get(domainId) ??
             null;
           if (existingBinding == null) {
             this.navigation.bindDomain(domainId, layer.topologyId);
+            if (
+              this.navigation.domainBindings.get(
+                domainId
+              ) !== layer.topologyId
+            ) {
+              throw new Error(
+                `failed to bind world-core domain ${domainId} to topology ${layer.topologyId}`
+              );
+            }
           }
         }
       }
@@ -1187,6 +1201,11 @@ export class WorldCoreBridge {
           this.world.addDomain({
             id: state.domainId
           });
+          if (!this.world.getDomain(state.domainId)) {
+            throw new Error(
+              `failed to restore world-core domain ${state.domainId}`
+            );
+          }
         });
       }
 
@@ -1244,6 +1263,15 @@ export class WorldCoreBridge {
             this.navigation.unbindDomain(
               state.domainId
             );
+            if (
+              this.navigation.domainBindings.get(
+                state.domainId
+              ) != null
+            ) {
+              throw new Error(
+                `failed to unbind world-core domain ${state.domainId}`
+              );
+            }
           });
       } else if (
         bindingReadable &&
@@ -1264,6 +1292,15 @@ export class WorldCoreBridge {
               state.domainId,
               state.previousBinding
             );
+            if (
+              this.navigation.domainBindings.get(
+                state.domainId
+              ) !== state.previousBinding
+            ) {
+              throw new Error(
+                `failed to restore world-core domain binding for ${state.domainId}`
+              );
+            }
           });
       }
 
@@ -1311,6 +1348,11 @@ export class WorldCoreBridge {
             this.world.removeDomain(
               state.domainId
             );
+            if (this.world.getDomain(state.domainId)) {
+              throw new Error(
+                `failed to remove world-core domain ${state.domainId}`
+              );
+            }
           });
         }
       }
@@ -2031,11 +2073,25 @@ export class WorldCoreBridge {
           this.navigation.unbindDomain(
             state.domainId
           );
+          if (
+            this.navigation.domainBindings.get(
+              state.domainId
+            ) != null
+          ) {
+            throw new Error(
+              `failed to unbind world-core domain ${state.domainId}`
+            );
+          }
         }
         if (state.existed) {
           this.world.removeDomain(
             state.domainId
           );
+          if (this.world.getDomain(state.domainId)) {
+            throw new Error(
+              `failed to remove world-core domain ${state.domainId}`
+            );
+          }
         }
       }
     } catch (error) {
