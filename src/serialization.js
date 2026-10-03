@@ -42,8 +42,13 @@ function safeThrownString(value) {
 function serializeRestartError(error) {
   let name = "Error";
   let message;
+  let isError = false;
 
-  if (error instanceof Error) {
+  try {
+    isError = error instanceof Error;
+  } catch {}
+
+  if (isError) {
     try {
       if (
         typeof error.name === "string" &&
