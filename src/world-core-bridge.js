@@ -2260,6 +2260,12 @@ export class WorldCoreBridge {
           effectId,
           binding.roadId
         );
+        this.#assertDomainRoadEffect(
+          domainId,
+          effectId,
+          binding.roadId,
+          null
+        );
       } catch (error) {
         errors.push(error);
       }
@@ -2507,6 +2513,12 @@ export class WorldCoreBridge {
           domainId,
           effectId,
           binding.roadId
+        );
+        this.#assertDomainRoadEffect(
+          domainId,
+          effectId,
+          binding.roadId,
+          null
         );
       } catch (error) {
         errors.push(error);
