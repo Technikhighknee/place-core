@@ -295,20 +295,20 @@ test("StaticGeometryIndex cannot query against geometry different from its index
     }
   );
 
-  assert.deepEqual(
-    index.queryPoint(
-      { x: 0.5, y: 0.5 },
-      null,
-      () => ({
-        type: "aabb",
-        minX: 100,
-        minY: 100,
-        maxX: 101,
-        maxY: 101
-      })
-    ),
-    [item],
-    "extra legacy arguments must not replace the geometry used to build the index"
+  assert.throws(
+    () =>
+      index.queryPoint(
+        { x: 0.5, y: 0.5 },
+        null,
+        () => ({
+          type: "aabb",
+          minX: 100,
+          minY: 100,
+          maxX: 101,
+          maxY: 101
+        })
+      ),
+    /does not accept a query-specific geometry accessor/
   );
 
   assert.deepEqual(
@@ -318,6 +318,37 @@ test("StaticGeometryIndex cannot query against geometry different from its index
     }),
     []
   );
+});
+
+
+test("StaticGeometryIndex validates predicates independently of query hits", () => {
+  const index = new StaticGeometryIndex(
+    [{
+      id: "box",
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 1,
+        maxY: 1
+      }
+    }],
+    { cellSize: 1 }
+  );
+
+  for (const point of [
+    { x: 0.5, y: 0.5 },
+    { x: 100, y: 100 }
+  ]) {
+    assert.throws(
+      () =>
+        index.queryPoint(
+          point,
+          true
+        ),
+      /predicate must be a function or null/
+    );
+  }
 });
 
 
