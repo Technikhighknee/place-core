@@ -1489,6 +1489,16 @@ export class WorldCoreBridge {
         "world-core NavigationRegistry.domainBindings is required to release place-owned topologies"
       );
     }
+    if (
+      typeof this.navigation.topologies
+        ?.get !== "function" ||
+      typeof this.navigation.topologies
+        ?.has !== "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.topologies is required to release place-owned topologies"
+      );
+    }
 
     const boundTopologyIds = new Set(
       this.navigation.domainBindings.values()
@@ -1565,6 +1575,16 @@ export class WorldCoreBridge {
     ) {
       throw new Error(
         "world-core NavigationRegistry.domainBindings is required to release place-owned topologies"
+      );
+    }
+    if (
+      typeof this.navigation.topologies
+        ?.get !== "function" ||
+      typeof this.navigation.topologies
+        ?.has !== "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.topologies is required to release place-owned topologies"
       );
     }
 

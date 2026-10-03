@@ -1654,6 +1654,68 @@ test("topology cleanup fails closed when binding state becomes unobservable", ()
 });
 
 
+test("topology cleanup retains ownership when topology registry becomes unobservable", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(
+    definition()
+  );
+
+  const {
+    navigation,
+    bridge
+  } = makeBridge();
+
+  places.attachWorldCoreBridge(
+    bridge
+  );
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "late-attach-place"
+  });
+  const topologyId =
+    places.getDefinition(
+      place.definitionId
+    ).layers[0].topologyId;
+
+  assert.equal(
+    places.removePlace("house"),
+    true
+  );
+
+  const topologies =
+    navigation.topologies;
+  navigation.topologies =
+    undefined;
+
+  assert.throws(
+    () => bridge.dispose(),
+    /NavigationRegistry\.topologies.*release/
+  );
+
+  navigation.topologies =
+    topologies;
+
+  const replacement =
+    new PlaceRegistry();
+  assert.equal(
+    replacement.attachWorldCoreBridge(
+      bridge
+    ),
+    replacement
+  );
+  assert.equal(
+    navigation.topologies.has(
+      topologyId
+    ),
+    false,
+    "reattach must retry topology cleanup after observability is restored"
+  );
+
+  bridge.dispose();
+});
+
+
 test("failed world-event unsubscribe detaches logically and remains cleanup-retryable", () => {
   let subscribeCalls = 0;
   let unsubscribeCalls = 0;
