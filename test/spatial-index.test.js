@@ -236,6 +236,46 @@ test("StaticGeometryIndex keeps huge geometry in a sparse fallback", () => {
 });
 
 
+test("StaticGeometryIndex snapshots geometry independently from later item mutation", () => {
+  const item = {
+    id: "mutable",
+    geometry: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 1,
+      maxY: 1
+    }
+  };
+
+  const index = new StaticGeometryIndex(
+    [item],
+    { cellSize: 1 }
+  );
+
+  item.geometry.minX = 100;
+  item.geometry.minY = 100;
+  item.geometry.maxX = 101;
+  item.geometry.maxY = 101;
+
+  assert.deepEqual(
+    index.queryPoint({
+      x: 0.5,
+      y: 0.5
+    }),
+    [item]
+  );
+
+  assert.deepEqual(
+    index.queryPoint({
+      x: 100.5,
+      y: 100.5
+    }),
+    []
+  );
+});
+
+
 test("StaticGeometryIndex cannot query against geometry different from its index", () => {
   const item = {
     id: "shifted",
