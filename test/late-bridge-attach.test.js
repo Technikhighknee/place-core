@@ -873,6 +873,144 @@ test("topology materialization requires observable navigation registry state", (
 });
 
 
+test("domain lifecycle mutators must establish their observable postconditions", () => {
+  const domains = new Map();
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain(id) {
+      return domains.get(id);
+    },
+    addDomain() {},
+    removeDomain() {
+      return false;
+    }
+  };
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation: {},
+    startJourney,
+    stopJourney
+  });
+  const instance = {
+    id: "house",
+    layerDomains: new Map([
+      ["inside", "house:inside"]
+    ]),
+    dynamicPortals: new Map()
+  };
+  const definition = {
+    id: "place",
+    layers: [{
+      id: "inside",
+      topologyId: null,
+      navigation: null
+    }],
+    portals: [],
+    boundaries: []
+  };
+
+  assert.throws(
+    () =>
+      bridge.materializePlace(
+        instance,
+        definition
+      ),
+    /failed to add world-core domain/
+  );
+
+  domains.set("house:inside", {
+    id: "house:inside",
+    entityCount: 0
+  });
+
+  assert.throws(
+    () =>
+      bridge.unmaterializePlace(
+        instance,
+        definition
+      ),
+    /failed to remove world-core domain/
+  );
+  assert.ok(
+    domains.has("house:inside")
+  );
+});
+
+
+test("topology binding mutation must establish its observable postcondition", () => {
+  const domains = new Map();
+  const topology = {};
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain(id) {
+      return domains.get(id);
+    },
+    addDomain({ id }) {
+      const domain = {
+        id,
+        entityCount: 0
+      };
+      domains.set(id, domain);
+      return domain;
+    },
+    removeDomain(id) {
+      return domains.delete(id);
+    }
+  };
+  const navigation = {
+    topologies: new Map([
+      ["external-topology", topology]
+    ]),
+    domainBindings: new Map(),
+    bindDomain() {},
+    unbindDomain(id) {
+      return this.domainBindings.delete(id);
+    }
+  };
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    startJourney,
+    stopJourney
+  });
+
+  assert.throws(
+    () =>
+      bridge.materializePlace(
+        {
+          id: "house",
+          layerDomains: new Map([
+            ["inside", "house:inside"]
+          ]),
+          dynamicPortals: new Map()
+        },
+        {
+          id: "place",
+          layers: [{
+            id: "inside",
+            topologyId:
+              "external-topology",
+            navigation: null
+          }],
+          portals: [],
+          boundaries: []
+        }
+      ),
+    /failed to bind world-core domain/
+  );
+
+  assert.equal(
+    domains.has("house:inside"),
+    false,
+    "failed binding must roll the newly added domain back"
+  );
+});
+
+
 test("materialization preflights domain rollback capability before mutation", () => {
   const domains = new Map();
   const world = {
