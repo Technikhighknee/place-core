@@ -1071,11 +1071,21 @@ export class WorldCoreBridge {
       );
 
     for (const state of [...receipt.domains].reverse()) {
-      try {
-        if (
-          state.existed &&
-          !this.world.getDomain?.(state.domainId)
-        ) {
+      const attempt = (operation) => {
+        try {
+          operation();
+          return true;
+        } catch (error) {
+          errors.push(error);
+          return false;
+        }
+      };
+
+      if (
+        state.existed &&
+        !this.world.getDomain?.(state.domainId)
+      ) {
+        attempt(() => {
           if (
             typeof this.world.addDomain !==
               "function"
@@ -1087,12 +1097,14 @@ export class WorldCoreBridge {
           this.world.addDomain({
             id: state.domainId
           });
-        }
+        });
+      }
 
-        if (
-          hasRoadBindings ||
-          state.roadEffects.length > 0
-        ) {
+      if (
+        hasRoadBindings ||
+        state.roadEffects.length > 0
+      ) {
+        attempt(() => {
           if (
             typeof this.navigation
               .clearDomainOverrides !==
@@ -1105,14 +1117,32 @@ export class WorldCoreBridge {
           this.navigation.clearDomainOverrides(
             state.domainId
           );
-        }
+        });
+      }
 
-        const currentBinding =
-          this.navigation.domainBindings?.get?.(state.domainId) ??
-          null;
+      let currentBinding = null;
+      let bindingReadable = true;
+      try {
+        currentBinding =
+          this.navigation.domainBindings?.get?.(
+            state.domainId
+          ) ?? null;
+      } catch (error) {
+        errors.push(error);
+        bindingReadable = false;
+      }
 
-        if (state.previousBinding == null) {
-          if (currentBinding != null) {
+      let previousBindingRestored =
+        bindingReadable &&
+        currentBinding === state.previousBinding;
+
+      if (
+        bindingReadable &&
+        state.previousBinding == null &&
+        currentBinding != null
+      ) {
+        previousBindingRestored =
+          attempt(() => {
             if (
               typeof this.navigation.unbindDomain !==
                 "function"
@@ -1124,24 +1154,35 @@ export class WorldCoreBridge {
             this.navigation.unbindDomain(
               state.domainId
             );
-          }
-        } else if (currentBinding !== state.previousBinding) {
-          if (
-            typeof this.navigation.bindDomain !==
-              "function"
-          ) {
-            throw new Error(
-              "world-core NavigationRegistry.bindDomain is required to restore domain bindings"
+          });
+      } else if (
+        bindingReadable &&
+        state.previousBinding != null &&
+        currentBinding !== state.previousBinding
+      ) {
+        previousBindingRestored =
+          attempt(() => {
+            if (
+              typeof this.navigation.bindDomain !==
+                "function"
+            ) {
+              throw new Error(
+                "world-core NavigationRegistry.bindDomain is required to restore domain bindings"
+              );
+            }
+            this.navigation.bindDomain(
+              state.domainId,
+              state.previousBinding
             );
-          }
-          this.navigation.bindDomain(
-            state.domainId,
-            state.previousBinding
-          );
-        }
+          });
+      }
 
-        if (state.previousBinding != null) {
-          for (const saved of state.roadEffects) {
+      if (
+        state.previousBinding != null &&
+        previousBindingRestored
+      ) {
+        for (const saved of state.roadEffects) {
+          attempt(() =>
             this.#navigationMethod(
               "setDomainRoadEffect"
             )(
@@ -1149,28 +1190,39 @@ export class WorldCoreBridge {
               saved.effectId,
               saved.roadId,
               saved.effect
-            );
-          }
-        }
-
-        if (
-          !state.existed &&
-          this.world.getDomain?.(state.domainId)
-        ) {
-          if (
-            typeof this.world.removeDomain !==
-              "function"
-          ) {
-            throw new Error(
-              "world-core World.removeDomain is required to rollback newly materialized domains"
-            );
-          }
-          this.world.removeDomain(
-            state.domainId
+            )
           );
         }
-      } catch (error) {
-        errors.push(error);
+      }
+
+      if (!state.existed) {
+        let currentDomain;
+        let domainReadable = true;
+        try {
+          currentDomain =
+            this.world.getDomain?.(
+              state.domainId
+            );
+        } catch (error) {
+          errors.push(error);
+          domainReadable = false;
+        }
+
+        if (domainReadable && currentDomain) {
+          attempt(() => {
+            if (
+              typeof this.world.removeDomain !==
+                "function"
+            ) {
+              throw new Error(
+                "world-core World.removeDomain is required to rollback newly materialized domains"
+              );
+            }
+            this.world.removeDomain(
+              state.domainId
+            );
+          });
+        }
       }
     }
 
