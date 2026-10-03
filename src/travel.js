@@ -1942,14 +1942,36 @@ function advance(
         );
       }
 
-      const movedDomainId = moved.domainId ?? "default";
+      let movedId;
+      let movedDomainId;
+      let movedPosition;
+      try {
+        movedId = moved.id;
+        movedDomainId =
+          moved.domainId ?? "default";
+        const position = moved.position;
+        movedPosition =
+          position &&
+          typeof position === "object"
+            ? {
+                x: position.x,
+                y: position.y
+              }
+            : null;
+      } catch (error) {
+        registry.removeEntityOccupancy(
+          state.entityId
+        );
+        throw error;
+      }
+
       const transferDomainValid =
         typeof movedDomainId === "string" &&
         movedDomainId.length > 0;
       const transferPositionValid =
-        moved.position &&
-        Number.isFinite(moved.position.x) &&
-        Number.isFinite(moved.position.y);
+        movedPosition !== null &&
+        Number.isFinite(movedPosition.x) &&
+        Number.isFinite(movedPosition.y);
 
       const emitTransferFailed = (
         actualPosition
@@ -1971,15 +1993,15 @@ function advance(
         });
       };
 
-      if (moved.id !== state.entityId) {
+      if (movedId !== state.entityId) {
         registry.removeEntityOccupancy(
           state.entityId
         );
         emitTransferFailed(
           transferPositionValid
             ? {
-                x: moved.position.x,
-                y: moved.position.y
+                x: movedPosition.x,
+                y: movedPosition.y
               }
             : null
         );
@@ -1998,8 +2020,8 @@ function advance(
         emitTransferFailed(
           transferPositionValid
             ? {
-                x: moved.position.x,
-                y: moved.position.y
+                x: movedPosition.x,
+                y: movedPosition.y
               }
             : null
         );
@@ -2024,11 +2046,15 @@ function advance(
         );
       }
 
-      registry.updateEntityOccupancy(moved);
+      registry.updateEntityOccupancy({
+        id: movedId,
+        domainId: movedDomainId,
+        position: movedPosition
+      });
 
       const transferPositionDistance =
         pointDistance(
-          moved.position,
+          movedPosition,
           direction.to.position
         );
 
@@ -2038,8 +2064,8 @@ function advance(
           portalEntryTolerance
       ) {
         emitTransferFailed({
-          x: moved.position.x,
-          y: moved.position.y
+          x: movedPosition.x,
+          y: movedPosition.y
         });
         return replan(registry, bridge, state, options);
       }

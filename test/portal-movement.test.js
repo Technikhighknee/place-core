@@ -375,6 +375,70 @@ test("portal transfer exception clears uncertain occupancy before failing travel
   );
 });
 
+test("post-transfer entity getter failure clears stale occupancy", () => {
+  const runtime =
+    transferFailureRuntime(
+      (entity, endpoint) => {
+        entity.domainId =
+          endpoint.domainId;
+        entity.position = {
+          x: endpoint.position.x,
+          y: endpoint.position.y
+        };
+        entity.journey = null;
+
+        return new Proxy(
+          entity,
+          {
+            get(target, key, receiver) {
+              if (key === "domainId") {
+                throw new Error(
+                  "synthetic post-transfer domain getter failure"
+                );
+              }
+              return Reflect.get(
+                target,
+                key,
+                receiver
+              );
+            }
+          }
+        );
+      }
+    );
+
+  assert.throws(
+    () =>
+      reachPortalAndAttemptTransfer(
+        runtime
+      ),
+    /synthetic post-transfer domain getter failure/
+  );
+
+  assert.equal(
+    runtime.places.activeTravels.has(
+      "hans"
+    ),
+    false
+  );
+  assert.equal(
+    runtime.places.getEntityLocation(
+      "hans"
+    ),
+    null
+  );
+
+  assert.ok(
+    runtime.places.drainEvents().some(
+      (event) =>
+        event.type ===
+          "travel-failed" &&
+        event.reason === "step-error"
+    )
+  );
+});
+
+
 test("portal transfer lookup exception clears stale occupancy before failing travel", () => {
   let transferred = false;
   const runtime =
