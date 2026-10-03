@@ -333,6 +333,90 @@ test("domain transfer event clears stale occupancy when world entity is unavaila
 });
 
 
+test("domain transfer rejects invalid returned entity state and clears stale occupancy", () => {
+  for (const scenario of [
+    {
+      label: "identity",
+      getEntity() {
+        return {
+          id: "impostor",
+          domainId: "inside",
+          position: { x: 0, y: 0 }
+        };
+      },
+      error:
+        /world entity identity mismatch/
+    },
+    {
+      label: "getter",
+      getEntity() {
+        return new Proxy(
+          {
+            id: "hans"
+          },
+          {
+            get(target, key) {
+              if (key === "domainId") {
+                throw new Error(
+                  "synthetic domain getter failure"
+                );
+              }
+              return target[key];
+            }
+          }
+        );
+      },
+      error:
+        /synthetic domain getter failure/
+    }
+  ]) {
+    let onEvent = null;
+    const world = {
+      subscribeEvents(handler) {
+        onEvent = handler;
+        return () => true;
+      },
+      getEntity: scenario.getEntity
+    };
+    const bridge = new WorldCoreBridge({
+      world,
+      navigation: {},
+      startJourney() {},
+      stopJourney() {}
+    });
+    const places = new PlaceRegistry();
+
+    places.attachWorldCoreBridge(
+      bridge
+    );
+    places.updateEntityOccupancy({
+      id: "hans",
+      domainId: "street",
+      position: { x: 1, y: 2 }
+    });
+
+    assert.throws(
+      () =>
+        onEvent({
+          type:
+            "entityDomainTransferred",
+          entityId: "hans"
+        }),
+      scenario.error,
+      scenario.label
+    );
+
+    assert.equal(
+      places.getEntityLocation("hans"),
+      null,
+      scenario.label
+    );
+
+    bridge.dispose();
+  }
+});
+
+
 test("domain transfer lookup exception clears stale occupancy before surfacing bridge error", () => {
   let onEvent = null;
   const world = {
