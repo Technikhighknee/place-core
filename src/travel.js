@@ -420,9 +420,19 @@ function assertRouteCost(value, label) {
 }
 
 function routeEstimatedSeconds(plan, label) {
+  if (
+    !plan ||
+    typeof plan !== "object" ||
+    Array.isArray(plan)
+  ) {
+    throw new TypeError(
+      `${label} must be a route object`
+    );
+  }
+
   const value =
-    plan?.estimatedSeconds ??
-    plan?.route?.estimatedSeconds;
+    plan.estimatedSeconds ??
+    plan.route?.estimatedSeconds;
   if (value == null) {
     throw new TypeError(
       `${label} estimatedSeconds must be a finite number >= 0`
@@ -487,16 +497,16 @@ function localRoute(bridge, mobility, from, destination, options, cache, cachePr
       options.journeyOptions
     )
   });
-  const result = plan
-    ? {
+  const result = plan === null
+    ? null
+    : {
         estimatedSeconds:
           routeEstimatedSeconds(
             plan,
             "local route"
           ),
         plan
-      }
-    : null;
+      };
   cache.set(key, result);
   return result;
 }
@@ -555,7 +565,7 @@ function localRouteCostsToMany(
       mobility,
       options: cloneJourneyOptions(options)
     });
-    if (planned) {
+    if (planned !== null) {
       result.set(
         destinationNodeId,
         routeEstimatedSeconds(
