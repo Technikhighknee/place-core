@@ -880,6 +880,51 @@ test("default concrete-state search does not silently discard the globally cheap
 });
 
 
+test("planner rejects non-object local route results", () => {
+  const places = new PlaceRegistry();
+  const entity = {
+    id: "hans",
+    domainId: "A",
+    position: { x: 0, y: 0 },
+    mobility: { speed: 1 }
+  };
+
+  for (const invalid of [
+    undefined,
+    false,
+    0,
+    "",
+    []
+  ]) {
+    const bridge = {
+      getEntity(id) {
+        return id === "hans"
+          ? entity
+          : null;
+      },
+      planLocalRoute() {
+        return invalid;
+      }
+    };
+
+    assert.throws(
+      () =>
+        planTravel(
+          places,
+          bridge,
+          "hans",
+          {
+            domainId: "A",
+            position: { x: 10, y: 0 },
+            nodeId: "target"
+          }
+        ),
+      /local route must be a route object/
+    );
+  }
+});
+
+
 test("planner rejects invalid local routing costs instead of poisoning travel state", () => {
   const places = new PlaceRegistry();
   const entity = {

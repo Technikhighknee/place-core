@@ -852,7 +852,10 @@ export class WorldCoreBridge {
     destinationNodeId: string;
     mobility: any;
     options?: any;
-  }): any;
+  }):
+    | ({ estimatedSeconds: number } & Record<string, unknown>)
+    | ({ route: { estimatedSeconds: number } } & Record<string, unknown>)
+    | null;
   planLocalRouteCostsToMany(input: {
     domainId: string;
     position: Vec2;
