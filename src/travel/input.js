@@ -3,6 +3,7 @@ import {
   assertStringId,
   cloneJson,
   compareStrings,
+  deepFreeze,
   normalizeBoolean
 } from "../utils.js";
 
@@ -433,7 +434,12 @@ export function captureTravelOptions(options = {}) {
   };
 
   if (normalized.journeyOptions !== undefined) {
-    captured.journeyOptions = cloneJson(normalized.journeyOptions);
+    captured.journeyOptions =
+      deepFreeze(
+        cloneJson(
+          normalized.journeyOptions
+        )
+      );
   }
   if (options.excludedPortalKeys !== undefined) {
     captured.excludedPortalKeys = normalized.excludedPortalKeys;

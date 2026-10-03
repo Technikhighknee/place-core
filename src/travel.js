@@ -1774,7 +1774,17 @@ function advance(
       }
 
       if (!state.localStarted) {
-        const ok = bridge.startLocalJourney(state.entityId, step.destinationNodeId, options.journeyOptions);
+        const journeyOptions =
+          options.journeyOptions === undefined
+            ? undefined
+            : cloneJson(
+                options.journeyOptions
+              );
+        const ok = bridge.startLocalJourney(
+          state.entityId,
+          step.destinationNodeId,
+          journeyOptions
+        );
         if (!ok) return replan(registry, bridge, state, options);
         state.localStarted = true;
         registry.emit("travel-leg-start", {
