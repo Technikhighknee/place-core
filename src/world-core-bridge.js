@@ -761,6 +761,8 @@ export class WorldCoreBridge {
         )
       ),
       newTopologyIds,
+      attemptedTopologyIds:
+        new Set(),
       newTopologies: new Map()
     };
 
@@ -1130,6 +1132,17 @@ export class WorldCoreBridge {
 
     try {
       for (const layer of definition.layers) {
+        if (
+          layer.topologyId != null &&
+          newTopologyIds.includes(
+            layer.topologyId
+          )
+        ) {
+          receipt.attemptedTopologyIds.add(
+            layer.topologyId
+          );
+        }
+
         const topology =
           this.ensureLayerTopology(
             definition,
@@ -1447,11 +1460,16 @@ export class WorldCoreBridge {
             topologyId
           ) ?? null;
 
+        const attempted =
+          receipt.attemptedTopologyIds
+            ?.has?.(topologyId) ??
+          (expected != null);
         const shouldRemove =
           current != null &&
           (
-            expected == null ||
-            current === expected
+            expected != null
+              ? current === expected
+              : attempted
           );
         if (shouldRemove) {
           const didRemove =
