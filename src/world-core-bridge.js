@@ -1305,10 +1305,13 @@ export class WorldCoreBridge {
             topologyId
           ) ?? null;
 
-        if (
-          expected != null &&
-          current === expected
-        ) {
+        const shouldRemove =
+          current != null &&
+          (
+            expected == null ||
+            current === expected
+          );
+        if (shouldRemove) {
           const didRemove =
             this.navigation.removeTopology(
               topologyId
@@ -1321,6 +1324,7 @@ export class WorldCoreBridge {
         }
 
         if (
+          expected != null &&
           this.#ownedTopologies.get(
             topologyId
           ) === expected
