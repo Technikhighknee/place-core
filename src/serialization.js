@@ -599,16 +599,10 @@ export function deserializePlaceCore(snapshot, options = {}) {
     );
   }
 
-  if (bridge && resumeWorldCoreState) {
-    for (const saved of active) {
-      registry.updateEntityOccupancy(
-        resumableEntities.get(
-          saved.entityId
-        )
-      );
-    }
-  }
-
+  // resumeWorldCoreState already proved every tracked live entity
+  // matches the snapshot before bridge materialization. Re-reading live
+  // entity getters here would reopen a failure/TOCTOU window after attach,
+  // while producing the same occupancy that was restored above.
   const retainPending = (
     saved,
     ...restartErrors
