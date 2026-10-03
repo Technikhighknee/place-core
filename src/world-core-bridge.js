@@ -5,6 +5,8 @@ import {
 } from "./registry/support.js";
 import { compareStrings } from "./utils.js";
 
+const NO_THROWN_VALUE = Symbol("no-thrown-value");
+
 function sortedStrings(values) {
   if (values == null) return null;
   return [...values].sort();
@@ -984,14 +986,14 @@ export class WorldCoreBridge {
         }
       }
     } catch (error) {
-      let rollbackError = null;
+      let rollbackError = NO_THROWN_VALUE;
       try {
         this.rollbackMaterializePlace(instance, definition, receipt);
       } catch (restoreError) {
         rollbackError = restoreError;
       }
 
-      if (rollbackError) {
+      if (rollbackError !== NO_THROWN_VALUE) {
         throw new AggregateError(
           [error, rollbackError],
           `failed to materialize place ${String(instance.id)} and restore prior world-core state`
@@ -1748,7 +1750,7 @@ export class WorldCoreBridge {
         }
       }
     } catch (error) {
-      let rollbackError = null;
+      let rollbackError = NO_THROWN_VALUE;
       try {
         this.rollbackMaterializePlace(
           instance,
@@ -1759,7 +1761,7 @@ export class WorldCoreBridge {
         rollbackError = restoreError;
       }
 
-      if (rollbackError) {
+      if (rollbackError !== NO_THROWN_VALUE) {
         throw new AggregateError(
           [error, rollbackError],
           `failed to remove place ${String(instance.id)} and restore bridge state`

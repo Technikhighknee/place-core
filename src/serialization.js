@@ -31,6 +31,8 @@ export {
   validatePlaceCoreSnapshot
 };
 
+const NO_THROWN_VALUE = Symbol("no-thrown-value");
+
 function safeThrownString(value) {
   try {
     return String(value);
@@ -720,7 +722,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
           );
         }
       } catch (error) {
-        let cleanupError = null;
+        let cleanupError = NO_THROWN_VALUE;
         if (registry._hasActiveTravel(
           PLACE_REGISTRY_TRAVEL_MUTATION_TOKEN,
           saved.entityId
@@ -743,7 +745,7 @@ export function deserializePlaceCore(snapshot, options = {}) {
 
         retainPending(
           saved,
-          cleanupError
+          cleanupError !== NO_THROWN_VALUE
             ? new AggregateError(
                 [error, cleanupError],
                 "travel restart and cleanup failed"

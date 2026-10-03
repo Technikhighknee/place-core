@@ -134,6 +134,53 @@ test("internal rollback still completes when bridge cleanup itself fails", () =>
 });
 
 
+test("create rollback preserves falsy bridge cleanup throws", () => {
+  const bridge = {
+    attachRegistry() {},
+    materializePlace() {},
+    syncBoundaryState() {
+      throw new Error("sync failed");
+    },
+    syncPortalState() {},
+    unmaterializePlace() {
+      throw undefined;
+    }
+  };
+
+  const places = new PlaceRegistry({
+    bridge,
+    captureEvents: true
+  });
+  places.registerDefinition(definition());
+
+  assert.throws(
+    () => places.createPlace({
+      id: "broken",
+      definitionId: "transaction-place"
+    }),
+    (error) => {
+      assert.ok(error instanceof AggregateError);
+      assert.equal(error.errors.length, 2);
+      assert.match(
+        error.errors[0].message,
+        /sync failed/
+      );
+      assert.equal(
+        error.errors[1],
+        undefined
+      );
+      return true;
+    }
+  );
+
+  assert.equal(
+    places.getPlace("broken"),
+    null
+  );
+  places.assertInternalConsistency();
+});
+
+
 test("derived exterior overflow cannot leave a partially created place", () => {
   const places = new PlaceRegistry({
     captureEvents: true

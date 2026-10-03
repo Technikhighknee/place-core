@@ -58,6 +58,8 @@ import {
 
 export { PlaceInstance };
 
+const NO_THROWN_VALUE = Symbol("no-thrown-value");
+
 function footprintIntersectsBounds(
   footprint,
   transform,
@@ -1221,7 +1223,7 @@ export class PlaceRegistry {
         );
       }
     } catch (error) {
-      let rollbackError = null;
+      let rollbackError = NO_THROWN_VALUE;
       if (materialized) {
         try {
           if (materializationReceipt != null &&
@@ -1238,7 +1240,7 @@ export class PlaceRegistry {
           rollbackError = cleanupError;
         }
       }
-      let localRollbackError = null;
+      let localRollbackError = NO_THROWN_VALUE;
       if (registered) {
         try {
           this.#removePlaceInternal(instance.id, false, {
@@ -1250,16 +1252,22 @@ export class PlaceRegistry {
         }
       }
 
-      if (rollbackError || localRollbackError) {
-        const errors = [
-          error,
-          rollbackError,
-          localRollbackError
-        ].filter(Boolean);
+      if (
+        rollbackError !== NO_THROWN_VALUE ||
+        localRollbackError !== NO_THROWN_VALUE
+      ) {
+        const errors = [error];
+        if (rollbackError !== NO_THROWN_VALUE) {
+          errors.push(rollbackError);
+        }
+        if (localRollbackError !== NO_THROWN_VALUE) {
+          errors.push(localRollbackError);
+        }
         const rollbackLabel =
-          rollbackError && localRollbackError
+          rollbackError !== NO_THROWN_VALUE &&
+          localRollbackError !== NO_THROWN_VALUE
             ? "bridge and local state"
-            : rollbackError
+            : rollbackError !== NO_THROWN_VALUE
               ? "bridge state"
               : "local state";
         throw new AggregateError(
@@ -1445,13 +1453,13 @@ export class PlaceRegistry {
         previousOverride,
         PLACE_INSTANCE_MUTATION_TOKEN
       );
-      let rollbackError = null;
+      let rollbackError = NO_THROWN_VALUE;
       try {
         this.#bridge?.syncBoundaryState?.(instance, previousResolved);
       } catch (restoreError) {
         rollbackError = restoreError;
       }
-      if (rollbackError) {
+      if (rollbackError !== NO_THROWN_VALUE) {
         throw new AggregateError(
           [error, rollbackError],
           `failed to update boundary ${boundaryId} and restore bridge state`
@@ -1704,7 +1712,7 @@ export class PlaceRegistry {
       );
       this.#reindexInstancePortals(instance, definition);
 
-      let rollbackError = null;
+      let rollbackError = NO_THROWN_VALUE;
       try {
         this.#restorePortalBridgeStates(
           instance,
@@ -1714,7 +1722,7 @@ export class PlaceRegistry {
         rollbackError = restoreError;
       }
 
-      if (rollbackError) {
+      if (rollbackError !== NO_THROWN_VALUE) {
         throw new AggregateError(
           [error, rollbackError],
           `failed to update attachment ${slot} and restore bridge state`
@@ -1787,7 +1795,7 @@ export class PlaceRegistry {
       );
       this.#reindexInstancePortals(instance, definition);
 
-      let rollbackError = null;
+      let rollbackError = NO_THROWN_VALUE;
       try {
         this.#restorePortalBridgeStates(
           instance,
@@ -1797,7 +1805,7 @@ export class PlaceRegistry {
         rollbackError = restoreError;
       }
 
-      if (rollbackError) {
+      if (rollbackError !== NO_THROWN_VALUE) {
         throw new AggregateError(
           [error, rollbackError],
           `failed to clear attachment ${slot} and restore bridge state`
@@ -1863,7 +1871,7 @@ export class PlaceRegistry {
         );
       }
     } catch (error) {
-      let rollbackError = null;
+      let rollbackError = NO_THROWN_VALUE;
       try {
         for (const id of affected) {
           this.#unindexExterior(
@@ -1892,7 +1900,7 @@ export class PlaceRegistry {
         rollbackError = restoreError;
       }
 
-      if (rollbackError) {
+      if (rollbackError !== NO_THROWN_VALUE) {
         throw new AggregateError(
           [error, rollbackError],
           `failed to update placement for ${String(instanceId)} and restore exterior indexes`
@@ -2210,7 +2218,7 @@ export class PlaceRegistry {
           definition
         );
 
-        let rollbackError = null;
+        let rollbackError = NO_THROWN_VALUE;
         try {
           this.#bridge?.syncPortalState?.(
             instance,
@@ -2221,7 +2229,7 @@ export class PlaceRegistry {
           rollbackError = restoreError;
         }
 
-        if (rollbackError) {
+        if (rollbackError !== NO_THROWN_VALUE) {
           throw new AggregateError(
             [error, rollbackError],
             `failed to update dynamic portal ${portalId} and restore bridge state`
@@ -2299,14 +2307,14 @@ export class PlaceRegistry {
       );
       this.#reindexInstancePortals(instance, definition);
 
-      let rollbackError = null;
+      let rollbackError = NO_THROWN_VALUE;
       try {
         this.#bridge?.syncPortalState?.(instance, base, before);
       } catch (restoreError) {
         rollbackError = restoreError;
       }
 
-      if (rollbackError) {
+      if (rollbackError !== NO_THROWN_VALUE) {
         throw new AggregateError(
           [error, rollbackError],
           `failed to update portal ${portalId} and restore bridge state`
@@ -2529,7 +2537,7 @@ export class PlaceRegistry {
     try {
       this.#bridge?.syncDynamicPortal?.(instance, portal, resolved);
     } catch (error) {
-      let rollbackError = null;
+      let rollbackError = NO_THROWN_VALUE;
       try {
         this.#bridge?.removeDynamicPortal?.(instance, resolved);
       } catch (restoreError) {
@@ -2542,7 +2550,7 @@ export class PlaceRegistry {
       );
       this.#reindexInstancePortals(instance, definition);
 
-      if (rollbackError) {
+      if (rollbackError !== NO_THROWN_VALUE) {
         throw new AggregateError(
           [error, rollbackError],
           `failed to add dynamic portal ${portal.id} and restore bridge state`
@@ -2568,14 +2576,14 @@ export class PlaceRegistry {
     try {
       this.#bridge?.removeDynamicPortal?.(instance, resolved);
     } catch (error) {
-      let rollbackError = null;
+      let rollbackError = NO_THROWN_VALUE;
       try {
         this.#bridge?.syncDynamicPortal?.(instance, dynamic, resolved);
       } catch (restoreError) {
         rollbackError = restoreError;
       }
 
-      if (rollbackError) {
+      if (rollbackError !== NO_THROWN_VALUE) {
         throw new AggregateError(
           [error, rollbackError],
           `failed to remove dynamic portal ${portalId} and restore bridge state`

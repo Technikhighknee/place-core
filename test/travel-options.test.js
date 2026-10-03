@@ -1260,6 +1260,61 @@ test("stopTravel finalizes cancellation even when local cleanup throws", () => {
 });
 
 
+test("stopTravel preserves falsy cleanup throws", () => {
+  const falsyThrows = [
+    undefined,
+    null,
+    false,
+    0,
+    ""
+  ];
+
+  for (const thrown of falsyThrows) {
+    const {
+      places,
+      bridge
+    } = twoLayerRuntime();
+
+    assert.ok(
+      startTravel(
+        places,
+        bridge,
+        "hans",
+        {
+          placeId: "house",
+          anchorId: "target"
+        }
+      )
+    );
+
+    bridge.stopLocalJourney = () => {
+      throw thrown;
+    };
+
+    let didThrow = false;
+    let caught;
+    try {
+      stopTravel(
+        places,
+        bridge,
+        "hans",
+        { reason: "test-cancel" }
+      );
+    } catch (error) {
+      didThrow = true;
+      caught = error;
+    }
+
+    assert.equal(didThrow, true);
+    assert.equal(caught, thrown);
+    assert.equal(
+      places.activeTravels.size,
+      0
+    );
+  }
+});
+
+
 test("replan cleanup failure does not leave travel active", () => {
   const {
     places,

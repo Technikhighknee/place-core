@@ -31,6 +31,8 @@ export {
   validateTravelTarget
 };
 
+const NO_THROWN_VALUE = Symbol("no-thrown-value");
+
 function assertRegistryExecutionBridge(
   registry,
   bridge,
@@ -1607,7 +1609,7 @@ function liveTravelEntity(
 }
 
 function fail(registry, bridge, state, reason) {
-  let cleanupError = null;
+  let cleanupError = NO_THROWN_VALUE;
   try {
     bridge.stopLocalJourney(state.entityId);
   } catch (error) {
@@ -1620,7 +1622,7 @@ function fail(registry, bridge, state, reason) {
     reason
   );
 
-  if (cleanupError) {
+  if (cleanupError !== NO_THROWN_VALUE) {
     throw cleanupError;
   }
   return state;
@@ -2144,7 +2146,7 @@ function startTravelCore(
       )
     );
   } catch (error) {
-    let cleanupError = null;
+    let cleanupError = NO_THROWN_VALUE;
     if (
       state.status === "active" &&
       registry._hasActiveTravel(
@@ -2165,7 +2167,7 @@ function startTravelCore(
       );
     }
 
-    if (cleanupError) {
+    if (cleanupError !== NO_THROWN_VALUE) {
       throw new AggregateError(
         [error, cleanupError],
         "travel start failed and local journey cleanup also failed"
@@ -2395,7 +2397,7 @@ export function stepTravel(registry, a, b, c) {
         entityId
       )
     ) {
-      let cleanupError = null;
+      let cleanupError = NO_THROWN_VALUE;
       try {
         bridge.stopLocalJourney?.(
           entityId
@@ -2410,7 +2412,7 @@ export function stepTravel(registry, a, b, c) {
         "step-error"
       );
 
-      if (cleanupError) {
+      if (cleanupError !== NO_THROWN_VALUE) {
         throw new AggregateError(
           [error, cleanupError],
           "travel step failed and local journey cleanup also failed"
@@ -2555,7 +2557,7 @@ export function stopTravel(registry, a, b, c = {}) {
     options.reason
   );
 
-  let cleanupError = null;
+  let cleanupError = NO_THROWN_VALUE;
   try {
     bridge?.stopLocalJourney?.(entityId);
   } catch (error) {
@@ -2572,7 +2574,7 @@ export function stopTravel(registry, a, b, c = {}) {
     reason: options.reason
   });
 
-  if (cleanupError) {
+  if (cleanupError !== NO_THROWN_VALUE) {
     throw cleanupError;
   }
   return true;
