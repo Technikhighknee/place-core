@@ -1140,6 +1140,37 @@ test("public travel state surfaces cannot mutate registry internals", () => {
 });
 
 
+test("startTravel rejects non-boolean journey start results", () => {
+  const {
+    places,
+    bridge
+  } = twoLayerRuntime();
+
+  bridge.startLocalJourney = () => ({
+    started: true
+  });
+
+  assert.throws(
+    () =>
+      startTravel(
+        places,
+        bridge,
+        "hans",
+        {
+          placeId: "house",
+          anchorId: "target"
+        }
+      ),
+    /startLocalJourney must return a boolean/
+  );
+
+  assert.equal(
+    places.activeTravels.size,
+    0
+  );
+});
+
+
 test("startTravel does not leak active state when initial journey start throws", () => {
   const {
     places,

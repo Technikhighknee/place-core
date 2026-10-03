@@ -1805,6 +1805,11 @@ function advance(
           step.destinationNodeId,
           journeyOptions
         );
+        if (typeof ok !== "boolean") {
+          throw new TypeError(
+            "startLocalJourney must return a boolean"
+          );
+        }
         if (!ok) return replan(registry, bridge, state, options);
         state.localStarted = true;
         registry.emit("travel-leg-start", {
