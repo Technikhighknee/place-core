@@ -587,6 +587,59 @@ export class WorldCoreBridge {
       );
     }
 
+    const hasTopologyBoundLayers =
+      definition.layers.some(
+        (layer) =>
+          layer.topologyId != null
+      );
+    if (hasTopologyBoundLayers) {
+      if (
+        typeof this.navigation.topologies
+          ?.get !== "function" ||
+        typeof this.navigation.topologies
+          ?.has !== "function"
+      ) {
+        throw new Error(
+          "world-core NavigationRegistry.topologies is required to observe topology materialization state"
+        );
+      }
+      if (
+        typeof this.navigation.domainBindings
+          ?.get !== "function"
+      ) {
+        throw new Error(
+          "world-core NavigationRegistry.domainBindings is required to observe topology-bound domain state"
+        );
+      }
+    }
+
+    const hasRoadBindings =
+      definition.boundaries.some(
+        (boundary) =>
+          boundary.roadBindings?.length
+      ) ||
+      definition.portals.some(
+        (portal) =>
+          portal.roadBindings?.length
+      ) ||
+      [...(
+        instance.dynamicPortals?.values?.() ??
+        []
+      )].some(
+        (portal) =>
+          portal.roadBindings?.length
+      );
+
+    if (
+      hasRoadBindings &&
+      typeof this.navigation.domainInstances
+        ?.get !== "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.domainInstances is required to preserve domain road effects transactionally"
+      );
+    }
+
     const newTopologyIds = [
       ...new Set(
         definition.layers
@@ -653,23 +706,6 @@ export class WorldCoreBridge {
         "world-core World.removeDomain is required for transactional domain materialization rollback"
       );
     }
-
-    const hasRoadBindings =
-      definition.boundaries.some(
-        (boundary) =>
-          boundary.roadBindings?.length
-      ) ||
-      definition.portals.some(
-        (portal) =>
-          portal.roadBindings?.length
-      ) ||
-      [...(
-        instance.dynamicPortals?.values?.() ??
-        []
-      )].some(
-        (portal) =>
-          portal.roadBindings?.length
-      );
 
     if (
       hasRoadBindings &&
@@ -1568,8 +1604,16 @@ export class WorldCoreBridge {
 
   ensureLayerTopology(definition, layer) {
     if (layer.topologyId == null) return null;
+    if (
+      typeof this.navigation.topologies
+        ?.get !== "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.topologies is required to observe registered navigation topologies"
+      );
+    }
 
-    const existing = this.navigation.topologies?.get?.(layer.topologyId);
+    const existing = this.navigation.topologies.get(layer.topologyId);
     if (existing) {
       if (layer.navigation != null) {
         this.#assertLayerTopologyCompatible(
@@ -1718,6 +1762,47 @@ export class WorldCoreBridge {
     ) {
       throw new Error(
         "world-core World.getDomain is required to unmaterialize place domains"
+      );
+    }
+
+    const hasTopologyBoundLayers =
+      definition.layers.some(
+        (layer) =>
+          layer.topologyId != null
+      );
+    if (
+      hasTopologyBoundLayers &&
+      typeof this.navigation.domainBindings
+        ?.get !== "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.domainBindings is required to observe topology-bound domain state"
+      );
+    }
+
+    const hasRoadBindings =
+      definition.boundaries.some(
+        (boundary) =>
+          boundary.roadBindings?.length
+      ) ||
+      definition.portals.some(
+        (portal) =>
+          portal.roadBindings?.length
+      ) ||
+      [...(
+        instance.dynamicPortals?.values?.() ??
+        []
+      )].some(
+        (portal) =>
+          portal.roadBindings?.length
+      );
+    if (
+      hasRoadBindings &&
+      typeof this.navigation.domainInstances
+        ?.get !== "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.domainInstances is required to preserve domain road effects transactionally"
       );
     }
 

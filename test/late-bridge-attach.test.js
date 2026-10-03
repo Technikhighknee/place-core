@@ -771,6 +771,108 @@ test("materialization preflights addDomain before topology mutation", () => {
 });
 
 
+test("topology materialization requires observable navigation registry state", () => {
+  const domains = new Map();
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain(id) {
+      return domains.get(id);
+    },
+    addDomain({ id }) {
+      domains.set(id, {
+        id,
+        entityCount: 0
+      });
+    },
+    removeDomain(id) {
+      domains.delete(id);
+      return true;
+    }
+  };
+  let registerCalls = 0;
+  let bindCalls = 0;
+  const navigation = {
+    registerTopology() {
+      registerCalls += 1;
+    },
+    removeTopology() {
+      return true;
+    },
+    bindDomain() {
+      bindCalls += 1;
+    },
+    unbindDomain() {
+      return true;
+    }
+  };
+  class NavigationStub {}
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    Navigation: NavigationStub,
+    startJourney,
+    stopJourney
+  });
+  const instance = {
+    id: "house",
+    layerDomains: new Map([
+      ["inside", "house:inside"]
+    ]),
+    dynamicPortals: new Map()
+  };
+  const definition = {
+    id: "place",
+    layers: [{
+      id: "inside",
+      topologyId: "place:inside",
+      navigation: {
+        options: {},
+        regions: [],
+        nodes: [],
+        roads: []
+      }
+    }],
+    portals: [],
+    boundaries: []
+  };
+
+  assert.throws(
+    () =>
+      bridge.materializePlace(
+        instance,
+        definition
+      ),
+    /NavigationRegistry\.topologies.*observe/
+  );
+  assert.equal(registerCalls, 0);
+  assert.equal(bindCalls, 0);
+
+  domains.set("house:inside", {
+    id: "house:inside",
+    entityCount: 0
+  });
+  let removeCalls = 0;
+  world.removeDomain = (id) => {
+    removeCalls += 1;
+    domains.delete(id);
+    return true;
+  };
+
+  assert.throws(
+    () =>
+      bridge.unmaterializePlace(
+        instance,
+        definition
+      ),
+    /NavigationRegistry\.domainBindings.*observe/
+  );
+  assert.equal(removeCalls, 0);
+});
+
+
 test("materialization preflights domain rollback capability before mutation", () => {
   const domains = new Map();
   const world = {
