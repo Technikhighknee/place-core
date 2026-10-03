@@ -346,13 +346,7 @@ export class WorldCoreBridge {
       this.navigation.domainInstances.get(
         domainId
       );
-    if (
-      instance != null &&
-      (
-        instance.overrideEffectCount == null ||
-        instance.overrideEffectCount !== 0
-      )
-    ) {
+    if (instance != null) {
       throw new Error(
         `failed to clear domain navigation overrides for ${domainId}`
       );
