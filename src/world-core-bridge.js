@@ -2512,7 +2512,16 @@ export class WorldCoreBridge {
 
   stopLocalJourney(entityId) {
     const entity = this.world.getEntity(entityId);
-    if (entity) this.stopJourneyFn(entity, this.world);
+    if (!entity) return;
+    this.stopJourneyFn(
+      entity,
+      this.world
+    );
+    if (entity.journey != null) {
+      throw new Error(
+        `failed to stop world-core journey for ${String(entityId)}`
+      );
+    }
   }
 
   transferEntity(entityId, endpoint) {
