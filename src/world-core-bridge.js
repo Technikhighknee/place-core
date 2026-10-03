@@ -114,6 +114,50 @@ export class WorldCoreBridge {
     return method.bind(this.navigation);
   }
 
+  #assertDomainRoadEffect(
+    domainId,
+    effectId,
+    roadId,
+    expected
+  ) {
+    if (
+      typeof this.navigation.domainInstances
+        ?.get !== "function"
+    ) {
+      return;
+    }
+
+    const actual =
+      this.navigation.domainInstances
+        .get(domainId)
+        ?.roadEffects?.get?.(roadId)
+        ?.get?.(effectId) ??
+      null;
+
+    if (expected == null) {
+      if (actual != null) {
+        throw new Error(
+          `failed to remove domain road effect ${effectId} from ${domainId}:${roadId}`
+        );
+      }
+      return;
+    }
+
+    if (
+      actual == null ||
+      actual.blocked !==
+        (expected.blocked === true) ||
+      actual.costMultiplier !==
+        (expected.costMultiplier ?? 1) ||
+      actual.traversalDelaySeconds !==
+        (expected.traversalDelaySeconds ?? 0)
+    ) {
+      throw new Error(
+        `failed to apply domain road effect ${effectId} to ${domainId}:${roadId}`
+      );
+    }
+  }
+
   attachRegistry(
     registry,
     onDispose = null,
@@ -1309,7 +1353,7 @@ export class WorldCoreBridge {
         previousBindingRestored
       ) {
         for (const saved of state.roadEffects) {
-          attempt(() =>
+          attempt(() => {
             this.#navigationMethod(
               "setDomainRoadEffect"
             )(
@@ -1317,8 +1361,14 @@ export class WorldCoreBridge {
               saved.effectId,
               saved.roadId,
               saved.effect
-            )
-          );
+            );
+            this.#assertDomainRoadEffect(
+              state.domainId,
+              saved.effectId,
+              saved.roadId,
+              saved.effect
+            );
+          });
         }
       }
 
@@ -2155,6 +2205,12 @@ export class WorldCoreBridge {
             binding.roadId,
             { blocked: true }
           );
+          this.#assertDomainRoadEffect(
+            domainId,
+            effectId,
+            binding.roadId,
+            { blocked: true }
+          );
         } else {
           this.#navigationMethod(
             "removeDomainRoadEffect"
@@ -2162,6 +2218,12 @@ export class WorldCoreBridge {
             domainId,
             effectId,
             binding.roadId
+          );
+          this.#assertDomainRoadEffect(
+            domainId,
+            effectId,
+            binding.roadId,
+            null
           );
         }
       } catch (error) {
@@ -2378,16 +2440,23 @@ export class WorldCoreBridge {
 
       try {
         if (blocked || traversalDelaySeconds > 0) {
+          const effect = {
+            blocked,
+            traversalDelaySeconds
+          };
           this.#navigationMethod(
             "setDomainRoadEffect"
           )(
             domainId,
             effectId,
             binding.roadId,
-            {
-              blocked,
-              traversalDelaySeconds
-            }
+            effect
+          );
+          this.#assertDomainRoadEffect(
+            domainId,
+            effectId,
+            binding.roadId,
+            effect
           );
         } else {
           this.#navigationMethod(
@@ -2396,6 +2465,12 @@ export class WorldCoreBridge {
             domainId,
             effectId,
             binding.roadId
+          );
+          this.#assertDomainRoadEffect(
+            domainId,
+            effectId,
+            binding.roadId,
+            null
           );
         }
       } catch (error) {
