@@ -1501,12 +1501,22 @@ export class WorldCoreBridge {
       ) {
         try {
           if (
-            !this.navigation.topologies
-              ?.has?.(topologyId)
+            !this.navigation.topologies.has(
+              topologyId
+            )
           ) {
             this.navigation.registerTopology(
               topologyId,
               topology
+            );
+          }
+          if (
+            this.navigation.topologies.get(
+              topologyId
+            ) !== topology
+          ) {
+            throw new Error(
+              `failed to restore navigation topology ${topologyId}`
             );
           }
         } catch (rollbackError) {
@@ -1783,6 +1793,15 @@ export class WorldCoreBridge {
     }
 
     this.navigation.registerTopology(layer.topologyId, nav);
+    if (
+      this.navigation.topologies.get(
+        layer.topologyId
+      ) !== nav
+    ) {
+      throw new Error(
+        `failed to register navigation topology ${layer.topologyId}`
+      );
+    }
     return nav;
   }
 

@@ -1296,6 +1296,94 @@ test("materialization rollback continues domain cleanup after override failure",
 });
 
 
+test("topology registration must establish the requested topology", () => {
+  const domains = new Map();
+  const topologies = new Map();
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getDomain(id) {
+      return domains.get(id);
+    },
+    addDomain({ id }) {
+      const domain = {
+        id,
+        entityCount: 0
+      };
+      domains.set(id, domain);
+      return domain;
+    },
+    removeDomain(id) {
+      return domains.delete(id);
+    }
+  };
+  const navigation = {
+    topologies,
+    domainBindings: new Map(),
+    registerTopology() {},
+    removeTopology(id) {
+      return topologies.delete(id);
+    },
+    bindDomain() {
+      throw new Error(
+        "bindDomain must not run after failed topology registration"
+      );
+    },
+    unbindDomain(id) {
+      return this.domainBindings.delete(id);
+    }
+  };
+  class NavigationStub {}
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    Navigation: NavigationStub,
+    startJourney,
+    stopJourney
+  });
+
+  assert.throws(
+    () =>
+      bridge.materializePlace(
+        {
+          id: "house",
+          layerDomains: new Map([
+            ["inside", "house:inside"]
+          ]),
+          dynamicPortals: new Map()
+        },
+        {
+          id: "place",
+          layers: [{
+            id: "inside",
+            topologyId: "place:inside",
+            navigation: {
+              options: {},
+              regions: [],
+              nodes: [],
+              roads: []
+            }
+          }],
+          portals: [],
+          boundaries: []
+        }
+      ),
+    /failed to register navigation topology place:inside/
+  );
+
+  assert.equal(
+    topologies.has("place:inside"),
+    false
+  );
+  assert.equal(
+    domains.size,
+    0
+  );
+});
+
+
 test("materialization rollback removes topology installed before register failure", () => {
   const domains = new Map();
   const topologies = new Map();
@@ -1851,6 +1939,105 @@ test("topology cleanup retains ownership when topology registry becomes unobserv
   );
 
   bridge.dispose();
+});
+
+
+test("topology release rollback verifies re-registration postconditions", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(
+    definition()
+  );
+  places.registerDefinition({
+    ...definition(),
+    id: "late-attach-place-two"
+  });
+
+  const {
+    navigation,
+    bridge
+  } = makeBridge();
+
+  places.attachWorldCoreBridge(
+    bridge
+  );
+  places.createPlace({
+    id: "first-house",
+    definitionId:
+      "late-attach-place"
+  });
+  places.createPlace({
+    id: "second-house",
+    definitionId:
+      "late-attach-place-two"
+  });
+
+  const firstTopologyId =
+    places.getDefinition(
+      "late-attach-place"
+    ).layers[0].topologyId;
+  const secondTopologyId =
+    places.getDefinition(
+      "late-attach-place-two"
+    ).layers[0].topologyId;
+
+  places.removePlace(
+    "first-house"
+  );
+  places.removePlace(
+    "second-house"
+  );
+
+  const originalRemove =
+    navigation.removeTopology.bind(
+      navigation
+    );
+  let removeCalls = 0;
+  navigation.removeTopology = (id) => {
+    removeCalls += 1;
+    if (removeCalls === 2) {
+      throw new Error(
+        "synthetic second topology removal failure"
+      );
+    }
+    return originalRemove(id);
+  };
+  navigation.registerTopology = () => {};
+
+  assert.throws(
+    () => bridge.dispose(),
+    (error) => {
+      assert.ok(
+        error instanceof AggregateError
+      );
+      assert.ok(
+        error.errors.some((item) =>
+          /synthetic second topology removal failure/.test(
+            String(item)
+          )
+        )
+      );
+      assert.ok(
+        error.errors.some((item) =>
+          /failed to restore navigation topology/.test(
+            String(item)
+          )
+        )
+      );
+      return true;
+    }
+  );
+
+  const remaining = [
+    firstTopologyId,
+    secondTopologyId
+  ].filter((id) =>
+    navigation.topologies.has(id)
+  );
+
+  assert.equal(
+    remaining.length,
+    1
+  );
 });
 
 
