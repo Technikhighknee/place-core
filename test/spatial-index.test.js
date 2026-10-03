@@ -236,6 +236,51 @@ test("StaticGeometryIndex keeps huge geometry in a sparse fallback", () => {
 });
 
 
+test("StaticGeometryIndex cannot query against geometry different from its index", () => {
+  const item = {
+    id: "shifted",
+    geometry: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 1,
+      maxY: 1
+    }
+  };
+
+  const index = new StaticGeometryIndex(
+    [item],
+    {
+      cellSize: 1
+    }
+  );
+
+  assert.deepEqual(
+    index.queryPoint(
+      { x: 0.5, y: 0.5 },
+      null,
+      () => ({
+        type: "aabb",
+        minX: 100,
+        minY: 100,
+        maxX: 101,
+        maxY: 101
+      })
+    ),
+    [item],
+    "extra legacy arguments must not replace the geometry used to build the index"
+  );
+
+  assert.deepEqual(
+    index.queryPoint({
+      x: 100.5,
+      y: 100.5
+    }),
+    []
+  );
+});
+
+
 test("StaticGeometryIndex reuses its constructor geometry accessor by default", () => {
   const items = [{
     id: "custom",
