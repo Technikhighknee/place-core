@@ -558,6 +558,60 @@ test("disposing a bridge with active direct-domain travel is rejected", () => {
 });
 
 
+test("local journey stop must clear the live world journey", () => {
+  const entity = {
+    id: "hans",
+    journey: {
+      destinationNodeId: "target"
+    }
+  };
+  const world = {
+    subscribeEvents() {
+      return () => {};
+    },
+    getEntity(id) {
+      return id === "hans"
+        ? entity
+        : null;
+    }
+  };
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation: {},
+    startJourney() {},
+    stopJourney() {}
+  });
+
+  assert.throws(
+    () =>
+      bridge.stopLocalJourney(
+        "hans"
+      ),
+    /failed to stop world-core journey for hans/
+  );
+  assert.ok(
+    entity.journey
+  );
+
+  bridge.stopJourneyFn = (
+    liveEntity
+  ) => {
+    liveEntity.journey = null;
+  };
+
+  assert.doesNotThrow(
+    () =>
+      bridge.stopLocalJourney(
+        "hans"
+      )
+  );
+  assert.equal(
+    entity.journey,
+    null
+  );
+});
+
+
 test("road-bound bridge sync requires road-effect capabilities on demand", () => {
   const world = new World({
     domains: [{ id: "inside-domain" }]
