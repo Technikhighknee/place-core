@@ -1353,6 +1353,17 @@ export class WorldCoreBridge {
     }
 
     if (
+      typeof this.navigation.topologies
+        ?.get !== "function" ||
+      typeof this.navigation.topologies
+        ?.has !== "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.topologies is required to release place-owned topologies"
+      );
+    }
+
+    if (
       typeof this.navigation.removeTopology !==
       "function"
     ) {
@@ -1463,10 +1474,20 @@ export class WorldCoreBridge {
   }
 
   #releaseUnboundOwnedTopologies() {
+    if (this.#ownedTopologies.size === 0) {
+      return 0;
+    }
+    if (
+      typeof this.navigation.domainBindings
+        ?.values !== "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.domainBindings is required to release place-owned topologies"
+      );
+    }
+
     const boundTopologyIds = new Set(
-      this.navigation.domainBindings
-        ?.values?.() ??
-      []
+      this.navigation.domainBindings.values()
     );
     const targets = [];
 
@@ -1534,6 +1555,14 @@ export class WorldCoreBridge {
     if (!candidates.length) {
       return 0;
     }
+    if (
+      typeof this.navigation.domainBindings
+        ?.values !== "function"
+    ) {
+      throw new Error(
+        "world-core NavigationRegistry.domainBindings is required to release place-owned topologies"
+      );
+    }
 
     const referencedByOther =
       new Set();
@@ -1555,9 +1584,7 @@ export class WorldCoreBridge {
     }
 
     const boundTopologyIds = new Set(
-      this.navigation.domainBindings
-        ?.values?.() ??
-      []
+      this.navigation.domainBindings.values()
     );
 
     const targets = [];

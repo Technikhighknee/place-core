@@ -1489,6 +1489,76 @@ test("disposing a detached-empty registry releases bridge-owned topologies", () 
 });
 
 
+test("topology cleanup fails closed when binding state becomes unobservable", () => {
+  const places = new PlaceRegistry();
+  places.registerDefinition(
+    definition()
+  );
+
+  const {
+    navigation,
+    bridge
+  } = makeBridge();
+
+  places.attachWorldCoreBridge(
+    bridge
+  );
+  const place = places.createPlace({
+    id: "house",
+    definitionId:
+      "late-attach-place"
+  });
+  const topologyId =
+    places.getDefinition(
+      place.definitionId
+    ).layers[0].topologyId;
+
+  assert.equal(
+    places.removePlace("house"),
+    true
+  );
+  assert.ok(
+    navigation.topologies.has(
+      topologyId
+    )
+  );
+
+  const bindings =
+    navigation.domainBindings;
+  navigation.domainBindings =
+    undefined;
+
+  assert.throws(
+    () => bridge.dispose(),
+    /NavigationRegistry\.domainBindings.*release/
+  );
+  assert.ok(
+    navigation.topologies.has(
+      topologyId
+    )
+  );
+
+  navigation.domainBindings =
+    bindings;
+
+  const replacement =
+    new PlaceRegistry();
+  assert.equal(
+    replacement.attachWorldCoreBridge(
+      bridge
+    ),
+    replacement
+  );
+  assert.equal(
+    navigation.topologies.has(
+      topologyId
+    ),
+    false
+  );
+  bridge.dispose();
+});
+
+
 test("failed world-event unsubscribe detaches logically and remains cleanup-retryable", () => {
   let subscribeCalls = 0;
   let unsubscribeCalls = 0;
