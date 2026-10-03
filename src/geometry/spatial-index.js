@@ -116,11 +116,8 @@ export class StaticGeometryIndex {
     for (const bucket of this.#cells.values()) Object.freeze(bucket);
   }
 
-  queryPoint(point, predicate = null, geometryOf = this.#geometryOf) {
+  queryPoint(point, predicate = null) {
     assertVec2(point);
-    if (typeof geometryOf !== "function") {
-      throw new TypeError("geometryOf must be a function");
-    }
     const bucket =
       this.#cells.get(
         this.#key(point.x, point.y)
@@ -133,7 +130,7 @@ export class StaticGeometryIndex {
         (!predicate || predicate(item)) &&
         pointInGeometry(
           point,
-          geometryOf(item)
+          this.#geometryOf(item)
         )
       ) {
         result.push(item);
