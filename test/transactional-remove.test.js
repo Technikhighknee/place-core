@@ -161,6 +161,64 @@ test("partial world-core removal failure restores domains bindings and effects",
   places.assertInternalConsistency();
 });
 
+test("WorldCoreBridge preserves falsy rollback throws during removal", () => {
+  const {
+    world,
+    bridge,
+    places,
+    place
+  } = setup();
+
+  const definition =
+    places.getDefinition(
+      place.definitionId
+    );
+  const originalRemoveDomain =
+    world.removeDomain.bind(world);
+
+  let removeCalls = 0;
+  world.removeDomain = (domainId) => {
+    removeCalls += 1;
+    if (removeCalls === 2) {
+      throw new Error(
+        "synthetic removal failure"
+      );
+    }
+    return originalRemoveDomain(domainId);
+  };
+
+  bridge.rollbackMaterializePlace = () => {
+    throw undefined;
+  };
+
+  assert.throws(
+    () =>
+      bridge.unmaterializePlace(
+        place,
+        definition
+      ),
+    (error) => {
+      assert.ok(
+        error instanceof AggregateError
+      );
+      assert.equal(
+        error.errors.length,
+        2
+      );
+      assert.match(
+        error.errors[0].message,
+        /synthetic removal failure/
+      );
+      assert.equal(
+        error.errors[1],
+        undefined
+      );
+      return true;
+    }
+  );
+});
+
+
 test("successful removal still removes all materialized state", () => {
   const { world, navigation, places, place } = setup();
   const domainA = place.layerDomains.get("a");
