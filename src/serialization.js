@@ -574,15 +574,21 @@ export function deserializePlaceCore(snapshot, options = {}) {
       savedState: cloneJson(saved)
     };
     if (restartError != null) {
+      const errorName =
+        restartError instanceof Error &&
+        typeof restartError.name === "string" &&
+        restartError.name.length > 0
+          ? restartError.name
+          : "Error";
+      const errorMessage =
+        restartError instanceof Error &&
+        typeof restartError.message === "string"
+          ? restartError.message
+          : String(restartError);
+
       pending.restartError = {
-        name:
-          restartError instanceof Error
-            ? restartError.name
-            : "Error",
-        message:
-          restartError instanceof Error
-            ? restartError.message
-            : String(restartError)
+        name: errorName,
+        message: errorMessage
       };
     }
     registry._pushPendingTravel(

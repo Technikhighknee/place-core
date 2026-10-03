@@ -2606,7 +2606,16 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       pending.savedState,
       `${pendingLabel}.savedState`
     );
-    if (pending.restartError != null) {
+    if (
+      Object.hasOwn(
+        pending,
+        "restartError"
+      )
+    ) {
+      assertObject(
+        pending.restartError,
+        `${pendingLabel}.restartError`
+      );
       assertOnlyKeys(
         pending.restartError,
         ["name", "message"],
