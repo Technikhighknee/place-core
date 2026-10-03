@@ -404,24 +404,49 @@ export class WorldCoreBridge {
         );
       }
 
-      let entity;
       try {
-        entity = this.world.getEntity(
+        const entity = this.world.getEntity(
           event.entityId
+        );
+        if (!entity) {
+          this.#registry.removeEntityOccupancy(
+            event.entityId
+          );
+          return;
+        }
+
+        const entityId = entity.id;
+        if (entityId !== event.entityId) {
+          throw new Error(
+            `world entity identity mismatch for ${String(event.entityId)}`
+          );
+        }
+
+        const domainId =
+          entity.domainId ?? "default";
+        const position =
+          entity.position;
+        const stableEntity = {
+          id: entityId,
+          domainId,
+          position:
+            position &&
+            typeof position === "object"
+              ? {
+                  x: position.x,
+                  y: position.y
+                }
+              : position
+        };
+
+        this.#registry.updateEntityOccupancy(
+          stableEntity
         );
       } catch (error) {
         this.#registry.removeEntityOccupancy(
           event.entityId
         );
         throw error;
-      }
-
-      if (entity) {
-        this.#registry.updateEntityOccupancy(entity);
-      } else {
-        this.#registry.removeEntityOccupancy(
-          event.entityId
-        );
       }
       return;
     }
