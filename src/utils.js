@@ -589,6 +589,11 @@ export class BoundedEventQueue {
   }
 
   drain(target = []) {
+    if (!Array.isArray(target)) {
+      throw new TypeError(
+        "event drain target must be an array"
+      );
+    }
     target.push(...this.#items);
     this.#items.length = 0;
     return target;
