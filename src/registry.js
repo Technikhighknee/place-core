@@ -2450,7 +2450,10 @@ export class PlaceRegistry {
           );
         }
         const bindingKey =
-          `${binding.layerId}\u0000${binding.roadId}`;
+          tupleKey(
+            binding.layerId,
+            binding.roadId
+          );
         if (seenRoadBindings.has(bindingKey)) {
           throw new Error(
             `dynamic portal ${spec.id} has duplicate road binding ${binding.layerId}:${binding.roadId}`
