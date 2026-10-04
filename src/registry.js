@@ -2731,6 +2731,8 @@ export class PlaceRegistry {
   }
 
   emit(type, data = {}) {
+    assertStringId(type, "event type");
+    assertPlainObject(data, "event data");
     if (!this.#captureEvents) return null;
     const event = deepFreeze({
       ...cloneJson(data),
