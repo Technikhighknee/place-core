@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { PlaceRegistry } from "../src/index.js";
+import {
+  PlaceRegistry,
+  serializePlaceCore,
+  deserializePlaceCore
+} from "../src/index.js";
 
 function definition() {
   return {
@@ -180,6 +184,98 @@ test("dynamic portal road bindings reject duplicates", () => {
       }),
     /duplicate road binding/
   );
+});
+
+
+test("snapshot validation preserves NUL-safe portal road binding pairs", () => {
+  const places =
+    new PlaceRegistry();
+
+  places.registerDefinition({
+    id: "snapshot-nul-binding-place",
+    layers: [
+      {
+        id: "a\u0000b",
+        navigation: {
+          nodes: [
+            { id: "left", x: 0, y: 0 },
+            { id: "right", x: 1, y: 0 }
+          ],
+          roads: [{
+            id: "c",
+            from: "left",
+            to: "right"
+          }]
+        }
+      },
+      {
+        id: "a",
+        navigation: {
+          nodes: [
+            { id: "left", x: 0, y: 0 },
+            { id: "right", x: 1, y: 0 }
+          ],
+          roads: [{
+            id: "b\u0000c",
+            from: "left",
+            to: "right"
+          }]
+        }
+      }
+    ]
+  });
+
+  const place =
+    places.createPlace({
+      id: "house",
+      definitionId:
+        "snapshot-nul-binding-place"
+    });
+
+  places.addPortal(
+    place.id,
+    {
+      id: "cross-layer",
+      a: {
+        domainId:
+          place.layerDomains.get(
+            "a\u0000b"
+          ),
+        position: { x: 0, y: 0 },
+        nodeId: "left"
+      },
+      b: {
+        domainId:
+          place.layerDomains.get("a"),
+        position: { x: 1, y: 0 },
+        nodeId: "right"
+      },
+      roadBindings: [
+        {
+          layerId: "a\u0000b",
+          roadId: "c"
+        },
+        {
+          layerId: "a",
+          roadId: "b\u0000c"
+        }
+      ]
+    }
+  );
+
+  const restored =
+    deserializePlaceCore(
+      serializePlaceCore(places)
+    );
+
+  assert.equal(
+    restored.resolvePortal(
+      "house",
+      "cross-layer"
+    )?.roadBindings.length,
+    2
+  );
+  restored.assertInternalConsistency();
 });
 
 
