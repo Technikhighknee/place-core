@@ -1,0 +1,47 @@
+{
+  "name": "place-core",
+  "version": "0.1.0",
+  "description": "Semantic place, interior, portal and travel simulation core",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:stress": "node --test test/stress.test.js",
+    "bench": "node --expose-gc benchmark/instances.js",
+    "bench:locate": "node --expose-gc benchmark/locate.js",
+    "bench:travel": "node --expose-gc benchmark/travel.js",
+    "example:mini-city": "node examples/mini-city.js",
+    "bench:snapshot": "node --expose-gc benchmark/snapshot.js",
+    "bench:mutations": "node --expose-gc benchmark/mutations.js",
+    "bench:retention": "node --expose-gc benchmark/retention.js",
+    "bench:guardrails": "node --expose-gc benchmark/guardrails.js",
+    "bench:nearest-target": "node --expose-gc benchmark/nearest-target.js",
+    "bench:explicit-travel": "node --expose-gc benchmark/explicit-travel.js",
+    "bench:portal-spatial": "node --expose-gc benchmark/portal-spatial.js",
+    "bench:luebeck": "node --expose-gc benchmark/luebeck.js"
+  },
+  "keywords": [
+    "simulation",
+    "places",
+    "interiors",
+    "navigation",
+    "world"
+  ],
+  "license": "ISC",
+  "devDependencies": {
+    "world-core": "github:Technikhighknee/world-core#3257f0bb75ab000649f4e3ecc0660359c6d0c6f3"
+  }
+}
