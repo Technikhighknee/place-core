@@ -5,6 +5,7 @@ import {
   pointInBounds,
   pointInGeometry
 } from "./primitives.js";
+import { assertId } from "../utils.js";
 
 const MAX_INDEX_CELLS_PER_ITEM = 4096;
 
@@ -242,6 +243,10 @@ export class DynamicAabbIndex {
   }
 
   set(id, bounds) {
+    assertId(
+      id,
+      "DynamicAabbIndex id"
+    );
     assertFiniteBounds(
       bounds,
       "DynamicAabbIndex bounds"
