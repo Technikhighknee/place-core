@@ -28,6 +28,15 @@ jobs:
         env:
           PORTAL_SPATIAL_PLACES: "5000"
           PORTAL_SPATIAL_QUERIES: "1000"
+
+  luebeck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
       - run: npm run bench:luebeck
         env:
           LUEBECK_TRAVELERS: "250"
