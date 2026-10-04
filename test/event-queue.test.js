@@ -108,6 +108,60 @@ test("zero-sized event queue records drops without affecting simulation", () => 
 });
 
 
+test("event drain target must be an array and failures preserve queued events", () => {
+  const places =
+    new PlaceRegistry({
+      captureEvents: true
+    });
+
+  places.emit(
+    "queued",
+    { value: 1 }
+  );
+
+  for (const target of [
+    null,
+    {},
+    {
+      push() {}
+    },
+    "events"
+  ]) {
+    assert.throws(
+      () =>
+        places.drainEvents(
+          target
+        ),
+      /event drain target must be an array/
+    );
+    assert.equal(
+      places.peekEvents().length,
+      1
+    );
+  }
+
+  const target = [{
+    sequence: 0,
+    type: "existing"
+  }];
+  const drained =
+    places.drainEvents(target);
+
+  assert.equal(
+    drained,
+    target
+  );
+  assert.equal(
+    target.length,
+    2
+  );
+  assert.equal(
+    places.peekEvents().length,
+    0
+  );
+});
+
+
 test("public emit validates event type and data before capture policy", () => {
   for (const captureEvents of [
     false,
