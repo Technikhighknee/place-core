@@ -183,6 +183,90 @@ test("dynamic portal road bindings reject duplicates", () => {
 });
 
 
+test("compiled portal road binding keys do not collide on embedded NUL characters", () => {
+  const places =
+    new PlaceRegistry();
+
+  assert.doesNotThrow(
+    () =>
+      places.registerDefinition({
+        id: "compiled-nul-binding-place",
+        layers: [
+          {
+            id: "a\u0000b",
+            navigation: {
+              nodes: [
+                { id: "left", x: 0, y: 0 },
+                { id: "right", x: 1, y: 0 }
+              ],
+              roads: [{
+                id: "c",
+                from: "left",
+                to: "right"
+              }]
+            }
+          },
+          {
+            id: "a",
+            navigation: {
+              nodes: [
+                { id: "left", x: 0, y: 0 },
+                { id: "right", x: 1, y: 0 }
+              ],
+              roads: [{
+                id: "b\u0000c",
+                from: "left",
+                to: "right"
+              }]
+            }
+          }
+        ],
+        portals: [{
+          id: "cross-layer",
+          a: {
+            kind: "local",
+            layerId: "a\u0000b",
+            position: { x: 0, y: 0 },
+            nodeId: "left"
+          },
+          b: {
+            kind: "local",
+            layerId: "a",
+            position: { x: 1, y: 0 },
+            nodeId: "right"
+          },
+          roadBindings: [
+            {
+              layerId: "a\u0000b",
+              roadId: "c"
+            },
+            {
+              layerId: "a",
+              roadId: "b\u0000c"
+            }
+          ]
+        }]
+      })
+  );
+
+  const place =
+    places.createPlace({
+      id: "house",
+      definitionId:
+        "compiled-nul-binding-place"
+    });
+
+  assert.equal(
+    places.resolvePortal(
+      place.id,
+      "cross-layer"
+    )?.roadBindings.length,
+    2
+  );
+  places.assertInternalConsistency();
+});
+
+
 test("dynamic portal road binding keys do not collide on embedded NUL characters", () => {
   const places =
     new PlaceRegistry();
