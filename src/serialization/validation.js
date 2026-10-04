@@ -866,7 +866,10 @@ function assertDynamicPortal(portal, definition, item, dynamicIds) {
       `dynamic portal ${portal.id}.roadBindings[${i}].roadId`
     );
     const bindingKey =
-      `${binding.layerId}\u0000${binding.roadId}`;
+      tupleKey(
+        binding.layerId,
+        binding.roadId
+      );
     if (seenRoadBindings.has(bindingKey)) {
       throw new Error(
         `dynamic portal ${portal.id} has duplicate road binding ${binding.layerId}:${binding.roadId}`
