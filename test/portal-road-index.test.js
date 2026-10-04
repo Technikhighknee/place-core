@@ -183,6 +183,119 @@ test("dynamic portal road bindings reject duplicates", () => {
 });
 
 
+test("dynamic portal road binding keys do not collide on embedded NUL characters", () => {
+  const places =
+    new PlaceRegistry();
+
+  places.registerDefinition({
+    id: "nul-binding-place",
+    layers: [
+      {
+        id: "a\u0000b",
+        navigation: {
+          nodes: [
+            {
+              id: "left",
+              x: 0,
+              y: 0
+            },
+            {
+              id: "right",
+              x: 1,
+              y: 0
+            }
+          ],
+          roads: [{
+            id: "c",
+            from: "left",
+            to: "right"
+          }]
+        }
+      },
+      {
+        id: "a",
+        navigation: {
+          nodes: [
+            {
+              id: "left",
+              x: 0,
+              y: 0
+            },
+            {
+              id: "right",
+              x: 1,
+              y: 0
+            }
+          ],
+          roads: [{
+            id: "b\u0000c",
+            from: "left",
+            to: "right"
+          }]
+        }
+      }
+    ]
+  });
+
+  const place =
+    places.createPlace({
+      id: "house",
+      definitionId:
+        "nul-binding-place"
+    });
+
+  assert.doesNotThrow(
+    () =>
+      places.addPortal(
+        "house",
+        {
+          id: "cross-layer",
+          a: {
+            domainId:
+              place.layerDomains.get(
+                "a\u0000b"
+              ),
+            position: {
+              x: 0,
+              y: 0
+            },
+            nodeId: "left"
+          },
+          b: {
+            domainId:
+              place.layerDomains.get(
+                "a"
+              ),
+            position: {
+              x: 1,
+              y: 0
+            },
+            nodeId: "right"
+          },
+          roadBindings: [
+            {
+              layerId: "a\u0000b",
+              roadId: "c"
+            },
+            {
+              layerId: "a",
+              roadId: "b\u0000c"
+            }
+          ]
+        }
+      )
+  );
+
+  assert.equal(
+    place.dynamicPortals
+      .get("cross-layer")
+      ?.roadBindings.length,
+    2
+  );
+  places.assertInternalConsistency();
+});
+
+
 test("distinct portal thresholds may share the same navigation node", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
