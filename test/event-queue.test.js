@@ -108,6 +108,58 @@ test("zero-sized event queue records drops without affecting simulation", () => 
 });
 
 
+test("public emit validates event type and data before capture policy", () => {
+  for (const captureEvents of [
+    false,
+    true
+  ]) {
+    const places =
+      new PlaceRegistry({
+        captureEvents
+      });
+
+    for (const type of [
+      "",
+      null,
+      0,
+      false,
+      {}
+    ]) {
+      assert.throws(
+        () =>
+          places.emit(
+            type,
+            {}
+          ),
+        /event type/
+      );
+    }
+
+    for (const data of [
+      null,
+      [],
+      "payload",
+      17,
+      false
+    ]) {
+      assert.throws(
+        () =>
+          places.emit(
+            "custom-event",
+            data
+          ),
+        /event data/
+      );
+    }
+
+    assert.equal(
+      places.peekEvents().length,
+      0
+    );
+  }
+});
+
+
 test("public emit cannot spoof reserved event envelope fields", () => {
   const places = new PlaceRegistry({
     captureEvents: true
