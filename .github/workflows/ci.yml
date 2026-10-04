@@ -48,3 +48,7 @@ jobs:
           LUEBECK_TRAVELERS: "250"
           LUEBECK_QUERY_COUNT: "50000"
           LUEBECK_MAX_TICKS: "1200"
+          # Hosted GitHub runners have substantial throughput variance.
+          # Keep CI thresholds broad; benchmark defaults stay stricter for dedicated runs.
+          LUEBECK_MIN_PLANNING_PER_SECOND: "1000"
+          LUEBECK_MIN_REPLANS_PER_SECOND: "1400"
