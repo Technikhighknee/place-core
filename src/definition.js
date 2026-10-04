@@ -629,7 +629,10 @@ function normalizePortal(portal, layersById, spacesById) {
       );
     }
     const bindingKey =
-      `${binding.layerId}\u0000${binding.roadId}`;
+      tupleKey(
+        binding.layerId,
+        binding.roadId
+      );
     if (portalRoadBindings.has(bindingKey)) {
       throw new Error(
         `portal ${portal.id} has duplicate road binding ${binding.layerId}:${binding.roadId}`
