@@ -113,6 +113,5 @@ console.log(`elapsed: ${elapsedMs.toFixed(2)} ms`);
 console.log(`batch calls: ${batchCalls.toLocaleString()}`);
 console.log(`largest batch: ${largestBatch.toLocaleString()}`);
 console.log(`destinations costed: ${destinationsCosted.toLocaleString()}`);
-console.log(`semantic expansions: ${plan.searchExpansions.toLocaleString()}`);
 console.log(`estimated travel seconds: ${plan.estimatedSeconds.toFixed(2)}`);
 console.log(`post-GC heap delta: ${((heapAfter - heapBefore) / 1024 / 1024).toFixed(2)} MiB`);
