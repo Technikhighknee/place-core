@@ -128,6 +128,61 @@ test("DynamicPointIndex updates and deletes without stale nearest entries", () =
 });
 
 
+test("DynamicAabbIndex validates identities before mutation", () => {
+  const index =
+    new DynamicAabbIndex(8);
+
+  for (const id of [
+    "",
+    null,
+    undefined,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    {},
+    []
+  ]) {
+    assert.throws(
+      () =>
+        index.set(
+          id,
+          {
+            minX: 0,
+            minY: 0,
+            maxX: 1,
+            maxY: 1
+          }
+        ),
+      /DynamicAabbIndex id/
+    );
+  }
+
+  assert.equal(
+    index.size,
+    0
+  );
+
+  assert.doesNotThrow(
+    () =>
+      index.set(
+        0,
+        {
+          minX: 0,
+          minY: 0,
+          maxX: 1,
+          maxY: 1
+        }
+      )
+  );
+  assert.deepEqual(
+    index.queryPoint({
+      x: 0.5,
+      y: 0.5
+    }),
+    [0]
+  );
+});
+
+
 test("DynamicAabbIndex rejects invalid bounds before mutating existing entries", () => {
   const index = new DynamicAabbIndex(8);
   const original = {
