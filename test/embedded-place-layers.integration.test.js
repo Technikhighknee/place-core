@@ -187,8 +187,7 @@ test("embedded routable anchors bind explicitly to host navigation nodes", () =>
     anchors: [{
       id: "stall",
       layerId: "market",
-      position: { x: 2, y: 3 },
-      nodeId: "stall-node"
+      position: { x: 2, y: 3 }
     }]
   });
 
@@ -197,6 +196,11 @@ test("embedded routable anchors bind explicitly to host navigation nodes", () =>
     definitionId: "routable-market",
     layerDomains: {
       market: "default"
+    },
+    embeddedNodeBindings: {
+      anchors: {
+        stall: "stall-node"
+      }
     },
     placement: {
       domainId: "default",
@@ -268,6 +272,11 @@ test("embedded routable anchors bind explicitly to host navigation nodes", () =>
       definitionId: "routable-market",
       layerDomains: {
         market: "default"
+      },
+      embeddedNodeBindings: {
+        anchors: {
+          stall: "stall-node"
+        }
       },
       placement: {
         domainId: "default",
