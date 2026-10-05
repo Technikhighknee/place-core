@@ -11,6 +11,7 @@ export class PlaceInstance {
   #parentId;
   #layerDomains;
   #attachments;
+  #embeddedNodeBindings;
   #placement;
   #metadata;
 
@@ -22,6 +23,7 @@ export class PlaceInstance {
 
   #layerDomainsView;
   #attachmentsView;
+  #embeddedNodeBindingsView;
   #portalOverridesView;
   #boundaryOverridesView;
   #spaceOverridesView;
@@ -33,6 +35,8 @@ export class PlaceInstance {
     this.#parentId = data.parentId ?? null;
     this.#layerDomains = new Map(data.layerDomains);
     this.#attachments = new Map(data.attachments);
+    this.#embeddedNodeBindings =
+      new Map(data.embeddedNodeBindings);
     this.#placement = data.placement;
     this.#metadata = deepFreeze(
       cloneJson(data.metadata ?? null)
@@ -42,6 +46,10 @@ export class PlaceInstance {
       new ReadonlyMapView(this.#layerDomains);
     this.#attachmentsView =
       new ReadonlyMapView(this.#attachments);
+    this.#embeddedNodeBindingsView =
+      new ReadonlyMapView(
+        this.#embeddedNodeBindings
+      );
     this.#portalOverridesView =
       new ReadonlyMapView(this.#portalOverrides);
     this.#boundaryOverridesView =
@@ -69,6 +77,9 @@ export class PlaceInstance {
   get parentId() { return this.#parentId; }
   get layerDomains() { return this.#layerDomainsView; }
   get attachments() { return this.#attachmentsView; }
+  get embeddedNodeBindings() {
+    return this.#embeddedNodeBindingsView;
+  }
   get placement() { return this.#placement; }
   get metadata() { return this.#metadata; }
   get portalOverrides() { return this.#portalOverridesView; }
