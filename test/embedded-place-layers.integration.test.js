@@ -282,6 +282,18 @@ test("enabling an embedded space refreshes occupants outside the place footprint
     places.updateEntityOccupancy(entity);
   assert.deepEqual(before.places, []);
   assert.deepEqual(before.spaces, []);
+  assert.deepEqual(
+    places.placesInBounds(
+      "default",
+      {
+        minX: 113,
+        minY: 51,
+        maxX: 115,
+        maxY: 53
+      }
+    ),
+    []
+  );
 
   places.setSpaceState(
     "market",
@@ -301,6 +313,18 @@ test("enabling an embedded space refreshes occupants outside the place footprint
       (space) => space.spaceId
     ),
     ["annex"]
+  );
+  assert.deepEqual(
+    places.placesInBounds(
+      "default",
+      {
+        minX: 113,
+        minY: 51,
+        maxX: 115,
+        maxY: 53
+      }
+    ).map((place) => place.id),
+    ["market"]
   );
 
   places.assertInternalConsistency();
