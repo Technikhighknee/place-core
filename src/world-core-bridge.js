@@ -157,10 +157,7 @@ export class WorldCoreBridge {
     if (!this.#registry) return;
 
     for (const anchor of definition.anchors) {
-      if (
-        anchor.layerId !== layer.id ||
-        anchor.nodeId == null
-      ) {
+      if (anchor.layerId !== layer.id) {
         continue;
       }
       const resolved =
@@ -168,7 +165,12 @@ export class WorldCoreBridge {
           instance.id,
           anchor.id
         );
-      if (!resolved) continue;
+      if (
+        !resolved ||
+        resolved.nodeId == null
+      ) {
+        continue;
+      }
       this.#assertEmbeddedHostNode(
         resolved.domainId,
         resolved.nodeId,
