@@ -26,26 +26,25 @@ test("compilePlace produces immutable shared definition state", () => {
   }, TypeError);
 });
 
-test("spatial layer mode defaults to owned and canonicalizes explicitly", () => {
-  const omitted = compilePlace({
-    id: "owned-default",
-    layers: [{ spatialMode: "owned", id: "ground" }]
-  });
-  const explicit = compilePlace({
-    id: "owned-default",
+test("spatial layer mode is explicit and required", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "missing-spatial-mode",
+      layers: [{ id: "ground" }]
+    }),
+    /spatialMode must be "owned" or "embedded"/
+  );
+
+  const owned = compilePlace({
+    id: "owned-explicit",
     layers: [{
       id: "ground",
       spatialMode: "owned"
     }]
   });
-
   assert.equal(
-    omitted.getLayer("ground")?.spatialMode,
+    owned.getLayer("ground")?.spatialMode,
     "owned"
-  );
-  assert.equal(
-    omitted.contentHash,
-    explicit.contentHash
   );
 });
 
