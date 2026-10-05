@@ -27,6 +27,7 @@ function definition() {
   return {
     id: "late-attach-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -754,6 +755,7 @@ test("domain lifecycle requires observable world state before mutation", () => {
   const placeDefinition = {
     id: "place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId: null,
       navigation: null
@@ -847,6 +849,7 @@ test("materialization preflights addDomain before topology mutation", () => {
         {
           id: "place",
           layers: [{
+            spatialMode: "owned",
             id: "inside",
             topologyId: "place:inside",
             navigation: {
@@ -926,6 +929,7 @@ test("topology materialization requires observable navigation registry state", (
   const definition = {
     id: "place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId: "place:inside",
       navigation: {
@@ -1003,6 +1007,7 @@ test("domain lifecycle mutators must establish their observable postconditions",
   const definition = {
     id: "place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId: null,
       navigation: null
@@ -1091,6 +1096,7 @@ test("topology binding mutation must establish its observable postcondition", ()
         {
           id: "place",
           layers: [{
+            spatialMode: "owned",
             id: "inside",
             topologyId:
               "external-topology",
@@ -1145,11 +1151,13 @@ test("materialization preflights domain rollback capability before mutation", ()
     id: "two-layer-place",
     layers: [
       {
+        spatialMode: "owned",
         id: "one",
         topologyId: null,
         navigation: null
       },
       {
+        spatialMode: "owned",
         id: "two",
         topologyId: null,
         navigation: null
@@ -1218,6 +1226,7 @@ test("unmaterialization preflights domain removal capability before mutation", (
   const placeDefinition = {
     id: "single-layer-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId: null,
       navigation: null
@@ -1537,6 +1546,7 @@ test("topology registration must establish the requested topology", () => {
         {
           id: "place",
           layers: [{
+            spatialMode: "owned",
             id: "inside",
             topologyId: "place:inside",
             navigation: {
@@ -1700,6 +1710,7 @@ test("materialization rollback removes topology installed before register failur
         {
           id: "place",
           layers: [{
+            spatialMode: "owned",
             id: "inside",
             topologyId: "place:inside",
             navigation: {
