@@ -11,6 +11,7 @@ function definition() {
   return {
     id: "road-index-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -195,6 +196,7 @@ test("snapshot validation preserves NUL-safe portal road binding pairs", () => {
     id: "snapshot-nul-binding-place",
     layers: [
       {
+        spatialMode: "owned",
         id: "a\u0000b",
         navigation: {
           nodes: [
@@ -209,6 +211,7 @@ test("snapshot validation preserves NUL-safe portal road binding pairs", () => {
         }
       },
       {
+        spatialMode: "owned",
         id: "a",
         navigation: {
           nodes: [
@@ -289,6 +292,7 @@ test("compiled portal road binding keys do not collide on embedded NUL character
         id: "compiled-nul-binding-place",
         layers: [
           {
+            spatialMode: "owned",
             id: "a\u0000b",
             navigation: {
               nodes: [
@@ -303,6 +307,7 @@ test("compiled portal road binding keys do not collide on embedded NUL character
             }
           },
           {
+            spatialMode: "owned",
             id: "a",
             navigation: {
               nodes: [
@@ -371,6 +376,7 @@ test("dynamic portal road binding keys do not collide on embedded NUL characters
     id: "nul-binding-place",
     layers: [
       {
+        spatialMode: "owned",
         id: "a\u0000b",
         navigation: {
           nodes: [
@@ -393,6 +399,7 @@ test("dynamic portal road binding keys do not collide on embedded NUL characters
         }
       },
       {
+        spatialMode: "owned",
         id: "a",
         navigation: {
           nodes: [
@@ -481,6 +488,7 @@ test("distinct portal thresholds may share the same navigation node", () => {
   places.registerDefinition({
     id: "shared-threshold-node",
     layers: [{
+      spatialMode: "owned",
       id: "ground",
       navigation: {
         nodes: [
