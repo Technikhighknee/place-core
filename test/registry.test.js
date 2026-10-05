@@ -165,7 +165,7 @@ test("layer IDs that shadow Object.prototype still receive default domains", () 
   const registry = new PlaceRegistry();
   registry.registerDefinition({
     id: "prototype-layer-place",
-    layers: [{ id: "constructor" }]
+    layers: [{ spatialMode: "owned", id: "constructor" }]
   });
 
   const place = registry.createPlace({
@@ -185,7 +185,7 @@ test("default domain IDs support lone surrogate place and layer IDs without coll
 
   registry.registerDefinition({
     id: "surrogate-place-id",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
 
   const lonePlace =
@@ -216,7 +216,7 @@ test("default domain IDs support lone surrogate place and layer IDs without coll
 
   registry.registerDefinition({
     id: "surrogate-layer-id",
-    layers: [{ id: "\uDCFF" }]
+    layers: [{ spatialMode: "owned", id: "\uDCFF" }]
   });
   const loneLayer =
     registry.createPlace({
@@ -291,7 +291,7 @@ test("numeric zero place IDs remain distinct and survive graph snapshot round-tr
   const registry = new PlaceRegistry();
   registry.registerDefinition({
     id: "typed-zero-place",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
 
   registry.createPlace({
@@ -396,7 +396,7 @@ test("runtime nested place inputs reject unknown fields", () => {
     const registry = new PlaceRegistry();
     registry.registerDefinition({
       id: "strict-runtime-input",
-      layers: [{ id: "inside" }]
+      layers: [{ spatialMode: "owned", id: "inside" }]
     });
     return registry;
   };
@@ -471,7 +471,7 @@ test("prototype-shadowing layer IDs survive snapshot round-trip", () => {
   const registry = new PlaceRegistry();
   registry.registerDefinition({
     id: "prototype-snapshot-place",
-    layers: [{ id: "constructor" }]
+    layers: [{ spatialMode: "owned", id: "constructor" }]
   });
   registry.createPlace({
     id: "house",
@@ -500,7 +500,7 @@ test("nearest anchor selection survives finite coordinate subtraction overflow",
   const registry = new PlaceRegistry();
   registry.registerDefinition({
     id: "huge-anchor-space",
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     anchors: [
       {
         id: "far",
@@ -549,7 +549,7 @@ test("nearest boundary selection survives finite coordinate subtraction overflow
   const registry = new PlaceRegistry();
   registry.registerDefinition({
     id: "huge-boundary-space",
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     boundaries: [
       {
         id: "a-far",
@@ -637,7 +637,7 @@ test("bound-domain location keeps singular place context coherent with overlappi
 
   registry.registerDefinition({
     id: "interior",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
@@ -717,7 +717,7 @@ test("resolvedPortals never yields null when registry mutates between iterator s
 
   registry.registerDefinition({
     id: "two-portals",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [
       {
         id: "a",
