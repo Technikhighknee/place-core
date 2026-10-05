@@ -27,6 +27,7 @@ function definition() {
     id: "transaction-remove-place",
     layers: [
       {
+        spatialMode: "owned",
         id: "a",
         navigation: {
           nodes: [
@@ -42,6 +43,7 @@ function definition() {
         }
       },
       {
+        spatialMode: "owned",
         id: "b",
         navigation: {
           nodes: [
