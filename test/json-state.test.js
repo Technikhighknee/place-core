@@ -12,7 +12,7 @@ import {
 function simpleDefinition(extra = {}) {
   return {
     id: "json-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "target",
       layerId: "inside",
