@@ -9,7 +9,7 @@ const count = Number(process.env.NEAREST_TARGET_PLACES ?? 50_000);
 const places = new PlaceRegistry();
 places.registerDefinition({
   id: "nearest-house",
-  layers: [{ id: "inside" }],
+  layers: [{ spatialMode: "owned", id: "inside" }],
   portals: [{
     id: "door",
     a: { kind: "external", slot: "street" },
