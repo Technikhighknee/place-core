@@ -12,6 +12,7 @@ import {
   normalizeBoolean
 } from "./utils.js";
 import { typedIdKey } from "./registry/support.js";
+import { transformPoint } from "./geometry.js";
 
 export class PlaceRegistry extends CorePlaceRegistry {
   registerDefinition(input, options) {
@@ -152,15 +153,46 @@ export class PlaceRegistry extends CorePlaceRegistry {
           }
         }
 
-        const resolved =
-          this.resolveAnchor(
-            instance.id,
-            anchor.id
+        const layer =
+          definition.getLayer(
+            anchor.layerId
           );
-        if (!resolved) {
-          continue;
+        let position =
+          anchor.position;
+        if (
+          layer?.spatialMode ===
+          "embedded"
+        ) {
+          const resolvedPlacement =
+            this.getResolvedPlacement(
+              instance.id
+            );
+          if (
+            resolvedPlacement &&
+            resolvedPlacement.domainId !==
+              instance.layerDomains.get(
+                anchor.layerId
+              )
+          ) {
+            throw new Error(
+              `embedded layer ${String(instance.id)}:${anchor.layerId} placement domain drift`
+            );
+          }
+          position = transformPoint(
+            anchor.position,
+            resolvedPlacement?.transform
+          );
         }
-        result.push(resolved);
+
+        result.push({
+          ...anchor,
+          position,
+          placeId: instance.id,
+          domainId:
+            instance.layerDomains.get(
+              anchor.layerId
+            )
+        });
       }
     }
     return result;
