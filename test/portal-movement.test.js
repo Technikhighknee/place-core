@@ -12,7 +12,7 @@ test("encounter travel replans instead of teleporting through a moved portal end
   const places = new PlaceRegistry({ captureEvents: true });
   places.registerDefinition({
     id: "movable-door-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       a: { kind: "external", slot: "street" },
@@ -148,7 +148,7 @@ test("portal entry tolerance is validated", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "tolerance-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       a: { kind: "external", slot: "street" },
@@ -210,7 +210,7 @@ function transferFailureRuntime(transferEntity) {
   const places = new PlaceRegistry({ captureEvents: true });
   places.registerDefinition({
     id: "transfer-contract-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       a: { kind: "external", slot: "street" },
@@ -613,7 +613,7 @@ test("portal entry tolerance survives squared-distance overflow", () => {
   const places = new PlaceRegistry({ captureEvents: true });
   places.registerDefinition({
     id: "huge-tolerance-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       transitionCost: 1,
@@ -872,7 +872,7 @@ test("cancelling during a portal transition emits one portal abort", () => {
   });
   places.registerDefinition({
     id: "cancel-transition-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       transitionCost: 5,
