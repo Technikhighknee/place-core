@@ -387,6 +387,7 @@ function normalizeSpace(space, layersById) {
       "parentSpaceId",
       "defaultAnchorId",
       "priority",
+      "enabled",
       "metadata"
     ],
     "space"
@@ -419,6 +420,11 @@ function normalizeSpace(space, layersById) {
     geometry,
     parentSpaceId,
     defaultAnchorId,
+    enabled: normalizeBoolean(
+      space.enabled,
+      `space(${space.id}).enabled`,
+      { defaultValue: true }
+    ),
     priority: (() => {
       const value = space.priority ?? 0;
       if (!Number.isFinite(value)) {
