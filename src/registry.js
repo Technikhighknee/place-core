@@ -59,6 +59,12 @@ import {
 export { PlaceInstance };
 
 const NO_THROWN_VALUE = Symbol("no-thrown-value");
+const IDENTITY_TRANSFORM = Object.freeze({
+  x: 0,
+  y: 0,
+  rotation: 0,
+  scale: 1
+});
 
 function footprintIntersectsBounds(
   footprint,
@@ -269,6 +275,7 @@ export class PlaceRegistry {
   #definitions = new Map();
   #instances = new Map();
   #domainBindings = new Map();
+  #embeddedLayerBindings = new Map();
   #definitionsView;
   #instancesView;
   #domainBindingsView;
@@ -1101,25 +1108,42 @@ export class PlaceRegistry {
         Object.hasOwn(suppliedLayerDomains, layer.id)
           ? suppliedLayerDomains[layer.id]
           : undefined;
+      if (
+        layer.spatialMode === "embedded" &&
+        suppliedDomainId == null
+      ) {
+        throw new Error(
+          `embedded layer ${layer.id} requires an explicit layerDomains binding`
+        );
+      }
+
       const domainId =
         suppliedDomainId ??
         defaultLayerDomainId(input.id, layer.id);
       assertStringId(domainId, `layerDomains.${layer.id}`);
 
-      const claimedBy = claimedDomains.get(domainId);
-      if (claimedBy != null) {
-        throw new Error(
-          `domain ${domainId} is assigned to multiple layers: ${claimedBy}, ${layer.id}`
+      if (layer.spatialMode === "owned") {
+        const claimedBy =
+          claimedDomains.get(domainId);
+        if (claimedBy != null) {
+          throw new Error(
+            `domain ${domainId} is assigned to multiple owned layers: ${claimedBy}, ${layer.id}`
+          );
+        }
+        claimedDomains.set(
+          domainId,
+          layer.id
         );
-      }
-      claimedDomains.set(domainId, layer.id);
 
-      const existing = this.#domainBindings.get(domainId);
-      if (existing) {
-        throw new Error(
-          `domain ${domainId} is already bound to ${String(existing.instanceId)}:${existing.layerId}`
-        );
+        const existing =
+          this.#domainBindings.get(domainId);
+        if (existing) {
+          throw new Error(
+            `domain ${domainId} is already bound to ${String(existing.instanceId)}:${existing.layerId}`
+          );
+        }
       }
+
       layerDomains.set(layer.id, domainId);
     }
 
@@ -1204,15 +1228,28 @@ export class PlaceRegistry {
       this.#semanticGraph.registerPrimary(instance);
       this.#semanticGraph.registerMemberships(instance);
       this.#placementGraph.register(instance);
-      for (const [layerId, domainId] of layerDomains) {
+      for (const layer of definition.layers) {
+        if (layer.spatialMode !== "owned") {
+          continue;
+        }
+        const domainId =
+          layerDomains.get(layer.id);
         this.#domainBindings.set(
           domainId,
           deepFreeze({
             instanceId: instance.id,
-            layerId
+            layerId: layer.id
           })
         );
       }
+      this.#indexEmbeddedLayers(
+        instance,
+        definition
+      );
+      this.#validateEmbeddedPlacement(
+        instance,
+        definition
+      );
       this.#validateInstancePortals(
         instance,
         definition
@@ -1351,7 +1388,18 @@ export class PlaceRegistry {
     }
     if (callBridge) this.#bridge?.unmaterializePlace?.(instance, definition);
     this.clearEntityOccupancyForPlace(instanceId);
-    for (const domainId of instance.layerDomains.values()) this.#domainBindings.delete(domainId);
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "owned") {
+        continue;
+      }
+      const domainId =
+        instance.layerDomains.get(layer.id);
+      this.#domainBindings.delete(domainId);
+    }
+    this.#unindexEmbeddedLayers(
+      instance,
+      definition
+    );
     this.#unindexExterior(instance);
     this.#semanticGraph.unregisterPrimary(instance);
     this.#semanticGraph.unregisterMemberships(instance);
