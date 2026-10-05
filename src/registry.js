@@ -1489,6 +1489,15 @@ export class PlaceRegistry {
   resolveEndpoint(instanceId, endpoint) {
     const instance = this.#instances.get(instanceId);
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
+    const definition =
+      this.#definitions.get(
+        instance.definitionId
+      );
+    if (!definition) {
+      throw new Error(
+        `unknown place definition: ${instance.definitionId}`
+      );
+    }
     if (endpoint.kind === "local") {
       const domainId = instance.layerDomains.get(endpoint.layerId);
       if (!domainId) throw new Error(`place ${String(instanceId)} has no domain for layer ${endpoint.layerId}`);
