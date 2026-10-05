@@ -3131,6 +3131,34 @@ export class PlaceRegistry {
         );
       }
     }
+    for (const [domainId, bindings] of
+      this.#embeddedLayerBindings) {
+      for (const binding of bindings.values()) {
+        const instance =
+          this.#instances.get(
+            binding.instanceId
+          );
+        const definition = instance
+          ? this.#definitions.get(
+              instance.definitionId
+            )
+          : null;
+        const layer = definition
+          ?.getLayer(binding.layerId);
+        if (
+          !instance ||
+          layer?.spatialMode !== "embedded" ||
+          instance.layerDomains.get(
+            binding.layerId
+          ) !== domainId
+        ) {
+          throw new Error(
+            `embedded domain binding drift for ${domainId}`
+          );
+        }
+      }
+    }
+
     for (const instance of this.#instances.values()) {
       const definition = this.#definitions.get(instance.definitionId);
       if (!definition) throw new Error(`instance ${String(instance.id)} references missing definition`);
@@ -3147,23 +3175,52 @@ export class PlaceRegistry {
       for (const layer of definition.layers) {
         const domainId =
           instance.layerDomains.get(layer.id);
+        if (domainId == null) {
+          throw new Error(
+            `instance ${String(instance.id)} missing domain for layer ${layer.id}`
+          );
+        }
+
+        if (layer.spatialMode === "owned") {
+          const binding =
+            this.#domainBindings.get(
+              domainId
+            );
+          if (
+            !binding ||
+            binding.instanceId !==
+              instance.id ||
+            binding.layerId !== layer.id
+          ) {
+            throw new Error(
+              `instance ${String(instance.id)} missing owned domain binding for layer ${layer.id}`
+            );
+          }
+          continue;
+        }
+
+        const key = tupleKey(
+          typedIdKey(instance.id),
+          layer.id
+        );
         const binding =
-          domainId == null
-            ? null
-            : this.#domainBindings.get(
-                domainId
-              );
+          this.#embeddedLayerBindings
+            .get(domainId)
+            ?.get(key);
         if (
-          domainId == null ||
           !binding ||
           binding.instanceId !==
             instance.id ||
           binding.layerId !== layer.id
         ) {
           throw new Error(
-            `instance ${String(instance.id)} missing domain binding for layer ${layer.id}`
+            `instance ${String(instance.id)} missing embedded domain binding for layer ${layer.id}`
           );
         }
+        this.#validateEmbeddedPlacement(
+          instance,
+          definition
+        );
       }
 
       for (const layerId of
