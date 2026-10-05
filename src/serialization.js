@@ -283,7 +283,7 @@ export function serializePlaceCore(registry) {
         layerDomains: mapToObject(instance.layerDomains),
         attachments: mapToObject(instance.attachments),
         embeddedNodeBindings:
-          mapToObject(
+          canonicalClone(
             instance.embeddedNodeBindings
           ),
         placement: canonicalClone(instance.placement),
