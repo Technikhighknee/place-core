@@ -2042,6 +2042,20 @@ export class PlaceRegistry {
       this.#placementGraph.collectDescendants(
         instanceId
       );
+    const affectsEmbeddedTravel =
+      affected.some((id) => {
+        const candidate =
+          this.#instances.get(id);
+        const definition = candidate
+          ? this.#definitions.get(
+              candidate.definitionId
+            )
+          : null;
+        return definition?.layers.some(
+          (layer) =>
+            layer.spatialMode === "embedded"
+        ) ?? false;
+      });
     const affectedEntities = new Set(
       this.#collectTrackedEntitiesForIndexedPlaces(
         affected
@@ -2066,11 +2080,21 @@ export class PlaceRegistry {
       for (const id of affected) {
         const child = this.#instances.get(id);
         if (!child) continue;
-        this.#indexExterior(
-          child,
+        const childDefinition =
           this.#definitions.get(
             child.definitionId
-          )
+          );
+        this.#validateEmbeddedPlacement(
+          child,
+          childDefinition
+        );
+        this.#indexExterior(
+          child,
+          childDefinition
+        );
+        this.#reindexInstancePortals(
+          child,
+          childDefinition
         );
       }
     } catch (error) {
@@ -2092,11 +2116,21 @@ export class PlaceRegistry {
         for (const id of affected) {
           const child = this.#instances.get(id);
           if (!child) continue;
-          this.#indexExterior(
-            child,
+          const childDefinition =
             this.#definitions.get(
               child.definitionId
-            )
+            );
+          this.#validateEmbeddedPlacement(
+            child,
+            childDefinition
+          );
+          this.#indexExterior(
+            child,
+            childDefinition
+          );
+          this.#reindexInstancePortals(
+            child,
+            childDefinition
           );
         }
       } catch (restoreError) {
@@ -2121,7 +2155,9 @@ export class PlaceRegistry {
       affectedEntities.add(entityId);
     }
 
-    this.#touchState();
+    this.#touchState({
+      travel: affectsEmbeddedTravel
+    });
     this.#occupancyIndex.refresh(affectedEntities);
     this.emit("place-placement-changed", {
       placeId: instanceId,
