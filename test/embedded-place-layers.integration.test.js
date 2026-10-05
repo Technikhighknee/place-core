@@ -40,6 +40,14 @@ const MARKET = {
       maxY: 8
     }
   }],
+  boundaries: [{
+    id: "north-edge",
+    layerId: "market",
+    kind: "edge",
+    a: { x: 0, y: 8 },
+    b: { x: 10, y: 8 },
+    tags: ["market-edge"]
+  }],
   anchors: [{
     id: "food-stall",
     kind: "market-stall",
@@ -191,6 +199,29 @@ test("embedded places share a host domain without owning it", () => {
       [
         "south-market",
         { x: 202, y: 53 }
+      ]
+    ]
+  );
+
+  assert.deepEqual(
+    places.getBoundariesForDomain(
+      "default",
+      { tag: "market-edge" }
+    ).map((boundary) => [
+      boundary.placeId,
+      boundary.a,
+      boundary.b
+    ]),
+    [
+      [
+        "north-market",
+        { x: 100, y: 58 },
+        { x: 110, y: 58 }
+      ],
+      [
+        "south-market",
+        { x: 200, y: 58 },
+        { x: 210, y: 58 }
       ]
     ]
   );
