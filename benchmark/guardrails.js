@@ -24,7 +24,7 @@ const limits = {
 const places = new PlaceRegistry();
 places.registerDefinition({
   id: "guardrail-place",
-  layers: [{ id: "ground" }, { id: "cellar" }],
+  layers: [{ spatialMode: "owned", id: "ground" }, { spatialMode: "owned", id: "cellar" }],
   spaces: [
     {
       id: "whole",
