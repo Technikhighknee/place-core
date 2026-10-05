@@ -831,6 +831,10 @@ export class WorldCoreBridge {
   readonly existingDomainPolicy: "reject" | "adopt";
 
   dispose(): boolean;
+  validateEmbeddedHostNavigation(
+    instance: PlaceInstance,
+    definition: CompiledPlaceDefinition
+  ): true;
   materializePlace(
     instance: PlaceInstance,
     definition: CompiledPlaceDefinition
