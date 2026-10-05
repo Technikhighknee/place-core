@@ -124,11 +124,24 @@ export class WorldCoreBridge {
         `${label} references unknown host navigation node ${nodeId} in domain ${domainId}`
       );
     }
+    const nodePosition =
+      node.position;
     if (
-      Math.abs(node.x - position.x) >
-        1e-9 ||
-      Math.abs(node.y - position.y) >
-        1e-9
+      !nodePosition ||
+      !Number.isFinite(nodePosition.x) ||
+      !Number.isFinite(nodePosition.y)
+    ) {
+      throw new Error(
+        `${label} host navigation node ${nodeId} in domain ${domainId} has no finite position`
+      );
+    }
+    if (
+      Math.abs(
+        nodePosition.x - position.x
+      ) > 1e-9 ||
+      Math.abs(
+        nodePosition.y - position.y
+      ) > 1e-9
     ) {
       throw new Error(
         `${label} position does not match host navigation node ${nodeId} in domain ${domainId}`
