@@ -3768,6 +3768,69 @@ export class PlaceRegistry {
         );
       }
 
+      for (const [anchorId, nodeId] of
+        Object.entries(
+          instance.embeddedNodeBindings
+            .anchors ?? {}
+        )) {
+        const anchor =
+          definition.getAnchor(anchorId);
+        const layer = anchor
+          ? definition.getLayer(
+              anchor.layerId
+            )
+          : null;
+        if (
+          !anchor ||
+          layer?.spatialMode !==
+            "embedded" ||
+          typeof nodeId !== "string" ||
+          nodeId.length === 0
+        ) {
+          throw new Error(
+            `instance ${String(instance.id)} embedded anchor binding drift for ${anchorId}`
+          );
+        }
+      }
+
+      for (const [portalId, sides] of
+        Object.entries(
+          instance.embeddedNodeBindings
+            .portals ?? {}
+        )) {
+        const portal =
+          definition.getPortal(portalId);
+        if (!portal) {
+          throw new Error(
+            `instance ${String(instance.id)} embedded portal binding drift for ${portalId}`
+          );
+        }
+        for (const side of ["a", "b"]) {
+          if (!Object.hasOwn(sides, side)) {
+            continue;
+          }
+          const endpoint = portal[side];
+          const layer =
+            endpoint?.kind === "local"
+              ? definition.getLayer(
+                  endpoint.layerId
+                )
+              : null;
+          if (
+            endpoint?.kind !== "local" ||
+            layer?.spatialMode !==
+              "embedded" ||
+            typeof sides[side] !==
+              "string" ||
+            sides[side].length === 0
+          ) {
+            throw new Error(
+              `instance ${String(instance.id)} embedded portal binding drift for ${portalId}.${side}`
+            );
+          }
+        }
+      }
+
       for (const layerId of
         instance.layerDomains.keys()) {
         if (!definition.getLayer(layerId)) {
