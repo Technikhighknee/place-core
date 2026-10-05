@@ -2885,6 +2885,39 @@ export class PlaceRegistry {
             seenPlaces.add(id);
           }
         }
+
+        for (const layer of definition.layers) {
+          if (
+            layer.spatialMode !== "embedded" ||
+            instance.layerDomains.get(
+              layer.id
+            ) !== domainId
+          ) {
+            continue;
+          }
+
+          for (const space of
+            definition.locateSpaces(
+              layer.id,
+              local
+            )) {
+            if (
+              !this.#spaceEnabled(
+                instance,
+                definition,
+                space
+              )
+            ) {
+              continue;
+            }
+            spaces.push({
+              placeId: instance.id,
+              spaceId: space.id,
+              layerId: layer.id,
+              kind: space.kind
+            });
+          }
+        }
       }
     }
 
@@ -3582,6 +3615,161 @@ export class PlaceRegistry {
     }
 
     return cache.get(space.id) ?? enabled;
+  }
+
+  #embeddedTransform(
+    instance,
+    definition,
+    layer
+  ) {
+    if (layer?.spatialMode !== "embedded") {
+      return IDENTITY_TRANSFORM;
+    }
+
+    const domainId =
+      instance.layerDomains.get(layer.id);
+    if (!domainId) {
+      throw new Error(
+        `embedded layer ${layer.id} has no host domain`
+      );
+    }
+
+    const resolved =
+      this.#placementGraph.resolve(
+        instance.id
+      );
+    if (!resolved) {
+      return IDENTITY_TRANSFORM;
+    }
+    if (resolved.domainId !== domainId) {
+      throw new Error(
+        `embedded layer ${String(instance.id)}:${layer.id} is bound to ${domainId} but placement resolves into ${resolved.domainId}`
+      );
+    }
+    return resolved.transform;
+  }
+
+  #validateEmbeddedPlacement(
+    instance,
+    definition
+  ) {
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "embedded") {
+        continue;
+      }
+      this.#embeddedTransform(
+        instance,
+        definition,
+        layer
+      );
+    }
+  }
+
+  #resolveAnchorForInstance(
+    instance,
+    definition,
+    anchor
+  ) {
+    const layer =
+      definition.getLayer(anchor.layerId);
+    const domainId =
+      instance.layerDomains.get(
+        anchor.layerId
+      );
+    if (!domainId) {
+      throw new Error(
+        `place ${String(instance.id)} has no domain for layer ${anchor.layerId}`
+      );
+    }
+
+    const position =
+      layer?.spatialMode === "embedded"
+        ? transformPoint(
+            anchor.position,
+            this.#embeddedTransform(
+              instance,
+              definition,
+              layer
+            )
+          )
+        : anchor.position;
+
+    return {
+      ...anchor,
+      position,
+      placeId: instance.id,
+      domainId
+    };
+  }
+
+  #indexEmbeddedLayers(
+    instance,
+    definition
+  ) {
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "embedded") {
+        continue;
+      }
+      const domainId =
+        instance.layerDomains.get(layer.id);
+      if (!domainId) {
+        throw new Error(
+          `embedded layer ${layer.id} has no host domain`
+        );
+      }
+      let bindings =
+        this.#embeddedLayerBindings.get(
+          domainId
+        );
+      if (!bindings) {
+        bindings = new Map();
+        this.#embeddedLayerBindings.set(
+          domainId,
+          bindings
+        );
+      }
+      const key = tupleKey(
+        typedIdKey(instance.id),
+        layer.id
+      );
+      bindings.set(
+        key,
+        deepFreeze({
+          instanceId: instance.id,
+          layerId: layer.id
+        })
+      );
+    }
+  }
+
+  #unindexEmbeddedLayers(
+    instance,
+    definition
+  ) {
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "embedded") {
+        continue;
+      }
+      const domainId =
+        instance.layerDomains.get(layer.id);
+      if (!domainId) continue;
+      const bindings =
+        this.#embeddedLayerBindings.get(
+          domainId
+        );
+      if (!bindings) continue;
+      bindings.delete(
+        tupleKey(
+          typedIdKey(instance.id),
+          layer.id
+        )
+      );
+      if (bindings.size === 0) {
+        this.#embeddedLayerBindings.delete(
+          domainId
+        );
+      }
+    }
   }
 
   #indexExterior(instance, definition) {
