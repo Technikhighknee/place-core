@@ -10,6 +10,7 @@ function booleanDefinition(overrides = {}) {
   return {
     id: "boolean-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -140,7 +141,7 @@ test("dynamic portal booleans are strict at creation and mutation time", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "dynamic-boolean-place",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
   const place = places.createPlace({
     id: "hall",
@@ -198,7 +199,7 @@ test("live mutation patches reject unknown fields atomically", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "strict-patch-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
@@ -282,7 +283,7 @@ test("live mutation patches must be plain objects", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "plain-patch-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
