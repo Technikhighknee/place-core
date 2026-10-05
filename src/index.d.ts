@@ -831,6 +831,12 @@ export class WorldCoreBridge {
   readonly existingDomainPolicy: "reject" | "adopt";
 
   dispose(): boolean;
+  validateHostNavigationPoint(
+    domainId: string,
+    nodeId: NavigationId,
+    position: Vec2,
+    label?: string
+  ): true;
   validateEmbeddedHostNavigation(
     instance: PlaceInstance,
     definition: CompiledPlaceDefinition
