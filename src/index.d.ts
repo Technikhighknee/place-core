@@ -1,5 +1,6 @@
 export type PlaceId = string | number;
 export type EntityId = string | number;
+export type NavigationId = string;
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
