@@ -1726,7 +1726,41 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     const space = definition.getSpace(spaceId);
     if (!space) throw new Error(`unknown space ${spaceId} on place ${String(instanceId)}`);
-    const affectedEntities = [...this.#occupancyIndex.entitiesInPlace(instanceId)];
+    const affectedEntities =
+      new Set(
+        this.#occupancyIndex.entitiesInPlace(
+          instanceId
+        )
+      );
+
+    const layer =
+      definition.getLayer(space.layerId);
+    if (layer?.spatialMode === "embedded") {
+      const domainId =
+        instance.layerDomains.get(
+          layer.id
+        );
+      const bounds =
+        this.#embeddedSpaceIndexes
+          .get(domainId)
+          ?.getBounds(
+            this.#embeddedSpaceKey(
+              instance.id,
+              layer.id,
+              space.id
+            )
+          );
+      if (bounds) {
+        for (const entityId of
+          this.#occupancyIndex.queryBounds(
+            domainId,
+            bounds
+          )) {
+          affectedEntities.add(entityId);
+        }
+      }
+    }
+
     const baseEnabled = space.enabled;
     const currentEnabled = instance.getSpaceOverride(spaceId)?.enabled ?? baseEnabled;
     const enabled = normalizeBoolean(
@@ -1799,7 +1833,9 @@ export class PlaceRegistry {
     }
 
     this.#touchState({ travel: true });
-    this.#occupancyIndex.refresh(affectedEntities);
+    this.#occupancyIndex.refresh(
+      affectedEntities
+    );
     this.emit("space-state-changed", {
       placeId: instanceId,
       spaceId,
