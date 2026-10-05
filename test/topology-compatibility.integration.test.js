@@ -34,6 +34,7 @@ function makeDefinition(id, patch = {}) {
   return {
     id,
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId: "shared-interior-topology",
       navigation: {
@@ -64,6 +65,7 @@ function placesDefinitionForRollback() {
   return compilePlace({
     id: "rollback-ownership",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId:
         "rollback-owned-topology",
@@ -382,6 +384,7 @@ test("explicit external topology references reuse a pre-registered topology", ()
   places.registerDefinition({
     id: "external-topology-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId: "external-topology"
     }]
@@ -430,6 +433,7 @@ test("missing external topology reference fails before domain creation", () => {
   places.registerDefinition({
     id: "missing-external-topology",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId: "not-registered"
     }]
@@ -496,6 +500,7 @@ test("missing external topology does not require topology rollback capability", 
   const definition = {
     id: "missing-external-preflight",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId: "not-registered",
       navigation: null
@@ -631,6 +636,7 @@ test("definition removal never deletes an externally registered topology", () =>
   places.registerDefinition({
     id: "external-ref",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId: "external-owned"
     }]
@@ -1008,6 +1014,7 @@ test("external topology road bindings are validated before domain mutation", () 
   places.registerDefinition({
     id: "external-road-binding-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId:
         "external-road-topology"
@@ -1106,6 +1113,7 @@ test("external topology threshold road must connect portal endpoint nodes", () =
   places.registerDefinition({
     id: "external-threshold-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId:
         "external-threshold"
@@ -1175,6 +1183,7 @@ test("connected portal road binding cannot target an unrelated layer domain", ()
     id: "unrelated-binding-place",
     layers: [
       {
+        spatialMode: "owned",
         id: "ground",
         navigation: {
           nodes: [
@@ -1197,6 +1206,7 @@ test("connected portal road binding cannot target an unrelated layer domain", ()
         }
       },
       {
+        spatialMode: "owned",
         id: "cellar",
         navigation: {
           nodes: [
