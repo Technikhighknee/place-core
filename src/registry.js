@@ -650,6 +650,12 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     const anchor = definition.getAnchor(anchorId);
     if (!anchor) return null;
+    if (anchor.spaceId != null) {
+      const space = definition.getSpace(anchor.spaceId);
+      if (space && !this.#spaceEnabled(instance, definition, space)) {
+        return null;
+      }
+    }
     return { ...anchor, placeId: instanceId, domainId: instance.layerDomains.get(anchor.layerId) };
   }
 
@@ -657,9 +663,16 @@ export class PlaceRegistry {
     const instance = this.#instances.get(instanceId);
     if (!instance) return [];
     const definition = this.#definitions.get(instance.definitionId);
-    return definition.getAnchorsByTag(tag).map((anchor) => ({
-      ...anchor, placeId: instanceId, domainId: instance.layerDomains.get(anchor.layerId)
-    }));
+    return definition.getAnchorsByTag(tag)
+      .filter((anchor) => {
+        if (anchor.spaceId == null) return true;
+        const space = definition.getSpace(anchor.spaceId);
+        return !space ||
+          this.#spaceEnabled(instance, definition, space);
+      })
+      .map((anchor) => ({
+        ...anchor, placeId: instanceId, domainId: instance.layerDomains.get(anchor.layerId)
+      }));
   }
 
   findNearestAnchor(instanceId, position, options = {}) {
@@ -1402,6 +1415,24 @@ export class PlaceRegistry {
     const a = this.resolveEndpoint(instanceId, merged.a);
     const b = this.resolveEndpoint(instanceId, merged.b);
     const connected = Boolean(a && b);
+    const localEndpointSpacesEnabled =
+      dynamic ||
+      [merged.a, merged.b].every((endpoint) => {
+        if (
+          endpoint.kind !== "local" ||
+          endpoint.spaceId == null
+        ) {
+          return true;
+        }
+        const space =
+          definition.getSpace(endpoint.spaceId);
+        return !space ||
+          this.#spaceEnabled(
+            instance,
+            definition,
+            space
+          );
+      });
     const resolved = {
       ...merged,
       instanceId,
@@ -1413,7 +1444,9 @@ export class PlaceRegistry {
     };
     return {
       ...resolved,
-      traversable: portalTraversableState(resolved)
+      traversable:
+        localEndpointSpacesEnabled &&
+        portalTraversableState(resolved)
     };
   }
 
@@ -1508,12 +1541,58 @@ export class PlaceRegistry {
       };
     }
 
+    const previousOverride =
+      instance.getSpaceOverride(spaceId);
     instance.setSpaceOverride(
       spaceId,
       enabled === baseEnabled ? null : { enabled },
       PLACE_INSTANCE_MUTATION_TOKEN
     );
     this.#spaceEnabledCache.delete(instanceId);
+
+    const syncPortals = () => {
+      this.#reindexInstancePortals(
+        instance,
+        definition
+      );
+      for (const portal of definition.portals) {
+        this.#bridge?.syncPortalState?.(
+          instance,
+          portal,
+          this.resolvePortal(
+            instanceId,
+            portal.id
+          )
+        );
+      }
+    };
+
+    try {
+      syncPortals();
+    } catch (error) {
+      instance.setSpaceOverride(
+        spaceId,
+        previousOverride,
+        PLACE_INSTANCE_MUTATION_TOKEN
+      );
+      this.#spaceEnabledCache.delete(instanceId);
+
+      let rollbackError = NO_THROWN_VALUE;
+      try {
+        syncPortals();
+      } catch (restoreError) {
+        rollbackError = restoreError;
+      }
+
+      if (rollbackError !== NO_THROWN_VALUE) {
+        throw new AggregateError(
+          [error, rollbackError],
+          `failed to update space ${spaceId} and restore portal state`
+        );
+      }
+      throw error;
+    }
+
     this.#touchState({ travel: true });
     this.#occupancyIndex.refresh(affectedEntities);
     this.emit("space-state-changed", {
@@ -3568,5 +3647,8 @@ export class PlaceRegistry {
 }
 
 export function isPortalTraversable(portal) {
+  if (portal?.traversable === false) {
+    return false;
+  }
   return portalTraversableState(portal);
 }
