@@ -40,6 +40,7 @@ function houseBlueprint() {
     },
     layers: [
       {
+        spatialMode: "owned",
         id: "ground",
         navigation: {
           nodes: [
@@ -57,6 +58,7 @@ function houseBlueprint() {
         }
       },
       {
+        spatialMode: "owned",
         id: "upper",
         navigation: {
           nodes: [
@@ -245,6 +247,7 @@ function tavernBlueprint() {
     },
     layers: [
       {
+        spatialMode: "owned",
         id: "ground",
         navigation: {
           nodes: [
@@ -261,6 +264,7 @@ function tavernBlueprint() {
         }
       },
       {
+        spatialMode: "owned",
         id: "cellar",
         navigation: {
           nodes: [
@@ -392,6 +396,7 @@ function attachedPlaceBlueprint(id, kind, anchorTag) {
       maxY: 2
     },
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -457,6 +462,7 @@ function shipBlueprint() {
       maxY: 3
     },
     layers: [{
+      spatialMode: "owned",
       id: "deck",
       navigation: {
         nodes: [
