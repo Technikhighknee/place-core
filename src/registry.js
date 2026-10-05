@@ -4124,16 +4124,69 @@ export class PlaceRegistry {
       if (layer.spatialMode !== "embedded") {
         continue;
       }
+
       this.#embeddedTransform(
         instance,
         definition,
         layer
       );
-    }
 
-    this.#bridge
-      ?.validateEmbeddedHostNavigation
-      ?.(instance, definition);
+      const validatePoint =
+        this.#bridge
+          ?.validateHostNavigationPoint;
+      if (typeof validatePoint !== "function") {
+        continue;
+      }
+
+      for (const anchor of definition.anchors) {
+        if (
+          anchor.layerId !== layer.id ||
+          anchor.nodeId == null
+        ) {
+          continue;
+        }
+        const resolved =
+          this.#resolveAnchorForInstance(
+            instance,
+            definition,
+            anchor
+          );
+        validatePoint.call(
+          this.#bridge,
+          resolved.domainId,
+          resolved.nodeId,
+          resolved.position,
+          `embedded anchor ${definition.id}:${anchor.id}`
+        );
+      }
+
+      for (const portal of definition.portals) {
+        const resolved =
+          this.resolvePortal(
+            instance.id,
+            portal.id
+          );
+        if (!resolved) continue;
+        for (const endpoint of [
+          resolved.a,
+          resolved.b
+        ]) {
+          if (
+            endpoint?.layerId !== layer.id ||
+            endpoint.nodeId == null
+          ) {
+            continue;
+          }
+          validatePoint.call(
+            this.#bridge,
+            endpoint.domainId,
+            endpoint.nodeId,
+            endpoint.position,
+            `embedded portal ${definition.id}:${portal.id}`
+          );
+        }
+      }
+    }
   }
 
   #resolveBoundaryForInstance(
