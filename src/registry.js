@@ -1190,7 +1190,7 @@ export class PlaceRegistry {
           claimedDomains.get(domainId);
         if (claimedBy != null) {
           throw new Error(
-            `domain ${domainId} is assigned to multiple owned layers: ${claimedBy}, ${layer.id}`
+            `domain ${domainId} is assigned to multiple layers: ${claimedBy}, ${layer.id}`
           );
         }
         claimedDomains.set(
