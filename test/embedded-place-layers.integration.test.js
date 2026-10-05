@@ -29,17 +29,31 @@ const MARKET = {
     id: "market",
     spatialMode: "embedded"
   }],
-  spaces: [{
-    id: "square",
-    layerId: "market",
-    geometry: {
-      type: "aabb",
-      minX: 0,
-      minY: 0,
-      maxX: 10,
-      maxY: 8
+  spaces: [
+    {
+      id: "square",
+      layerId: "market",
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 10,
+        maxY: 8
+      }
+    },
+    {
+      id: "annex",
+      layerId: "market",
+      enabled: false,
+      geometry: {
+        type: "aabb",
+        minX: 12,
+        minY: 0,
+        maxX: 16,
+        maxY: 4
+      }
     }
-  }],
+  ],
   boundaries: [{
     id: "north-edge",
     layerId: "market",
@@ -235,6 +249,61 @@ test("embedded places share a host domain without owning it", () => {
     world.getDomain("default"),
     host
   );
+});
+
+test("enabling an embedded space refreshes occupants outside the place footprint", () => {
+  const { places } = setup();
+
+  places.createPlace({
+    id: "market",
+    definitionId: "embedded-market",
+    layerDomains: {
+      market: "default"
+    },
+    placement: {
+      domainId: "default",
+      containment: "footprint",
+      transform: {
+        x: 100,
+        y: 50,
+        rotation: 0,
+        scale: 1
+      }
+    }
+  });
+
+  const entity = {
+    id: "merchant",
+    domainId: "default",
+    position: { x: 114, y: 52 }
+  };
+
+  const before =
+    places.updateEntityOccupancy(entity);
+  assert.deepEqual(before.places, []);
+  assert.deepEqual(before.spaces, []);
+
+  places.setSpaceState(
+    "market",
+    "annex",
+    { enabled: true }
+  );
+
+  const after =
+    places.getEntityLocation("merchant");
+  assert.ok(after);
+  assert.deepEqual(
+    after.places,
+    ["market"]
+  );
+  assert.deepEqual(
+    after.spaces.map(
+      (space) => space.spaceId
+    ),
+    ["annex"]
+  );
+
+  places.assertInternalConsistency();
 });
 
 test("moving an embedded place updates resolved anchors and spatial lookup", () => {
