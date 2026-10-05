@@ -353,6 +353,26 @@ test("embedded places share a host domain without owning it", () => {
     ),
     ["square"]
   );
+  assert.equal(
+    location.layerId,
+    "market"
+  );
+
+  assert.deepEqual(
+    places.findAnchors({
+      placeId: "north-market",
+      tag: "food"
+    }).map((anchor) => [
+      anchor.domainId,
+      anchor.position
+    ]),
+    [
+      [
+        "default",
+        { x: 102, y: 53 }
+      ]
+    ]
+  );
 
   assert.deepEqual(
     places.getAnchorsForDomain(
