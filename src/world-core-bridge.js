@@ -104,6 +104,93 @@ export class WorldCoreBridge {
     this.existingDomainPolicy = existingDomainPolicy;
   }
 
+  #assertEmbeddedHostNode(
+    domainId,
+    nodeId,
+    position,
+    label
+  ) {
+    const navigation =
+      this.navigationForDomain(domainId);
+    if (!navigation) {
+      throw new Error(
+        `${label} references host navigation node ${nodeId}, but domain ${domainId} has no navigation topology`
+      );
+    }
+    const node =
+      navigation.nodes?.get?.(nodeId);
+    if (!node) {
+      throw new Error(
+        `${label} references unknown host navigation node ${nodeId} in domain ${domainId}`
+      );
+    }
+    if (
+      Math.abs(node.x - position.x) >
+        1e-9 ||
+      Math.abs(node.y - position.y) >
+        1e-9
+    ) {
+      throw new Error(
+        `${label} position does not match host navigation node ${nodeId} in domain ${domainId}`
+      );
+    }
+  }
+
+  #validateEmbeddedHostNavigation(
+    instance,
+    definition,
+    layer
+  ) {
+    if (!this.#registry) return;
+
+    for (const anchor of definition.anchors) {
+      if (
+        anchor.layerId !== layer.id ||
+        anchor.nodeId == null
+      ) {
+        continue;
+      }
+      const resolved =
+        this.#registry.resolveAnchor(
+          instance.id,
+          anchor.id
+        );
+      if (!resolved) continue;
+      this.#assertEmbeddedHostNode(
+        resolved.domainId,
+        resolved.nodeId,
+        resolved.position,
+        `embedded anchor ${definition.id}:${anchor.id}`
+      );
+    }
+
+    for (const portal of definition.portals) {
+      const resolved =
+        this.#registry.resolvePortal(
+          instance.id,
+          portal.id
+        );
+      if (!resolved) continue;
+      for (const endpoint of [
+        resolved.a,
+        resolved.b
+      ]) {
+        if (
+          endpoint?.layerId !== layer.id ||
+          endpoint.nodeId == null
+        ) {
+          continue;
+        }
+        this.#assertEmbeddedHostNode(
+          endpoint.domainId,
+          endpoint.nodeId,
+          endpoint.position,
+          `embedded portal ${definition.id}:${portal.id}`
+        );
+      }
+    }
+  }
+
   #navigationMethod(name) {
     const method = this.navigation?.[name];
     if (typeof method !== "function") {
@@ -1098,6 +1185,11 @@ export class WorldCoreBridge {
           `embedded place layer ${definition.id}:${layer.id} requires existing world-core domain ${domainId}`
         );
       }
+      this.#validateEmbeddedHostNavigation(
+        instance,
+        definition,
+        layer
+      );
     }
 
     // Preflight ownership and existing bindings before mutating either core.
