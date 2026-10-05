@@ -40,7 +40,10 @@ export class PlaceRegistry extends CorePlaceRegistry {
               location.places.length - 1
             ]
           : null),
-      layerId: binding?.layerId ?? null,
+      layerId:
+        binding?.layerId ??
+        deepestSpace?.layerId ??
+        null,
       deepestSpace
     });
   }
@@ -149,11 +152,15 @@ export class PlaceRegistry extends CorePlaceRegistry {
           }
         }
 
-        result.push({
-          ...anchor,
-          placeId: instance.id,
-          domainId: instance.layerDomains.get(anchor.layerId)
-        });
+        const resolved =
+          this.resolveAnchor(
+            instance.id,
+            anchor.id
+          );
+        if (!resolved) {
+          continue;
+        }
+        result.push(resolved);
       }
     }
     return result;
