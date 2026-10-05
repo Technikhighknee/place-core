@@ -21,6 +21,7 @@ test("invalid snapshot fails before any world-core materialization", () => {
   source.registerDefinition({
     id: "snapshot-preflight-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [

@@ -7,7 +7,7 @@ function definition() {
   return {
     id: "query-place",
     footprint: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 10 },
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     spaces: [
       {
         id: "room",
@@ -223,7 +223,7 @@ test("overlapping spaces choose deepest then highest-priority then smallest-ID",
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "overlap-place",
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     spaces: [
       {
         id: "outer",
@@ -287,7 +287,7 @@ test("findAnchors can explicitly filter by effective nested-space availability",
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "anchor-availability-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [
       {
         id: "parent",
@@ -377,7 +377,7 @@ test("public spatial queries reject non-finite coordinates and malformed bounds"
       maxX: 10,
       maxY: 10
     },
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
@@ -452,7 +452,7 @@ test("spatial query options do not silently coerce strings", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "query-option-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     boundaries: [{
       id: "wall",
       layerId: "inside",
@@ -500,7 +500,7 @@ test("nearest portal terminates when every indexed endpoint is filtered out", ()
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "filtered-portals",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       a: { kind: "external", slot: "outside" },
@@ -549,7 +549,7 @@ test("nearest portal runtime is independent of empty coordinate distance", () =>
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "far-portal",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       a: { kind: "external", slot: "outside" },
@@ -592,7 +592,7 @@ test("huge portal radius query visits sparse occupied cells rather than empty ar
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "radius-portals",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       a: { kind: "external", slot: "outside" },
@@ -641,8 +641,8 @@ test("instance-local nearest anchor refuses to compare different layer frames", 
   places.registerDefinition({
     id: "multi-layer-nearest",
     layers: [
-      { id: "ground" },
-      { id: "upper" }
+      { spatialMode: "owned", id: "ground" },
+      { spatialMode: "owned", id: "upper" }
     ],
     anchors: [
       {
@@ -708,7 +708,7 @@ test("space tie-breaking uses locale-independent code-unit ordering", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "canonical-id-order",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [
       {
         id: "z",
@@ -754,7 +754,7 @@ test("nearest boundary remains defined when squared distance would overflow", ()
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "huge-boundary-distance",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     boundaries: [{
       id: "wall",
       layerId: "inside",

@@ -1276,6 +1276,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       "memberships",
       "layerDomains",
       "attachments",
+      "embeddedNodeBindings",
       "placement",
       "metadata",
       "portalOverrides",
@@ -1410,6 +1411,79 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
     assertObject(item.layerDomains, `instance ${String(item.id)}.layerDomains`);
     assertObject(item.attachments, `instance ${String(item.id)}.attachments`);
+    assertObject(
+      item.embeddedNodeBindings,
+      `instance ${String(item.id)}.embeddedNodeBindings`
+    );
+    assertOnlyKeys(
+      item.embeddedNodeBindings,
+      ["anchors", "portals"],
+      `instance ${String(item.id)}.embeddedNodeBindings`
+    );
+    assertObject(
+      item.embeddedNodeBindings.anchors,
+      `instance ${String(item.id)}.embeddedNodeBindings.anchors`
+    );
+    assertObject(
+      item.embeddedNodeBindings.portals,
+      `instance ${String(item.id)}.embeddedNodeBindings.portals`
+    );
+
+    for (const [anchorId, nodeId] of
+      Object.entries(
+        item.embeddedNodeBindings.anchors
+      )) {
+      assertStringId(anchorId, "embedded anchor binding id");
+      assertStringId(nodeId, `embedded anchor binding ${anchorId}`);
+      const anchor = definition.getAnchor(anchorId);
+      const layer = anchor
+        ? definition.getLayer(anchor.layerId)
+        : null;
+      if (!anchor || layer?.spatialMode !== "embedded") {
+        throw new Error(
+          `instance ${String(item.id)} has invalid embedded anchor binding ${anchorId}`
+        );
+      }
+    }
+
+    for (const [portalId, sides] of
+      Object.entries(
+        item.embeddedNodeBindings.portals
+      )) {
+      assertStringId(portalId, "embedded portal binding id");
+      assertObject(sides, `embedded portal binding ${portalId}`);
+      assertOnlyKeys(
+        sides,
+        ["a", "b"],
+        `embedded portal binding ${portalId}`
+      );
+      const portal = definition.getPortal(portalId);
+      if (!portal) {
+        throw new Error(
+          `instance ${String(item.id)} has invalid embedded portal binding ${portalId}`
+        );
+      }
+      for (const side of ["a", "b"]) {
+        if (!Object.hasOwn(sides, side)) continue;
+        assertStringId(
+          sides[side],
+          `embedded portal binding ${portalId}.${side}`
+        );
+        const endpoint = portal[side];
+        const layer =
+          endpoint?.kind === "local"
+            ? definition.getLayer(endpoint.layerId)
+            : null;
+        if (
+          endpoint?.kind !== "local" ||
+          layer?.spatialMode !== "embedded"
+        ) {
+          throw new Error(
+            `instance ${String(item.id)} has invalid embedded portal binding ${portalId}.${side}`
+          );
+        }
+      }
+    }
     assertObject(item.portalOverrides, `instance ${String(item.id)}.portalOverrides`);
     assertObject(item.boundaryOverrides, `instance ${String(item.id)}.boundaryOverrides`);
     assertObject(item.spaceOverrides, `instance ${String(item.id)}.spaceOverrides`);
@@ -1444,6 +1518,9 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       const domainId = ownValue(item.layerDomains, layer.id);
       if (typeof domainId !== "string" || !domainId) {
         throw new Error(`instance ${String(item.id)} missing domain for layer ${layer.id}`);
+      }
+      if (layer.spatialMode !== "owned") {
+        continue;
       }
       if (domains.has(domainId)) {
         throw new Error(

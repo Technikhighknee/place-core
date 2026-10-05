@@ -59,6 +59,12 @@ import {
 export { PlaceInstance };
 
 const NO_THROWN_VALUE = Symbol("no-thrown-value");
+const IDENTITY_TRANSFORM = Object.freeze({
+  x: 0,
+  y: 0,
+  rotation: 0,
+  scale: 1
+});
 
 function footprintIntersectsBounds(
   footprint,
@@ -269,6 +275,9 @@ export class PlaceRegistry {
   #definitions = new Map();
   #instances = new Map();
   #domainBindings = new Map();
+  #embeddedLayerBindings = new Map();
+  #embeddedSpaceIndexes = new Map();
+  #embeddedSpaceRecords = new Map();
   #definitionsView;
   #instancesView;
   #domainBindingsView;
@@ -641,7 +650,11 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     const boundary = definition.getBoundary(boundaryId);
     if (!boundary) return null;
-    return { ...boundary, enabled: instance.getBoundaryOverride(boundaryId)?.enabled ?? boundary.enabled };
+    return this.#resolveBoundaryForInstance(
+      instance,
+      definition,
+      boundary
+    );
   }
 
   resolveAnchor(instanceId, anchorId) {
@@ -656,7 +669,11 @@ export class PlaceRegistry {
         return null;
       }
     }
-    return { ...anchor, placeId: instanceId, domainId: instance.layerDomains.get(anchor.layerId) };
+    return this.#resolveAnchorForInstance(
+      instance,
+      definition,
+      anchor
+    );
   }
 
   findAnchorsByTag(instanceId, tag) {
@@ -670,9 +687,13 @@ export class PlaceRegistry {
         return !space ||
           this.#spaceEnabled(instance, definition, space);
       })
-      .map((anchor) => ({
-        ...anchor, placeId: instanceId, domainId: instance.layerDomains.get(anchor.layerId)
-      }));
+      .map((anchor) =>
+        this.#resolveAnchorForInstance(
+          instance,
+          definition,
+          anchor
+        )
+      );
   }
 
   findNearestAnchor(instanceId, position, options = {}) {
@@ -702,7 +723,13 @@ export class PlaceRegistry {
         const space = definition.getSpace(anchor.spaceId);
         if (space && !this.#spaceEnabled(instance, definition, space)) continue;
       }
-      eligible.push(anchor);
+      eligible.push(
+        this.#resolveAnchorForInstance(
+          instance,
+          definition,
+          anchor
+        )
+      );
     }
 
     if (options.layerId == null) {
@@ -724,11 +751,6 @@ export class PlaceRegistry {
 
     return nearest ? {
       ...nearest.anchor,
-      placeId: instanceId,
-      domainId:
-        instance.layerDomains.get(
-          nearest.anchor.layerId
-        ),
       distance: nearest.distance
     } : null;
   }
@@ -743,30 +765,84 @@ export class PlaceRegistry {
     assertOptionalString(options.tag, "getAnchorsForDomain.tag");
     assertOptionalString(options.kind, "getAnchorsForDomain.kind");
     assertOptionalString(options.spaceId, "getAnchorsForDomain.spaceId");
-    const binding = this.#domainBindings.get(domainId);
-    if (!binding) return [];
-    const instance = this.#instances.get(binding.instanceId);
-    if (!instance) return [];
-    const definition = this.#definitions.get(instance.definitionId);
-    const candidates = options.tag ? definition.getAnchorsByTag(options.tag) : definition.anchors;
-    const result = [];
 
-    for (const anchor of candidates) {
-      if (anchor.layerId !== binding.layerId) continue;
-      if (options.kind != null && anchor.kind !== options.kind) continue;
-      if (options.spaceId != null && anchor.spaceId !== options.spaceId) continue;
-      if (anchor.spaceId != null) {
-        const space = definition.getSpace(anchor.spaceId);
-        if (space && !this.#spaceEnabled(instance, definition, space)) continue;
-      }
-      result.push({
-        ...anchor,
-        placeId: instance.id,
-        domainId
-      });
+    const layerRefs = [];
+    const owned =
+      this.#domainBindings.get(domainId);
+    if (owned) {
+      layerRefs.push(owned);
+    }
+    for (const ref of
+      this.#embeddedLayerBindings
+        .get(domainId)?.values?.() ?? []) {
+      layerRefs.push(ref);
     }
 
-    result.sort((a, b) => compareStrings(a.id, b.id));
+    const result = [];
+    for (const ref of layerRefs) {
+      const instance =
+        this.#instances.get(ref.instanceId);
+      if (!instance) continue;
+      const definition =
+        this.#definitions.get(
+          instance.definitionId
+        );
+      if (!definition) continue;
+      const candidates = options.tag
+        ? definition.getAnchorsByTag(
+            options.tag
+          )
+        : definition.anchors;
+
+      for (const anchor of candidates) {
+        if (anchor.layerId !== ref.layerId) {
+          continue;
+        }
+        if (
+          options.kind != null &&
+          anchor.kind !== options.kind
+        ) {
+          continue;
+        }
+        if (
+          options.spaceId != null &&
+          anchor.spaceId !== options.spaceId
+        ) {
+          continue;
+        }
+        if (anchor.spaceId != null) {
+          const space =
+            definition.getSpace(
+              anchor.spaceId
+            );
+          if (
+            space &&
+            !this.#spaceEnabled(
+              instance,
+              definition,
+              space
+            )
+          ) {
+            continue;
+          }
+        }
+        result.push(
+          this.#resolveAnchorForInstance(
+            instance,
+            definition,
+            anchor
+          )
+        );
+      }
+    }
+
+    result.sort((a, b) =>
+      compareStrings(
+        typedIdKey(a.placeId),
+        typedIdKey(b.placeId)
+      ) ||
+      compareStrings(a.id, b.id)
+    );
     return result;
   }
 
@@ -962,21 +1038,79 @@ export class PlaceRegistry {
     );
     assertOptionalString(options.kind, "getBoundariesForDomain.kind");
     assertOptionalString(options.tag, "getBoundariesForDomain.tag");
-    const binding = this.#domainBindings.get(domainId);
-    if (!binding) return [];
-    const instance = this.#instances.get(binding.instanceId);
-    if (!instance) return [];
-    const definition = this.#definitions.get(instance.definitionId);
+
+    const layerRefs = [];
+    const owned =
+      this.#domainBindings.get(domainId);
+    if (owned) {
+      layerRefs.push(owned);
+    }
+    for (const ref of
+      this.#embeddedLayerBindings
+        .get(domainId)?.values?.() ?? []) {
+      layerRefs.push(ref);
+    }
 
     const result = [];
-    for (const boundary of definition.boundaries) {
-      if (boundary.layerId !== binding.layerId) continue;
-      const resolved = this.resolveBoundary(instance.id, boundary.id);
-      if (enabledOnly && !resolved.enabled) continue;
-      if (options.kind != null && resolved.kind !== options.kind) continue;
-      if (options.tag != null && !resolved.tags?.includes(options.tag)) continue;
-      result.push({ ...resolved, placeId: instance.id, domainId });
+    for (const ref of layerRefs) {
+      const instance =
+        this.#instances.get(ref.instanceId);
+      if (!instance) continue;
+      const definition =
+        this.#definitions.get(
+          instance.definitionId
+        );
+      if (!definition) continue;
+
+      for (const boundary of
+        definition.boundaries) {
+        if (
+          boundary.layerId !==
+          ref.layerId
+        ) {
+          continue;
+        }
+        const resolved =
+          this.#resolveBoundaryForInstance(
+            instance,
+            definition,
+            boundary
+          );
+        if (
+          enabledOnly &&
+          !resolved.enabled
+        ) {
+          continue;
+        }
+        if (
+          options.kind != null &&
+          resolved.kind !== options.kind
+        ) {
+          continue;
+        }
+        if (
+          options.tag != null &&
+          !resolved.tags?.includes(
+            options.tag
+          )
+        ) {
+          continue;
+        }
+        result.push({
+          ...resolved,
+          placeId: instance.id,
+          domainId
+        });
+      }
     }
+
+    result.sort((a, b) =>
+      compareStrings(
+        typedIdKey(a.placeId),
+        typedIdKey(b.placeId)
+      ) ||
+      compareStrings(a.id, b.id)
+    );
     return result;
   }
 
@@ -1001,11 +1135,15 @@ export class PlaceRegistry {
   placesInBounds(domainId, bounds) {
     assertStringId(domainId, "placesInBounds.domainId");
     assertBounds(bounds, "placesInBounds.bounds");
-    const index = this.#exteriorIndexes.get(domainId);
-    if (!index) return [];
-    const result = [];
-    for (const instanceId of index.queryBounds(bounds)) {
-      const instance = this.#instances.get(instanceId);
+
+    const resultById = new Map();
+
+    const exteriorIndex =
+      this.#exteriorIndexes.get(domainId);
+    for (const instanceId of
+      exteriorIndex?.queryBounds(bounds) ?? []) {
+      const instance =
+        this.#instances.get(instanceId);
       if (!instance) continue;
       const definition =
         this.#definitions.get(
@@ -1028,10 +1166,72 @@ export class PlaceRegistry {
       ) {
         continue;
       }
-      result.push(instance);
+      resultById.set(instance.id, instance);
     }
-    result.sort((a, b) => compareStrings(typedIdKey(a.id), typedIdKey(b.id)));
-    return result;
+
+    const embeddedIndex =
+      this.#embeddedSpaceIndexes.get(
+        domainId
+      );
+    for (const key of
+      embeddedIndex?.queryBounds(bounds) ?? []) {
+      const record =
+        this.#embeddedSpaceRecords.get(
+          key
+        );
+      if (!record) continue;
+      const instance =
+        this.#instances.get(
+          record.instanceId
+        );
+      if (!instance) continue;
+      const definition =
+        this.#definitions.get(
+          instance.definitionId
+        );
+      const layer = definition
+        ?.getLayer(record.layerId);
+      const space = definition
+        ?.getSpace(record.spaceId);
+      if (
+        !definition ||
+        layer?.spatialMode !== "embedded" ||
+        !space ||
+        !this.#spaceEnabled(
+          instance,
+          definition,
+          space
+        )
+      ) {
+        continue;
+      }
+
+      const transform =
+        this.#embeddedTransform(
+          instance,
+          definition,
+          layer
+        );
+      if (
+        !footprintIntersectsBounds(
+          space.geometry,
+          transform,
+          bounds
+        )
+      ) {
+        continue;
+      }
+
+      resultById.set(instance.id, instance);
+    }
+
+    return [...resultById.values()]
+      .sort((a, b) =>
+        compareStrings(
+          typedIdKey(a.id),
+          typedIdKey(b.id)
+        )
+      );
   }
 
   createPlace(input) {
@@ -1043,6 +1243,7 @@ export class PlaceRegistry {
       "parentId",
       "layerDomains",
       "attachments",
+      "embeddedNodeBindings",
       "placement",
       "memberships",
       "metadata"
@@ -1101,27 +1302,179 @@ export class PlaceRegistry {
         Object.hasOwn(suppliedLayerDomains, layer.id)
           ? suppliedLayerDomains[layer.id]
           : undefined;
+      if (
+        layer.spatialMode === "embedded" &&
+        suppliedDomainId == null
+      ) {
+        throw new Error(
+          `embedded layer ${layer.id} requires an explicit layerDomains binding`
+        );
+      }
+
       const domainId =
         suppliedDomainId ??
         defaultLayerDomainId(input.id, layer.id);
       assertStringId(domainId, `layerDomains.${layer.id}`);
 
-      const claimedBy = claimedDomains.get(domainId);
-      if (claimedBy != null) {
-        throw new Error(
-          `domain ${domainId} is assigned to multiple layers: ${claimedBy}, ${layer.id}`
+      if (layer.spatialMode === "owned") {
+        const claimedBy =
+          claimedDomains.get(domainId);
+        if (claimedBy != null) {
+          throw new Error(
+            `domain ${domainId} is assigned to multiple layers: ${claimedBy}, ${layer.id}`
+          );
+        }
+        claimedDomains.set(
+          domainId,
+          layer.id
         );
-      }
-      claimedDomains.set(domainId, layer.id);
 
-      const existing = this.#domainBindings.get(domainId);
-      if (existing) {
-        throw new Error(
-          `domain ${domainId} is already bound to ${String(existing.instanceId)}:${existing.layerId}`
-        );
+        const existing =
+          this.#domainBindings.get(domainId);
+        if (existing) {
+          throw new Error(
+            `domain ${domainId} is already bound to ${String(existing.instanceId)}:${existing.layerId}`
+          );
+        }
       }
+
       layerDomains.set(layer.id, domainId);
     }
+
+    const embeddedNodeBindingsInput =
+      input.embeddedNodeBindings == null
+        ? {}
+        : assertPlainObject(
+            input.embeddedNodeBindings,
+            "embeddedNodeBindings"
+          );
+    assertPatchKeys(
+      embeddedNodeBindingsInput,
+      ["anchors", "portals"],
+      "embeddedNodeBindings"
+    );
+
+    const normalizedAnchorBindings =
+      new Map();
+    const normalizedPortalBindings =
+      new Map();
+
+    const anchorBindings =
+      embeddedNodeBindingsInput.anchors == null
+        ? {}
+        : assertPlainObject(
+            embeddedNodeBindingsInput.anchors,
+            "embeddedNodeBindings.anchors"
+          );
+    for (const [anchorId, nodeId] of
+      Object.entries(anchorBindings)) {
+      assertStringId(
+        anchorId,
+        "embeddedNodeBindings anchor id"
+      );
+      assertStringId(
+        nodeId,
+        `embeddedNodeBindings.anchors.${anchorId}`
+      );
+      const anchor =
+        definition.getAnchor(anchorId);
+      if (!anchor) {
+        throw new Error(
+          `embeddedNodeBindings references unknown anchor ${anchorId}`
+        );
+      }
+      const layer =
+        definition.getLayer(anchor.layerId);
+      if (layer?.spatialMode !== "embedded") {
+        throw new Error(
+          `embeddedNodeBindings anchor ${anchorId} is not on an embedded layer`
+        );
+      }
+      normalizedAnchorBindings.set(
+        anchorId,
+        nodeId
+      );
+    }
+
+    const portalBindings =
+      embeddedNodeBindingsInput.portals == null
+        ? {}
+        : assertPlainObject(
+            embeddedNodeBindingsInput.portals,
+            "embeddedNodeBindings.portals"
+          );
+    for (const [portalId, sidesInput] of
+      Object.entries(portalBindings)) {
+      assertStringId(
+        portalId,
+        "embeddedNodeBindings portal id"
+      );
+      const portal =
+        definition.getPortal(portalId);
+      if (!portal) {
+        throw new Error(
+          `embeddedNodeBindings references unknown portal ${portalId}`
+        );
+      }
+      const sides = assertPlainObject(
+        sidesInput,
+        `embeddedNodeBindings.portals.${portalId}`
+      );
+      assertPatchKeys(
+        sides,
+        ["a", "b"],
+        `embeddedNodeBindings.portals.${portalId}`
+      );
+      for (const side of ["a", "b"]) {
+        if (sides[side] == null) continue;
+        const nodeId = sides[side];
+        assertStringId(
+          nodeId,
+          `embeddedNodeBindings.portals.${portalId}.${side}`
+        );
+        const endpoint = portal[side];
+        const layer =
+          endpoint?.kind === "local"
+            ? definition.getLayer(
+                endpoint.layerId
+              )
+            : null;
+        if (
+          endpoint?.kind !== "local" ||
+          layer?.spatialMode !== "embedded"
+        ) {
+          throw new Error(
+            `embeddedNodeBindings portal ${portalId} endpoint ${side} is not local to an embedded layer`
+          );
+        }
+        let normalizedSides =
+          normalizedPortalBindings.get(
+            portalId
+          );
+        if (!normalizedSides) {
+          normalizedSides = {};
+          normalizedPortalBindings.set(
+            portalId,
+            normalizedSides
+          );
+        }
+        normalizedSides[side] = nodeId;
+      }
+    }
+
+    const embeddedNodeBindings =
+      deepFreeze({
+        anchors: Object.fromEntries(
+          normalizedAnchorBindings
+        ),
+        portals: Object.fromEntries(
+          [...normalizedPortalBindings]
+            .map(([portalId, sides]) => [
+              portalId,
+              deepFreeze({ ...sides })
+            ])
+        )
+      });
 
     const attachmentsInput = input.attachments == null
       ? {}
@@ -1190,6 +1543,7 @@ export class PlaceRegistry {
       parentId: input.parentId ?? null,
       layerDomains,
       attachments,
+      embeddedNodeBindings,
       placement,
       memberships,
       metadata: input.metadata
@@ -1204,15 +1558,32 @@ export class PlaceRegistry {
       this.#semanticGraph.registerPrimary(instance);
       this.#semanticGraph.registerMemberships(instance);
       this.#placementGraph.register(instance);
-      for (const [layerId, domainId] of layerDomains) {
+      for (const layer of definition.layers) {
+        if (layer.spatialMode !== "owned") {
+          continue;
+        }
+        const domainId =
+          layerDomains.get(layer.id);
         this.#domainBindings.set(
           domainId,
           deepFreeze({
             instanceId: instance.id,
-            layerId
+            layerId: layer.id
           })
         );
       }
+      this.#indexEmbeddedLayers(
+        instance,
+        definition
+      );
+      this.#validateEmbeddedPlacement(
+        instance,
+        definition
+      );
+      this.#indexEmbeddedSpaces(
+        instance,
+        definition
+      );
       this.#validateInstancePortals(
         instance,
         definition
@@ -1351,7 +1722,22 @@ export class PlaceRegistry {
     }
     if (callBridge) this.#bridge?.unmaterializePlace?.(instance, definition);
     this.clearEntityOccupancyForPlace(instanceId);
-    for (const domainId of instance.layerDomains.values()) this.#domainBindings.delete(domainId);
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "owned") {
+        continue;
+      }
+      const domainId =
+        instance.layerDomains.get(layer.id);
+      this.#domainBindings.delete(domainId);
+    }
+    this.#unindexEmbeddedSpaces(
+      instance,
+      definition
+    );
+    this.#unindexEmbeddedLayers(
+      instance,
+      definition
+    );
     this.#unindexExterior(instance);
     this.#semanticGraph.unregisterPrimary(instance);
     this.#semanticGraph.unregisterMemberships(instance);
@@ -1378,12 +1764,34 @@ export class PlaceRegistry {
   resolveEndpoint(instanceId, endpoint) {
     const instance = this.#instances.get(instanceId);
     if (!instance) throw new Error(`unknown place instance: ${String(instanceId)}`);
+    const definition =
+      this.#definitions.get(
+        instance.definitionId
+      );
+    if (!definition) {
+      throw new Error(
+        `unknown place definition: ${instance.definitionId}`
+      );
+    }
     if (endpoint.kind === "local") {
       const domainId = instance.layerDomains.get(endpoint.layerId);
       if (!domainId) throw new Error(`place ${String(instanceId)} has no domain for layer ${endpoint.layerId}`);
+      const layer =
+        definition.getLayer(endpoint.layerId);
+      const position =
+        layer?.spatialMode === "embedded"
+          ? transformPoint(
+              endpoint.position,
+              this.#embeddedTransform(
+                instance,
+                definition,
+                layer
+              )
+            )
+          : endpoint.position;
       return {
         domainId,
-        position: endpoint.position,
+        position,
         nodeId: endpoint.nodeId,
         placeId: instanceId,
         spaceId: endpoint.spaceId,
@@ -1412,8 +1820,42 @@ export class PlaceRegistry {
     if (!source) return null;
     const override = dynamic ? null : instance.getPortalOverride(portalId);
     const merged = override ? { ...source, ...override } : source;
-    const a = this.resolveEndpoint(instanceId, merged.a);
-    const b = this.resolveEndpoint(instanceId, merged.b);
+    const endpointForSide = (
+      endpoint,
+      side
+    ) => {
+      if (
+        dynamic ||
+        endpoint.kind !== "local"
+      ) {
+        return endpoint;
+      }
+      const layer =
+        definition.getLayer(
+          endpoint.layerId
+        );
+      if (
+        layer?.spatialMode !== "embedded"
+      ) {
+        return endpoint;
+      }
+      return {
+        ...endpoint,
+        nodeId:
+          instance.embeddedNodeBindings
+            .portals?.[portalId]?.[side] ??
+          null
+      };
+    };
+
+    const a = this.resolveEndpoint(
+      instanceId,
+      endpointForSide(merged.a, "a")
+    );
+    const b = this.resolveEndpoint(
+      instanceId,
+      endpointForSide(merged.b, "b")
+    );
     const connected = Boolean(a && b);
     const localEndpointSpacesEnabled =
       dynamic ||
@@ -1521,7 +1963,41 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     const space = definition.getSpace(spaceId);
     if (!space) throw new Error(`unknown space ${spaceId} on place ${String(instanceId)}`);
-    const affectedEntities = [...this.#occupancyIndex.entitiesInPlace(instanceId)];
+    const affectedEntities =
+      new Set(
+        this.#occupancyIndex.entitiesInPlace(
+          instanceId
+        )
+      );
+
+    const layer =
+      definition.getLayer(space.layerId);
+    if (layer?.spatialMode === "embedded") {
+      const domainId =
+        instance.layerDomains.get(
+          layer.id
+        );
+      const bounds =
+        this.#embeddedSpaceIndexes
+          .get(domainId)
+          ?.getBounds(
+            this.#embeddedSpaceKey(
+              instance.id,
+              layer.id,
+              space.id
+            )
+          );
+      if (bounds) {
+        for (const entityId of
+          this.#occupancyIndex.queryBounds(
+            domainId,
+            bounds
+          )) {
+          affectedEntities.add(entityId);
+        }
+      }
+    }
+
     const baseEnabled = space.enabled;
     const currentEnabled = instance.getSpaceOverride(spaceId)?.enabled ?? baseEnabled;
     const enabled = normalizeBoolean(
@@ -1594,7 +2070,9 @@ export class PlaceRegistry {
     }
 
     this.#touchState({ travel: true });
-    this.#occupancyIndex.refresh(affectedEntities);
+    this.#occupancyIndex.refresh(
+      affectedEntities
+    );
     this.emit("space-state-changed", {
       placeId: instanceId,
       spaceId,
@@ -1918,6 +2396,20 @@ export class PlaceRegistry {
       this.#placementGraph.collectDescendants(
         instanceId
       );
+    const affectsEmbeddedTravel =
+      affected.some((id) => {
+        const candidate =
+          this.#instances.get(id);
+        const definition = candidate
+          ? this.#definitions.get(
+              candidate.definitionId
+            )
+          : null;
+        return definition?.layers.some(
+          (layer) =>
+            layer.spatialMode === "embedded"
+        ) ?? false;
+      });
     const affectedEntities = new Set(
       this.#collectTrackedEntitiesForIndexedPlaces(
         affected
@@ -1926,9 +2418,18 @@ export class PlaceRegistry {
     const previousPlacement = instance.placement;
 
     for (const id of affected) {
-      this.#unindexExterior(
-        this.#instances.get(id)
+      const candidate =
+        this.#instances.get(id);
+      if (!candidate) continue;
+      const candidateDefinition =
+        this.#definitions.get(
+          candidate.definitionId
+        );
+      this.#unindexEmbeddedSpaces(
+        candidate,
+        candidateDefinition
       );
+      this.#unindexExterior(candidate);
     }
 
     this.#placementGraph.unregister(instance);
@@ -1942,20 +2443,43 @@ export class PlaceRegistry {
       for (const id of affected) {
         const child = this.#instances.get(id);
         if (!child) continue;
-        this.#indexExterior(
-          child,
+        const childDefinition =
           this.#definitions.get(
             child.definitionId
-          )
+          );
+        this.#validateEmbeddedPlacement(
+          child,
+          childDefinition
+        );
+        this.#indexEmbeddedSpaces(
+          child,
+          childDefinition
+        );
+        this.#indexExterior(
+          child,
+          childDefinition
+        );
+        this.#reindexInstancePortals(
+          child,
+          childDefinition
         );
       }
     } catch (error) {
       let rollbackError = NO_THROWN_VALUE;
       try {
         for (const id of affected) {
-          this.#unindexExterior(
-            this.#instances.get(id)
+          const candidate =
+            this.#instances.get(id);
+          if (!candidate) continue;
+          const candidateDefinition =
+            this.#definitions.get(
+              candidate.definitionId
+            );
+          this.#unindexEmbeddedSpaces(
+            candidate,
+            candidateDefinition
           );
+          this.#unindexExterior(candidate);
         }
 
         this.#placementGraph.unregister(instance);
@@ -1968,11 +2492,25 @@ export class PlaceRegistry {
         for (const id of affected) {
           const child = this.#instances.get(id);
           if (!child) continue;
-          this.#indexExterior(
-            child,
+          const childDefinition =
             this.#definitions.get(
               child.definitionId
-            )
+            );
+          this.#validateEmbeddedPlacement(
+            child,
+            childDefinition
+          );
+          this.#indexEmbeddedSpaces(
+            child,
+            childDefinition
+          );
+          this.#indexExterior(
+            child,
+            childDefinition
+          );
+          this.#reindexInstancePortals(
+            child,
+            childDefinition
           );
         }
       } catch (restoreError) {
@@ -1997,7 +2535,9 @@ export class PlaceRegistry {
       affectedEntities.add(entityId);
     }
 
-    this.#touchState();
+    this.#touchState({
+      travel: affectsEmbeddedTravel
+    });
     this.#occupancyIndex.refresh(affectedEntities);
     this.emit("place-placement-changed", {
       placeId: instanceId,
@@ -2764,6 +3304,101 @@ export class PlaceRegistry {
       }
     }
 
+    const embeddedIndex =
+      this.#embeddedSpaceIndexes.get(
+        domainId
+      );
+    if (embeddedIndex) {
+      const groups = new Map();
+      for (const key of
+        embeddedIndex.queryPoint(position)) {
+        const record =
+          this.#embeddedSpaceRecords.get(
+            key
+          );
+        if (!record) continue;
+        const groupKey = tupleKey(
+          typedIdKey(record.instanceId),
+          record.layerId
+        );
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, record);
+        }
+      }
+
+      const orderedGroups = [...groups.values()]
+        .sort((a, b) =>
+          compareStrings(
+            typedIdKey(a.instanceId),
+            typedIdKey(b.instanceId)
+          ) ||
+          compareStrings(
+            a.layerId,
+            b.layerId
+          )
+        );
+
+      for (const group of orderedGroups) {
+        const instance =
+          this.#instances.get(
+            group.instanceId
+          );
+        if (!instance) continue;
+        const definition =
+          this.#definitions.get(
+            instance.definitionId
+          );
+        const layer =
+          definition?.getLayer(
+            group.layerId
+          );
+        if (
+          !definition ||
+          layer?.spatialMode !== "embedded"
+        ) {
+          continue;
+        }
+        const local = inverseTransformPoint(
+          position,
+          this.#embeddedTransform(
+            instance,
+            definition,
+            layer
+          )
+        );
+        const locatedSpaces =
+          definition.locateSpaces(
+            layer.id,
+            local
+          ).filter((space) =>
+            this.#spaceEnabled(
+              instance,
+              definition,
+              space
+            )
+          );
+        if (!locatedSpaces.length) {
+          continue;
+        }
+
+        for (const id of
+          this.#placeChain(instance.id)) {
+          if (!seenPlaces.has(id)) {
+            places.push(id);
+            seenPlaces.add(id);
+          }
+        }
+        for (const space of locatedSpaces) {
+          spaces.push({
+            placeId: instance.id,
+            spaceId: space.id,
+            layerId: layer.id,
+            kind: space.kind
+          });
+        }
+      }
+    }
+
     const semanticPlaces =
       this.#semanticGraph.closure(places);
 
@@ -2938,6 +3573,137 @@ export class PlaceRegistry {
         );
       }
     }
+    for (const [domainId, bindings] of
+      this.#embeddedLayerBindings) {
+      for (const binding of bindings.values()) {
+        const instance =
+          this.#instances.get(
+            binding.instanceId
+          );
+        const definition = instance
+          ? this.#definitions.get(
+              instance.definitionId
+            )
+          : null;
+        const layer = definition
+          ?.getLayer(binding.layerId);
+        if (
+          !instance ||
+          layer?.spatialMode !== "embedded" ||
+          instance.layerDomains.get(
+            binding.layerId
+          ) !== domainId
+        ) {
+          throw new Error(
+            `embedded domain binding drift for ${domainId}`
+          );
+        }
+      }
+    }
+
+    let expectedEmbeddedSpaceCount = 0;
+    for (const instance of this.#instances.values()) {
+      const definition =
+        this.#definitions.get(
+          instance.definitionId
+        );
+      for (const layer of
+        definition?.layers ?? []) {
+        if (
+          layer.spatialMode !== "embedded"
+        ) {
+          continue;
+        }
+        const domainId =
+          instance.layerDomains.get(
+            layer.id
+          );
+        const index =
+          this.#embeddedSpaceIndexes.get(
+            domainId
+          );
+        for (const space of
+          definition.spaces) {
+          if (space.layerId !== layer.id) {
+            continue;
+          }
+          expectedEmbeddedSpaceCount += 1;
+          const key =
+            this.#embeddedSpaceKey(
+              instance.id,
+              layer.id,
+              space.id
+            );
+          const record =
+            this.#embeddedSpaceRecords.get(
+              key
+            );
+          if (
+            !record ||
+            record.instanceId !== instance.id ||
+            record.layerId !== layer.id ||
+            record.spaceId !== space.id ||
+            record.domainId !== domainId ||
+            !index?.getBounds(key)
+          ) {
+            throw new Error(
+              `embedded space index drift for ${String(instance.id)}:${layer.id}:${space.id}`
+            );
+          }
+        }
+      }
+    }
+
+    let indexedEmbeddedSpaceCount = 0;
+    for (const index of
+      this.#embeddedSpaceIndexes.values()) {
+      indexedEmbeddedSpaceCount +=
+        index.size;
+    }
+    if (
+      this.#embeddedSpaceRecords.size !==
+        expectedEmbeddedSpaceCount ||
+      indexedEmbeddedSpaceCount !==
+        expectedEmbeddedSpaceCount
+    ) {
+      throw new Error(
+        "embedded space index count drift"
+      );
+    }
+
+    for (const [key, record] of
+      this.#embeddedSpaceRecords) {
+      const instance =
+        this.#instances.get(
+          record.instanceId
+        );
+      const definition = instance
+        ? this.#definitions.get(
+            instance.definitionId
+          )
+        : null;
+      const layer = definition
+        ?.getLayer(record.layerId);
+      const space = definition
+        ?.getSpace(record.spaceId);
+      if (
+        !instance ||
+        layer?.spatialMode !== "embedded" ||
+        !space ||
+        space.layerId !== record.layerId ||
+        instance.layerDomains.get(
+          record.layerId
+        ) !== record.domainId ||
+        !this.#embeddedSpaceIndexes
+          .get(record.domainId)
+          ?.getBounds(key)
+      ) {
+        throw new Error(
+          `stale embedded space record ${key}`
+        );
+      }
+    }
+
     for (const instance of this.#instances.values()) {
       const definition = this.#definitions.get(instance.definitionId);
       if (!definition) throw new Error(`instance ${String(instance.id)} references missing definition`);
@@ -2954,22 +3720,114 @@ export class PlaceRegistry {
       for (const layer of definition.layers) {
         const domainId =
           instance.layerDomains.get(layer.id);
+        if (domainId == null) {
+          throw new Error(
+            `instance ${String(instance.id)} missing domain for layer ${layer.id}`
+          );
+        }
+
+        if (layer.spatialMode === "owned") {
+          const binding =
+            this.#domainBindings.get(
+              domainId
+            );
+          if (
+            !binding ||
+            binding.instanceId !==
+              instance.id ||
+            binding.layerId !== layer.id
+          ) {
+            throw new Error(
+              `instance ${String(instance.id)} missing owned domain binding for layer ${layer.id}`
+            );
+          }
+          continue;
+        }
+
+        const key = tupleKey(
+          typedIdKey(instance.id),
+          layer.id
+        );
         const binding =
-          domainId == null
-            ? null
-            : this.#domainBindings.get(
-                domainId
-              );
+          this.#embeddedLayerBindings
+            .get(domainId)
+            ?.get(key);
         if (
-          domainId == null ||
           !binding ||
           binding.instanceId !==
             instance.id ||
           binding.layerId !== layer.id
         ) {
           throw new Error(
-            `instance ${String(instance.id)} missing domain binding for layer ${layer.id}`
+            `instance ${String(instance.id)} missing embedded domain binding for layer ${layer.id}`
           );
+        }
+        this.#validateEmbeddedPlacement(
+          instance,
+          definition
+        );
+      }
+
+      for (const [anchorId, nodeId] of
+        Object.entries(
+          instance.embeddedNodeBindings
+            .anchors ?? {}
+        )) {
+        const anchor =
+          definition.getAnchor(anchorId);
+        const layer = anchor
+          ? definition.getLayer(
+              anchor.layerId
+            )
+          : null;
+        if (
+          !anchor ||
+          layer?.spatialMode !==
+            "embedded" ||
+          typeof nodeId !== "string" ||
+          nodeId.length === 0
+        ) {
+          throw new Error(
+            `instance ${String(instance.id)} embedded anchor binding drift for ${anchorId}`
+          );
+        }
+      }
+
+      for (const [portalId, sides] of
+        Object.entries(
+          instance.embeddedNodeBindings
+            .portals ?? {}
+        )) {
+        const portal =
+          definition.getPortal(portalId);
+        if (!portal) {
+          throw new Error(
+            `instance ${String(instance.id)} embedded portal binding drift for ${portalId}`
+          );
+        }
+        for (const side of ["a", "b"]) {
+          if (!Object.hasOwn(sides, side)) {
+            continue;
+          }
+          const endpoint = portal[side];
+          const layer =
+            endpoint?.kind === "local"
+              ? definition.getLayer(
+                  endpoint.layerId
+                )
+              : null;
+          if (
+            endpoint?.kind !== "local" ||
+            layer?.spatialMode !==
+              "embedded" ||
+            typeof sides[side] !==
+              "string" ||
+            sides[side].length === 0
+          ) {
+            throw new Error(
+              `instance ${String(instance.id)} embedded portal binding drift for ${portalId}.${side}`
+            );
+          }
         }
       }
 
@@ -3460,6 +4318,376 @@ export class PlaceRegistry {
     return cache.get(space.id) ?? enabled;
   }
 
+  #embeddedTransform(
+    instance,
+    definition,
+    layer
+  ) {
+    if (layer?.spatialMode !== "embedded") {
+      return IDENTITY_TRANSFORM;
+    }
+
+    const domainId =
+      instance.layerDomains.get(layer.id);
+    if (!domainId) {
+      throw new Error(
+        `embedded layer ${layer.id} has no host domain`
+      );
+    }
+
+    const resolved =
+      this.#placementGraph.resolve(
+        instance.id
+      );
+    if (!resolved) {
+      return IDENTITY_TRANSFORM;
+    }
+    if (resolved.domainId !== domainId) {
+      throw new Error(
+        `embedded layer ${String(instance.id)}:${layer.id} is bound to ${domainId} but placement resolves into ${resolved.domainId}`
+      );
+    }
+    return resolved.transform;
+  }
+
+  #validateEmbeddedPlacement(
+    instance,
+    definition
+  ) {
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "embedded") {
+        continue;
+      }
+
+      this.#embeddedTransform(
+        instance,
+        definition,
+        layer
+      );
+
+      const validatePoint =
+        this.#bridge
+          ?.validateHostNavigationPoint;
+      if (typeof validatePoint !== "function") {
+        continue;
+      }
+
+      for (const anchor of definition.anchors) {
+        if (anchor.layerId !== layer.id) {
+          continue;
+        }
+        const resolved =
+          this.#resolveAnchorForInstance(
+            instance,
+            definition,
+            anchor
+          );
+        if (resolved.nodeId == null) {
+          continue;
+        }
+        validatePoint.call(
+          this.#bridge,
+          resolved.domainId,
+          resolved.nodeId,
+          resolved.position,
+          `embedded anchor ${definition.id}:${anchor.id}`
+        );
+      }
+
+      for (const portal of definition.portals) {
+        const resolved =
+          this.resolvePortal(
+            instance.id,
+            portal.id
+          );
+        if (!resolved) continue;
+        for (const endpoint of [
+          resolved.a,
+          resolved.b
+        ]) {
+          if (
+            endpoint?.layerId !== layer.id ||
+            endpoint.nodeId == null
+          ) {
+            continue;
+          }
+          validatePoint.call(
+            this.#bridge,
+            endpoint.domainId,
+            endpoint.nodeId,
+            endpoint.position,
+            `embedded portal ${definition.id}:${portal.id}`
+          );
+        }
+      }
+    }
+  }
+
+  #resolveBoundaryForInstance(
+    instance,
+    definition,
+    boundary
+  ) {
+    const layer =
+      definition.getLayer(
+        boundary.layerId
+      );
+    const transform =
+      this.#embeddedTransform(
+        instance,
+        definition,
+        layer
+      );
+    const embedded =
+      layer?.spatialMode === "embedded";
+
+    return {
+      ...boundary,
+      a: embedded
+        ? transformPoint(
+            boundary.a,
+            transform
+          )
+        : boundary.a,
+      b: embedded
+        ? transformPoint(
+            boundary.b,
+            transform
+          )
+        : boundary.b,
+      enabled:
+        instance.getBoundaryOverride(
+          boundary.id
+        )?.enabled ??
+        boundary.enabled
+    };
+  }
+
+  #resolveAnchorForInstance(
+    instance,
+    definition,
+    anchor
+  ) {
+    const layer =
+      definition.getLayer(anchor.layerId);
+    const domainId =
+      instance.layerDomains.get(
+        anchor.layerId
+      );
+    if (!domainId) {
+      throw new Error(
+        `place ${String(instance.id)} has no domain for layer ${anchor.layerId}`
+      );
+    }
+
+    const position =
+      layer?.spatialMode === "embedded"
+        ? transformPoint(
+            anchor.position,
+            this.#embeddedTransform(
+              instance,
+              definition,
+              layer
+            )
+          )
+        : anchor.position;
+
+    return {
+      ...anchor,
+      position,
+      nodeId:
+        layer?.spatialMode === "embedded"
+          ? instance.embeddedNodeBindings
+              .anchors?.[anchor.id] ??
+            null
+          : anchor.nodeId,
+      placeId: instance.id,
+      domainId
+    };
+  }
+
+  #indexEmbeddedLayers(
+    instance,
+    definition
+  ) {
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "embedded") {
+        continue;
+      }
+      const domainId =
+        instance.layerDomains.get(layer.id);
+      if (!domainId) {
+        throw new Error(
+          `embedded layer ${layer.id} has no host domain`
+        );
+      }
+      let bindings =
+        this.#embeddedLayerBindings.get(
+          domainId
+        );
+      if (!bindings) {
+        bindings = new Map();
+        this.#embeddedLayerBindings.set(
+          domainId,
+          bindings
+        );
+      }
+      const key = tupleKey(
+        typedIdKey(instance.id),
+        layer.id
+      );
+      bindings.set(
+        key,
+        deepFreeze({
+          instanceId: instance.id,
+          layerId: layer.id
+        })
+      );
+    }
+  }
+
+  #unindexEmbeddedLayers(
+    instance,
+    definition
+  ) {
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "embedded") {
+        continue;
+      }
+      const domainId =
+        instance.layerDomains.get(layer.id);
+      if (!domainId) continue;
+      const bindings =
+        this.#embeddedLayerBindings.get(
+          domainId
+        );
+      if (!bindings) continue;
+      bindings.delete(
+        tupleKey(
+          typedIdKey(instance.id),
+          layer.id
+        )
+      );
+      if (bindings.size === 0) {
+        this.#embeddedLayerBindings.delete(
+          domainId
+        );
+      }
+    }
+  }
+
+  #embeddedSpaceKey(
+    instanceId,
+    layerId,
+    spaceId
+  ) {
+    return tupleKey(
+      typedIdKey(instanceId),
+      layerId,
+      spaceId
+    );
+  }
+
+  #indexEmbeddedSpaces(
+    instance,
+    definition
+  ) {
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "embedded") {
+        continue;
+      }
+      const domainId =
+        instance.layerDomains.get(layer.id);
+      const transform =
+        this.#embeddedTransform(
+          instance,
+          definition,
+          layer
+        );
+      let index =
+        this.#embeddedSpaceIndexes.get(
+          domainId
+        );
+      if (!index) {
+        index = new DynamicAabbIndex();
+        this.#embeddedSpaceIndexes.set(
+          domainId,
+          index
+        );
+      }
+
+      for (const space of definition.spaces) {
+        if (space.layerId !== layer.id) {
+          continue;
+        }
+        const key =
+          this.#embeddedSpaceKey(
+            instance.id,
+            layer.id,
+            space.id
+          );
+        const bounds = transformBounds(
+          geometryBounds(space.geometry),
+          transform
+        );
+        index.set(key, bounds);
+        this.#embeddedSpaceRecords.set(
+          key,
+          deepFreeze({
+            instanceId: instance.id,
+            layerId: layer.id,
+            spaceId: space.id,
+            domainId
+          })
+        );
+      }
+
+      if (index.size === 0) {
+        this.#embeddedSpaceIndexes.delete(
+          domainId
+        );
+      }
+    }
+  }
+
+  #unindexEmbeddedSpaces(
+    instance,
+    definition
+  ) {
+    if (!instance || !definition) return;
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "embedded") {
+        continue;
+      }
+      const domainId =
+        instance.layerDomains.get(layer.id);
+      const index =
+        this.#embeddedSpaceIndexes.get(
+          domainId
+        );
+      for (const space of definition.spaces) {
+        if (space.layerId !== layer.id) {
+          continue;
+        }
+        const key =
+          this.#embeddedSpaceKey(
+            instance.id,
+            layer.id,
+            space.id
+          );
+        index?.delete(key);
+        this.#embeddedSpaceRecords.delete(
+          key
+        );
+      }
+      if (index?.size === 0) {
+        this.#embeddedSpaceIndexes.delete(
+          domainId
+        );
+      }
+    }
+  }
+
   #indexExterior(instance, definition) {
     if (!instance?.placement || instance.placement.containment !== "footprint" || !definition?.footprint) return;
     const resolved = this.#placementGraph.resolve(instance.id);
@@ -3620,18 +4848,70 @@ export class PlaceRegistry {
     const result = new Set();
 
     for (const instanceId of instanceIds) {
-      const domainId =
-        this.#indexedExteriorDomains.get(instanceId);
-      if (domainId == null) continue;
+      const instance =
+        this.#instances.get(instanceId);
+      if (!instance) continue;
+      const definition =
+        this.#definitions.get(
+          instance.definitionId
+        );
 
-      const bounds = this.#exteriorIndexes
-        .get(domainId)
-        ?.getBounds(instanceId);
-      if (!bounds) continue;
+      const exteriorDomainId =
+        this.#indexedExteriorDomains.get(
+          instanceId
+        );
+      if (exteriorDomainId != null) {
+        const bounds =
+          this.#exteriorIndexes
+            .get(exteriorDomainId)
+            ?.getBounds(instanceId);
+        if (bounds) {
+          for (const entityId of
+            this.#occupancyIndex.queryBounds(
+              exteriorDomainId,
+              bounds
+            )) {
+            result.add(entityId);
+          }
+        }
+      }
 
-      for (const entityId of
-        this.#occupancyIndex.queryBounds(domainId, bounds)) {
-        result.add(entityId);
+      for (const layer of
+        definition?.layers ?? []) {
+        if (
+          layer.spatialMode !== "embedded"
+        ) {
+          continue;
+        }
+        const domainId =
+          instance.layerDomains.get(
+            layer.id
+          );
+        const index =
+          this.#embeddedSpaceIndexes.get(
+            domainId
+          );
+        for (const space of
+          definition.spaces) {
+          if (space.layerId !== layer.id) {
+            continue;
+          }
+          const bounds = index?.getBounds(
+            this.#embeddedSpaceKey(
+              instance.id,
+              layer.id,
+              space.id
+            )
+          );
+          if (!bounds) continue;
+          for (const entityId of
+            this.#occupancyIndex.queryBounds(
+              domainId,
+              bounds
+            )) {
+            result.add(entityId);
+          }
+        }
       }
     }
 

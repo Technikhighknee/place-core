@@ -12,7 +12,7 @@ import {
 function definition() {
   return {
     id: "semantic-node",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "inside",
       layerId: "inside",

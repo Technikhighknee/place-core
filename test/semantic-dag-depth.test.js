@@ -18,7 +18,7 @@ test("deep semantic containment does not depend on the JavaScript call stack", (
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "deep-semantic-node",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
 
   for (let i = 0; i < DEPTH; i += 1) {
@@ -77,7 +77,7 @@ test("deep relative placement remains iterative across consistency and snapshot 
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "deep-placement-node",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
 
   for (let i = 0; i < DEPTH; i += 1) {
@@ -131,7 +131,7 @@ test("high-degree semantic memberships keep consistency checks linear", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "high-degree-semantic-node",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
 
   places.createPlace({
@@ -167,7 +167,7 @@ test("deep footprint placements avoid repeated ancestor resolution", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "deep-footprint-node",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     footprint: {
       type: "aabb",
       minX: 0,

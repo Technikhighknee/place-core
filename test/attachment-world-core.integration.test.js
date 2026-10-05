@@ -26,6 +26,7 @@ function definition() {
   return {
     id: "bound-door-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -153,6 +154,7 @@ test("same-domain external attachment rejects threshold geometry drift transacti
   places.registerDefinition({
     id: "external-attachment-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId:
         "external-attachment-threshold"

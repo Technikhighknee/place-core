@@ -8,7 +8,7 @@ const churnPerCycle = Number(process.env.CHURN_PER_CYCLE ?? 500);
 const places = new PlaceRegistry();
 places.registerDefinition({
   id: "retention-place",
-  layers: [{ id: "ground" }],
+  layers: [{ spatialMode: "owned", id: "ground" }],
   spaces: [{
     id: "room",
     layerId: "ground",

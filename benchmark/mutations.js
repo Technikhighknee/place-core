@@ -8,7 +8,7 @@ const batchSize = Number(process.env.BATCH_SIZE ?? 1_000);
 const places = new PlaceRegistry();
 places.registerDefinition({
   id: "mutation-place",
-  layers: [{ id: "a" }, { id: "b" }],
+  layers: [{ spatialMode: "owned", id: "a" }, { spatialMode: "owned", id: "b" }],
   portals: [{
     id: "door",
     a: { kind: "local", layerId: "a", position: { x: 0, y: 0 } },

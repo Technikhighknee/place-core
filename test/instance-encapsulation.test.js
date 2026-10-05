@@ -6,7 +6,7 @@ import { PlaceRegistry } from "../src/index.js";
 function definition() {
   return {
     id: "encapsulation-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",

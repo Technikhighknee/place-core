@@ -12,6 +12,7 @@ import {
   normalizeBoolean
 } from "./utils.js";
 import { typedIdKey } from "./registry/support.js";
+import { transformPoint } from "./geometry.js";
 
 export class PlaceRegistry extends CorePlaceRegistry {
   registerDefinition(input, options) {
@@ -40,7 +41,10 @@ export class PlaceRegistry extends CorePlaceRegistry {
               location.places.length - 1
             ]
           : null),
-      layerId: binding?.layerId ?? null,
+      layerId:
+        binding?.layerId ??
+        deepestSpace?.layerId ??
+        null,
       deepestSpace
     });
   }
@@ -149,10 +153,53 @@ export class PlaceRegistry extends CorePlaceRegistry {
           }
         }
 
+        const layer =
+          definition.getLayer(
+            anchor.layerId
+          );
+        let position =
+          anchor.position;
+        if (
+          layer?.spatialMode ===
+          "embedded"
+        ) {
+          const resolvedPlacement =
+            this.getResolvedPlacement(
+              instance.id
+            );
+          if (
+            resolvedPlacement &&
+            resolvedPlacement.domainId !==
+              instance.layerDomains.get(
+                anchor.layerId
+              )
+          ) {
+            throw new Error(
+              `embedded layer ${String(instance.id)}:${anchor.layerId} placement domain drift`
+            );
+          }
+          position = transformPoint(
+            anchor.position,
+            resolvedPlacement?.transform
+          );
+        }
+
         result.push({
           ...anchor,
+          position,
+          nodeId:
+            layer?.spatialMode ===
+            "embedded"
+              ? instance
+                  .embeddedNodeBindings
+                  .anchors?.[anchor.id] ??
+                null
+              : anchor.nodeId,
           placeId: instance.id,
-          domainId: instance.layerDomains.get(anchor.layerId)
+          domainId:
+            instance.layerDomains.get(
+              anchor.layerId
+            )
         });
       }
     }

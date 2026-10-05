@@ -6,7 +6,7 @@ import { PlaceRegistry } from "../src/index.js";
 function doorwayDefinition() {
   return {
     id: "doorway-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       kind: "door",
@@ -209,6 +209,7 @@ test("nearest portal filters traversal state and supports same-domain endpoints"
   places.registerDefinition({
     id: "same-domain",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -282,7 +283,7 @@ test("getPortalsForDomain is deterministic across dynamic portal insertion order
     const places = new PlaceRegistry();
     places.registerDefinition({
       id: "dynamic-domain-portals",
-      layers: [{ id: "inside" }]
+      layers: [{ spatialMode: "owned", id: "inside" }]
     });
 
     const place = places.createPlace({

@@ -10,7 +10,7 @@ const blockedQueries = Number(
 const places = new PlaceRegistry();
 places.registerDefinition({
   id: "portal-spatial-house",
-  layers: [{ id: "inside" }],
+  layers: [{ spatialMode: "owned", id: "inside" }],
   portals: [{
     id: "door",
     a: { kind: "external", slot: "city" },

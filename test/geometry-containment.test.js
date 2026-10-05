@@ -18,7 +18,7 @@ test("nested AABB spaces must be fully contained by their parent", () => {
   assert.throws(
     () => compilePlace({
       id: "bad-nested-aabb",
-      layers: [{ id: "ground" }],
+      layers: [{ spatialMode: "owned", id: "ground" }],
       spaces: [
         {
           id: "parent",
@@ -82,7 +82,7 @@ test("concave parent containment checks child edges, not only vertices", () => {
   assert.throws(
     () => compilePlace({
       id: "bad-concave-child",
-      layers: [{ id: "ground" }],
+      layers: [{ spatialMode: "owned", id: "ground" }],
       spaces: [
         {
           id: "parent",
@@ -180,7 +180,7 @@ test("circle containment is exact across supported parent geometry types", () =>
 test("valid nested mixed geometry compiles", () => {
   const definition = compilePlace({
     id: "valid-nested-geometry",
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     spaces: [
       {
         id: "hall",
@@ -436,7 +436,7 @@ test("deep space enablement remains scalable and invalidates after overrides", (
 
   const definition = compilePlace({
     id: "deep-space-enablement",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces
   });
 
@@ -485,7 +485,7 @@ test("setSpaceState returns effective enablement under disabled ancestors", () =
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "space-effective-state",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [
       {
         id: "parent",

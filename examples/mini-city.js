@@ -20,6 +20,7 @@ const building = compilePlace({
   id: "small-building",
   defaultAnchorId: "room-center",
   layers: [{
+    spatialMode: "owned",
     id: "ground",
     navigation: {
       nodes: [

@@ -10,7 +10,7 @@ import {
 
 const definition = compilePlace({
   id: "fuzz-place",
-  layers: [{ id: "a" }, { id: "b" }],
+  layers: [{ spatialMode: "owned", id: "a" }, { spatialMode: "owned", id: "b" }],
   spaces: [
     { id: "a-space", layerId: "a", geometry: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 10 } },
     { id: "b-space", layerId: "b", geometry: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 10 } }

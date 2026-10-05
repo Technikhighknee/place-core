@@ -104,6 +104,169 @@ export class WorldCoreBridge {
     this.existingDomainPolicy = existingDomainPolicy;
   }
 
+  #assertEmbeddedHostNode(
+    domainId,
+    nodeId,
+    position,
+    label
+  ) {
+    const navigation =
+      this.navigationForDomain(domainId);
+    if (!navigation) {
+      throw new Error(
+        `${label} references host navigation node ${nodeId}, but domain ${domainId} has no navigation topology`
+      );
+    }
+    const node =
+      navigation.nodes?.get?.(nodeId);
+    if (!node) {
+      throw new Error(
+        `${label} references unknown host navigation node ${nodeId} in domain ${domainId}`
+      );
+    }
+    const nodePosition =
+      node.position;
+    if (
+      !nodePosition ||
+      !Number.isFinite(nodePosition.x) ||
+      !Number.isFinite(nodePosition.y)
+    ) {
+      throw new Error(
+        `${label} host navigation node ${nodeId} in domain ${domainId} has no finite position`
+      );
+    }
+    if (
+      Math.abs(
+        nodePosition.x - position.x
+      ) > 1e-9 ||
+      Math.abs(
+        nodePosition.y - position.y
+      ) > 1e-9
+    ) {
+      throw new Error(
+        `${label} position does not match host navigation node ${nodeId} in domain ${domainId}`
+      );
+    }
+  }
+
+  #validateEmbeddedHostNavigation(
+    instance,
+    definition,
+    layer
+  ) {
+    if (!this.#registry) return;
+
+    const resolvedAnchors =
+      typeof this.#registry.findAnchors ===
+        "function"
+        ? this.#registry.findAnchors({
+            placeId: instance.id,
+            enabledOnly: false
+          })
+        : [];
+
+    const resolvedAnchorsById =
+      new Map(
+        resolvedAnchors.map(
+          (anchor) => [
+            anchor.id,
+            anchor
+          ]
+        )
+      );
+
+    for (const anchor of definition.anchors) {
+      if (anchor.layerId !== layer.id) {
+        continue;
+      }
+      const resolved =
+        resolvedAnchorsById.get(
+          anchor.id
+        ) ??
+        this.#registry.resolveAnchor(
+          instance.id,
+          anchor.id
+        );
+      if (
+        !resolved ||
+        resolved.nodeId == null
+      ) {
+        continue;
+      }
+      this.#assertEmbeddedHostNode(
+        resolved.domainId,
+        resolved.nodeId,
+        resolved.position,
+        `embedded anchor ${definition.id}:${anchor.id}`
+      );
+    }
+
+    for (const portal of definition.portals) {
+      const resolved =
+        this.#registry.resolvePortal(
+          instance.id,
+          portal.id
+        );
+      if (!resolved) continue;
+      for (const endpoint of [
+        resolved.a,
+        resolved.b
+      ]) {
+        if (
+          endpoint?.layerId !== layer.id ||
+          endpoint.nodeId == null
+        ) {
+          continue;
+        }
+        this.#assertEmbeddedHostNode(
+          endpoint.domainId,
+          endpoint.nodeId,
+          endpoint.position,
+          `embedded portal ${definition.id}:${portal.id}`
+        );
+      }
+    }
+  }
+
+  validateEmbeddedHostNavigation(
+    instance,
+    definition
+  ) {
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "embedded") {
+        continue;
+      }
+      const domainId =
+        instance.layerDomains.get(layer.id);
+      if (!this.world.getDomain(domainId)) {
+        throw new Error(
+          `embedded place layer ${definition.id}:${layer.id} requires existing world-core domain ${domainId}`
+        );
+      }
+      this.#validateEmbeddedHostNavigation(
+        instance,
+        definition,
+        layer
+      );
+    }
+    return true;
+  }
+
+  validateHostNavigationPoint(
+    domainId,
+    nodeId,
+    position,
+    label = "embedded point"
+  ) {
+    this.#assertEmbeddedHostNode(
+      domainId,
+      nodeId,
+      position,
+      label
+    );
+    return true;
+  }
+
   #navigationMethod(name) {
     const method = this.navigation?.[name];
     if (typeof method !== "function") {
@@ -755,11 +918,15 @@ export class WorldCoreBridge {
     }
 
     const receipt = {
-      domains: definition.layers.map((layer) =>
-        this.#captureDomainMaterializationState(
-          instance.layerDomains.get(layer.id)
+      domains: definition.layers
+        .filter((layer) =>
+          layer.spatialMode === "owned"
         )
-      ),
+        .map((layer) =>
+          this.#captureDomainMaterializationState(
+            instance.layerDomains.get(layer.id)
+          )
+        ),
       newTopologyIds,
       attemptedTopologyIds:
         new Set(),
@@ -1081,8 +1248,18 @@ export class WorldCoreBridge {
       }
     }
 
+    // Embedded layers borrow an existing world domain and are never
+    // created, removed, or topology-bound by place-core.
+    this.validateEmbeddedHostNavigation(
+      instance,
+      definition
+    );
+
     // Preflight ownership and existing bindings before mutating either core.
     for (const layer of definition.layers) {
+      if (layer.spatialMode === "embedded") {
+        continue;
+      }
       const domainId = instance.layerDomains.get(layer.id);
       const domainState =
         domainStateById.get(domainId);
@@ -1132,6 +1309,9 @@ export class WorldCoreBridge {
 
     try {
       for (const layer of definition.layers) {
+        if (layer.spatialMode === "embedded") {
+          continue;
+        }
         if (
           layer.topologyId != null &&
           newTopologyIds.includes(
@@ -2037,7 +2217,13 @@ export class WorldCoreBridge {
     }
 
     const domains =
-      [...instance.layerDomains.values()];
+      definition.layers
+        .filter((layer) =>
+          layer.spatialMode === "owned"
+        )
+        .map((layer) =>
+          instance.layerDomains.get(layer.id)
+        );
     for (const domainId of domains) {
       const domain =
         this.world.getDomain?.(domainId);

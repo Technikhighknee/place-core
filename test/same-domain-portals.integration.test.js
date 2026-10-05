@@ -26,6 +26,7 @@ function roomDoorDefinition({ kitchenEnabled = true } = {}) {
   return {
     id: "same-domain-rooms",
     layers: [{
+      spatialMode: "owned",
       id: "ground",
       navigation: {
         nodes: [
@@ -959,6 +960,7 @@ test("removing a same-domain dynamic portal mid-crossing aborts instead of emitt
   places.registerDefinition({
     id: "dynamic-threshold-place",
     layers: [{
+      spatialMode: "owned",
       id: "ground",
       navigation: {
         nodes: [

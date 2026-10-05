@@ -5,7 +5,7 @@ const count = Number(process.env.PLACE_COUNT ?? 50_000);
 const queries = Number(process.env.QUERY_COUNT ?? 10_000);
 const definition = compilePlace({
   id: "portal-house",
-  layers: [{ id: "ground" }],
+  layers: [{ spatialMode: "owned", id: "ground" }],
   portals: [{
     id: "front",
     a: { kind: "external", slot: "street" },

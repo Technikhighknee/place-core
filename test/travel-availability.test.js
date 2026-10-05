@@ -13,7 +13,7 @@ function definition() {
   return {
     id: "availability-place",
     defaultAnchorId: "private-bed",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [
       {
         id: "public-room",
@@ -144,7 +144,7 @@ test("space targets preserve the requested parent space when its default anchor 
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "nested-default-anchor",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [
       {
         id: "floor",
@@ -226,7 +226,7 @@ test("explicit space targets accept an unscoped anchor physically inside the req
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "unscoped-space-anchor",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
@@ -395,7 +395,7 @@ test("direct nearest target resolution honors all declarative filters", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "nearest-filter-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [
       {
         id: "public",

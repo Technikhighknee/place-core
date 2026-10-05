@@ -11,7 +11,7 @@ function basePlaces() {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "endpoint-place",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
   const place = places.createPlace({
     id: "house",
@@ -205,7 +205,7 @@ test("static local endpoint metadata survives resolve and snapshot roundtrip", (
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "static-endpoint-metadata",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       a: {

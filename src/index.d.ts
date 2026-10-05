@@ -67,6 +67,7 @@ export interface PlaceNavigationSpec {
 export interface PlaceLayerInput {
   id: string;
   kind?: string;
+  spatialMode: "owned" | "embedded";
   tags?: readonly string[];
   topologyId?: string | null;
   navigation?: PlaceNavigationSpec | null;
@@ -257,6 +258,7 @@ export interface CanonicalPlaceNavigationSpec {
 export interface CompiledPlaceLayer {
   readonly id: string;
   readonly kind: string;
+  readonly spatialMode: "owned" | "embedded";
   readonly tags: readonly string[];
   readonly topologyId: string | null;
   readonly navigation: CanonicalPlaceNavigationSpec | null;
@@ -526,6 +528,18 @@ export class PlaceInstance {
   readonly parentId: PlaceId | null;
   readonly layerDomains: ReadonlyMap<string, string>;
   readonly attachments: ReadonlyMap<string, ResolvedPlaceAttachment>;
+  readonly embeddedNodeBindings: Readonly<{
+    anchors: Readonly<Record<string, NavigationId>>;
+    portals: Readonly<
+      Record<
+        string,
+        Readonly<{
+          a?: NavigationId;
+          b?: NavigationId;
+        }>
+      >
+    >;
+  }>;
   readonly placement: NormalizedPlacePlacement | null;
   readonly metadata: JsonValue;
   readonly portalOverrides: ReadonlyMap<
@@ -577,12 +591,24 @@ export interface PlaceRegistryOptions {
   eventOverflowPolicy?: "drop-newest" | "drop-oldest";
 }
 
+export interface EmbeddedNodeBindingsInput {
+  anchors?: Record<string, NavigationId>;
+  portals?: Record<
+    string,
+    {
+      a?: NavigationId;
+      b?: NavigationId;
+    }
+  >;
+}
+
 export interface CreatePlaceInput {
   id: PlaceId;
   definitionId: string;
   parentId?: PlaceId | null;
   layerDomains?: Record<string, string>;
   attachments?: Record<string, PlaceAttachment>;
+  embeddedNodeBindings?: EmbeddedNodeBindingsInput;
   placement?: PlacePlacement | null;
   memberships?: readonly PlaceMembershipInput[];
   metadata?: JsonValue;
@@ -829,6 +855,16 @@ export class WorldCoreBridge {
   readonly existingDomainPolicy: "reject" | "adopt";
 
   dispose(): boolean;
+  validateHostNavigationPoint(
+    domainId: string,
+    nodeId: NavigationId,
+    position: Vec2,
+    label?: string
+  ): true;
+  validateEmbeddedHostNavigation(
+    instance: PlaceInstance,
+    definition: CompiledPlaceDefinition
+  ): true;
   materializePlace(
     instance: PlaceInstance,
     definition: CompiledPlaceDefinition

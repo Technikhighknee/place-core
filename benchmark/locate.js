@@ -5,7 +5,7 @@ const count = Number(process.env.PLACE_COUNT ?? 100_000);
 const queries = Number(process.env.QUERY_COUNT ?? 500_000);
 const definition = compilePlace({
   id: "locate-house",
-  layers: [{ id: "ground" }],
+  layers: [{ spatialMode: "owned", id: "ground" }],
   spaces: [
     { id: "whole", layerId: "ground", geometry: { type: "aabb", minX: 0, minY: 0, maxX: 20, maxY: 20 } },
     { id: "a", layerId: "ground", parentSpaceId: "whole", geometry: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 20 } },

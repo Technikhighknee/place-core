@@ -10,7 +10,7 @@ import {
 
 const definition = compilePlace({
   id: "house",
-  layers: [{ id: "ground" }, { id: "cellar" }],
+  layers: [{ spatialMode: "owned", id: "ground" }, { spatialMode: "owned", id: "cellar" }],
   spaces: [
     { id: "room", layerId: "ground", geometry: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 10 } },
     { id: "storage", layerId: "cellar", geometry: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 10 } }

@@ -12,7 +12,7 @@ const count = Number(process.env.PLACE_COUNT ?? 50_000);
 const places = new PlaceRegistry();
 places.registerDefinition({
   id: "snapshot-house",
-  layers: [{ id: "ground" }, { id: "cellar" }],
+  layers: [{ spatialMode: "owned", id: "ground" }, { spatialMode: "owned", id: "cellar" }],
   spaces: [
     {
       id: "room",

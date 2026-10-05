@@ -9,7 +9,7 @@ import {
 function baseDefinition(portal = {}) {
   return {
     id: "transition-cost-place",
-    layers: [{ id: "a" }, { id: "b" }],
+    layers: [{ spatialMode: "owned", id: "a" }, { spatialMode: "owned", id: "b" }],
     portals: [{
       id: "portal",
       a: {
@@ -51,7 +51,7 @@ test("dynamic portal transition costs reject invalid values atomically", () => {
   const places = new PlaceRegistry();
   places.registerDefinition(compilePlace({
     id: "dynamic-cost-place",
-    layers: [{ id: "a" }, { id: "b" }]
+    layers: [{ spatialMode: "owned", id: "a" }, { spatialMode: "owned", id: "b" }]
   }));
   const place = places.createPlace({
     id: "house",
@@ -89,7 +89,7 @@ test("dynamic portal transition costs preserve exact finite values", () => {
   const places = new PlaceRegistry();
   places.registerDefinition(compilePlace({
     id: "dynamic-cost-place",
-    layers: [{ id: "a" }, { id: "b" }]
+    layers: [{ spatialMode: "owned", id: "a" }, { spatialMode: "owned", id: "b" }]
   }));
   const place = places.createPlace({
     id: "house",

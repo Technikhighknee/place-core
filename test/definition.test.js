@@ -26,6 +26,100 @@ test("compilePlace produces immutable shared definition state", () => {
   }, TypeError);
 });
 
+test("spatial layer mode is explicit and required", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "missing-spatial-mode",
+      layers: [{ id: "ground" }]
+    }),
+    /spatialMode must be "owned" or "embedded"/
+  );
+
+  const owned = compilePlace({
+    id: "owned-explicit",
+    layers: [{
+      id: "ground",
+      spatialMode: "owned"
+    }]
+  });
+  assert.equal(
+    owned.getLayer("ground")?.spatialMode,
+    "owned"
+  );
+});
+
+test("embedded semantic targets cannot hard-code host navigation nodes", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "embedded-anchor-node",
+      layers: [{
+        id: "market",
+        spatialMode: "embedded"
+      }],
+      anchors: [{
+        id: "stall",
+        layerId: "market",
+        position: { x: 1, y: 1 },
+        nodeId: "city-node"
+      }]
+    }),
+    /cannot define a host navigation node/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "embedded-portal-node",
+      layers: [{
+        id: "market",
+        spatialMode: "embedded"
+      }],
+      portals: [{
+        id: "gate",
+        a: {
+          kind: "local",
+          layerId: "market",
+          position: { x: 1, y: 1 },
+          nodeId: "city-node"
+        },
+        b: {
+          kind: "external",
+          slot: "outside"
+        }
+      }]
+    }),
+    /cannot define a host navigation node/
+  );
+});
+
+test("embedded layers cannot define or bind their own navigation topology", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "embedded-navigation",
+      layers: [{
+        id: "market",
+        spatialMode: "embedded",
+        navigation: {
+          nodes: [],
+          roads: []
+        }
+      }]
+    }),
+    /cannot define its own navigation topology/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "embedded-topology",
+      layers: [{
+        id: "market",
+        spatialMode: "embedded",
+        topologyId: "city"
+      }]
+    }),
+    /cannot bind a navigation topology/
+  );
+});
+
 test("definition hash is canonical for equivalent input", () => {
   const a = compilePlace(tavernBlueprint());
   const b = compilePlace(structuredClone(tavernBlueprint()));
@@ -102,7 +196,7 @@ test("space default anchors cannot belong to unrelated overlapping spaces", () =
   assert.throws(
     () => compilePlace({
       id: "unrelated-default-anchor",
-      layers: [{ id: "inside" }],
+      layers: [{ spatialMode: "owned", id: "inside" }],
       spaces: [
         {
           id: "target",
@@ -157,6 +251,7 @@ test("same-domain portal road bindings must connect the portal endpoint nodes", 
   const valid = {
     id: "threshold-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -207,6 +302,7 @@ test("same-domain room portals require unique threshold roads", () => {
   const base = {
     id: "room-thresholds",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -279,6 +375,7 @@ test("unidirectional same-domain portals require one-way a-to-b threshold roads"
   const make = (road) => ({
     id: "one-way-threshold",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -340,6 +437,7 @@ test("generated topology IDs escape definition and layer delimiters", () => {
   const a = compilePlace({
     id: "a:b",
     layers: [{
+      spatialMode: "owned",
       id: "c",
       navigation: {
         nodes: [{ id: "n", x: 0, y: 0 }],
@@ -351,6 +449,7 @@ test("generated topology IDs escape definition and layer delimiters", () => {
   const b = compilePlace({
     id: "a",
     layers: [{
+      spatialMode: "owned",
       id: "b:c",
       navigation: {
         nodes: [{ id: "n", x: 0, y: 0 }],
@@ -369,6 +468,7 @@ test("explicit topology IDs must be non-empty strings", () => {
     () => compilePlace({
       id: "bad-topology",
       layers: [{
+        spatialMode: "owned",
         id: "ground",
         topologyId: "",
         navigation: {
@@ -387,7 +487,7 @@ test("authoring tag and profile fields require arrays of non-empty strings", () 
     () => compilePlace({
       id: "bad-place-tags",
       tags: "building",
-      layers: [{ id: "ground" }]
+      layers: [{ spatialMode: "owned", id: "ground" }]
     }),
     /place\.tags must be an array/
   );
@@ -395,7 +495,7 @@ test("authoring tag and profile fields require arrays of non-empty strings", () 
   assert.throws(
     () => compilePlace({
       id: "bad-space-tags",
-      layers: [{ id: "ground" }],
+      layers: [{ spatialMode: "owned", id: "ground" }],
       spaces: [{
         id: "room",
         layerId: "ground",
@@ -416,6 +516,7 @@ test("authoring tag and profile fields require arrays of non-empty strings", () 
     () => compilePlace({
       id: "bad-road-profiles",
       layers: [{
+        spatialMode: "owned",
         id: "ground",
         navigation: {
           nodes: [
@@ -438,6 +539,7 @@ test("authoring tag and profile fields require arrays of non-empty strings", () 
     id: "dedup-tags",
     tags: ["building", "building"],
     layers: [{
+      spatialMode: "owned",
       id: "ground",
       tags: ["interior", "interior"],
       navigation: {
@@ -475,7 +577,7 @@ test("space priority must be finite when supplied", () => {
     assert.throws(
       () => compilePlace({
         id: `bad-priority-${String(priority)}`,
-        layers: [{ id: "ground" }],
+        layers: [{ spatialMode: "owned", id: "ground" }],
         spaces: [{
           id: "room",
           layerId: "ground",
@@ -499,6 +601,7 @@ test("embedded navigation rejects invalid world-core geometry fields at compile 
   const make = (nodePatch = {}, roadPatch = {}) => ({
     id: "nav-validation",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -558,6 +661,7 @@ test("embedded navigation canonicalizes world-core defaults", () => {
   const omitted = compilePlace({
     id: "canonical-nav",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -576,6 +680,7 @@ test("embedded navigation canonicalizes world-core defaults", () => {
   const explicit = compilePlace({
     id: "canonical-nav",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -610,7 +715,7 @@ test("embedded navigation canonicalizes world-core defaults", () => {
 test("space enabled state is canonical and defaults to true", () => {
   const omitted = compilePlace({
     id: "canonical-space-state",
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     spaces: [{
       id: "room",
       layerId: "ground",
@@ -626,7 +731,7 @@ test("space enabled state is canonical and defaults to true", () => {
 
   const explicit = compilePlace({
     id: "canonical-space-state",
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     spaces: [{
       id: "room",
       layerId: "ground",
@@ -652,7 +757,7 @@ test("space enabled state is canonical and defaults to true", () => {
 
   const disabled = compilePlace({
     id: "disabled-space-state",
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     spaces: [{
       id: "room",
       layerId: "ground",
@@ -675,7 +780,7 @@ test("space enabled state is canonical and defaults to true", () => {
 test("definition identity canonicalizes top-level semantic defaults", () => {
   const omitted = compilePlace({
     id: "canonical-top-level",
-    layers: [{ id: "ground" }]
+    layers: [{ spatialMode: "owned", id: "ground" }]
   });
 
   const explicit = compilePlace({
@@ -684,7 +789,7 @@ test("definition identity canonicalizes top-level semantic defaults", () => {
     tags: [],
     revision: 1,
     defaultAnchorId: null,
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     spaces: [],
     boundaries: [],
     portals: [],
@@ -710,7 +815,7 @@ test("definition revision must be a non-empty string or finite number", () => {
       () => compilePlace({
         id: "bad-revision",
         revision,
-        layers: [{ id: "ground" }]
+        layers: [{ spatialMode: "owned", id: "ground" }]
       }),
       /place\.revision/
     );
@@ -720,7 +825,7 @@ test("definition revision must be a non-empty string or finite number", () => {
     compilePlace({
       id: "string-revision",
       revision: "schema-v2",
-      layers: [{ id: "ground" }]
+      layers: [{ spatialMode: "owned", id: "ground" }]
     }).revision,
     "schema-v2"
   );
@@ -730,7 +835,7 @@ test("unknown top-level authoring fields are rejected", () => {
   assert.throws(
     () => compilePlace({
       id: "unknown-field-place",
-      layers: [{ id: "ground" }],
+      layers: [{ spatialMode: "owned", id: "ground" }],
       accidentalField: "ignored"
     }),
     /place contains unknown field accidentalField/
@@ -761,6 +866,7 @@ test("definition authoring collections must be arrays", () => {
     () => compilePlace({
       id: "bad-nav-arrays",
       layers: [{
+        spatialMode: "owned",
         id: "inside",
         navigation: {
           nodes: {},
@@ -774,7 +880,7 @@ test("definition authoring collections must be arrays", () => {
   assert.throws(
     () => compilePlace({
       id: "bad-bindings",
-      layers: [{ id: "inside" }],
+      layers: [{ spatialMode: "owned", id: "inside" }],
       boundaries: [{
         id: "wall",
         layerId: "inside",
@@ -791,6 +897,7 @@ test("definition road bindings are canonical across input order", () => {
   const make = (reverse) => compilePlace({
     id: "binding-order",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId: "external-topology"
     }],
@@ -850,6 +957,7 @@ test("definition road bindings reject duplicates", () => {
   const portal = {
     id: "duplicate-portal-binding",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       topologyId: "external-topology"
     }],
@@ -906,7 +1014,7 @@ test("optional semantic reference IDs are type-checked even without navigation",
   assert.throws(
     () => compilePlace({
       id: "bad-parent-id",
-      layers: [{ id: "inside" }],
+      layers: [{ spatialMode: "owned", id: "inside" }],
       spaces: [{
         id: "room",
         layerId: "inside",
@@ -926,7 +1034,7 @@ test("optional semantic reference IDs are type-checked even without navigation",
   assert.throws(
     () => compilePlace({
       id: "bad-anchor-node",
-      layers: [{ id: "inside" }],
+      layers: [{ spatialMode: "owned", id: "inside" }],
       anchors: [{
         id: "target",
         layerId: "inside",
@@ -940,7 +1048,7 @@ test("optional semantic reference IDs are type-checked even without navigation",
   assert.throws(
     () => compilePlace({
       id: "bad-portal-node",
-      layers: [{ id: "inside" }, { id: "other" }],
+      layers: [{ spatialMode: "owned", id: "inside" }, { spatialMode: "owned", id: "other" }],
       portals: [{
         id: "stairs",
         a: {
@@ -965,6 +1073,7 @@ test("embedded navigation options reject unknown fields and invalid bounds", () 
   const make = (options) => ({
     id: "nav-options",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         options,
@@ -1009,6 +1118,7 @@ test("embedded navigation option defaults are canonical definition identity", ()
   const make = (options) => compilePlace({
     id: "nav-option-defaults",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         ...(options === undefined ? {} : { options }),
@@ -1040,7 +1150,7 @@ test("static road bindings require a topology-backed layer", () => {
   assert.throws(
     () => compilePlace({
       id: "boundary-without-topology",
-      layers: [{ id: "inside" }],
+      layers: [{ spatialMode: "owned", id: "inside" }],
       boundaries: [{
         id: "wall",
         layerId: "inside",
@@ -1055,7 +1165,7 @@ test("static road bindings require a topology-backed layer", () => {
   assert.throws(
     () => compilePlace({
       id: "portal-without-topology",
-      layers: [{ id: "inside" }, { id: "other" }],
+      layers: [{ spatialMode: "owned", id: "inside" }, { spatialMode: "owned", id: "other" }],
       portals: [{
         id: "stairs",
         a: {
@@ -1081,6 +1191,7 @@ test("static road bindings require a topology-backed layer", () => {
     () => compilePlace({
       id: "externally-backed-topology",
       layers: [{
+        spatialMode: "owned",
         id: "inside",
         topologyId: "external-topology"
       }],
@@ -1107,6 +1218,7 @@ test("set-like definition fields are canonical across input order", () => {
     id: "canonical-set-order",
     tags: placeTags,
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       tags: layerTags,
       navigation: {
@@ -1165,6 +1277,7 @@ test("compiler rejects unknown blueprint fields at every structural layer", () =
     () => compilePlace({
       id: "bad-layer",
       layers: [{
+        spatialMode: "owned",
         id: "inside",
         metdata: {}
       }]
@@ -1176,6 +1289,7 @@ test("compiler rejects unknown blueprint fields at every structural layer", () =
     () => compilePlace({
       id: "bad-nav",
       layers: [{
+        spatialMode: "owned",
         id: "inside",
         navigation: {
           nodse: []
@@ -1189,6 +1303,7 @@ test("compiler rejects unknown blueprint fields at every structural layer", () =
     () => compilePlace({
       id: "bad-node",
       layers: [{
+        spatialMode: "owned",
         id: "inside",
         navigation: {
           nodes: [{
@@ -1207,6 +1322,7 @@ test("compiler rejects unknown blueprint fields at every structural layer", () =
     () => compilePlace({
       id: "bad-road",
       layers: [{
+        spatialMode: "owned",
         id: "inside",
         navigation: {
           nodes: [
@@ -1228,7 +1344,7 @@ test("compiler rejects unknown blueprint fields at every structural layer", () =
   assert.throws(
     () => compilePlace({
       id: "bad-space",
-      layers: [{ id: "inside" }],
+      layers: [{ spatialMode: "owned", id: "inside" }],
       spaces: [{
         id: "room",
         layerId: "inside",
@@ -1248,7 +1364,7 @@ test("compiler rejects unknown blueprint fields at every structural layer", () =
   assert.throws(
     () => compilePlace({
       id: "bad-portal",
-      layers: [{ id: "inside" }],
+      layers: [{ spatialMode: "owned", id: "inside" }],
       portals: [{
         id: "door",
         a: {
@@ -1268,7 +1384,7 @@ test("compiler rejects unknown blueprint fields at every structural layer", () =
   assert.throws(
     () => compilePlace({
       id: "bad-anchor",
-      layers: [{ id: "inside" }],
+      layers: [{ spatialMode: "owned", id: "inside" }],
       anchors: [{
         id: "center",
         layerId: "inside",
@@ -1316,7 +1432,7 @@ test("deep space containment does not depend on the JavaScript call stack", () =
 
   const compiled = compilePlace({
     id: "deep-spaces",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces
   });
 
@@ -1333,6 +1449,7 @@ test("default topology IDs support lone surrogate definition and layer IDs", () 
   const definition = compilePlace({
     id: "\uD800",
     layers: [{
+      spatialMode: "owned",
       id: "\uDCFF",
       navigation: {
         nodes: [
@@ -1358,6 +1475,7 @@ test("default topology IDs support lone surrogate definition and layer IDs", () 
   const literal = compilePlace({
     id: "%uD800",
     layers: [{
+      spatialMode: "owned",
       id: "%uDCFF",
       navigation: {
         nodes: [

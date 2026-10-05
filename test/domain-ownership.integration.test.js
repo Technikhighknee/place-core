@@ -19,6 +19,7 @@ function definition(id = "owned-place", layers = ["inside"]) {
   return compilePlace({
     id,
     layers: layers.map((layerId) => ({
+      spatialMode: "owned",
       id: layerId,
       navigation: {
         nodes: [

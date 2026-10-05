@@ -11,6 +11,7 @@ export class PlaceInstance {
   #parentId;
   #layerDomains;
   #attachments;
+  #embeddedNodeBindings;
   #placement;
   #metadata;
 
@@ -33,6 +34,15 @@ export class PlaceInstance {
     this.#parentId = data.parentId ?? null;
     this.#layerDomains = new Map(data.layerDomains);
     this.#attachments = new Map(data.attachments);
+    this.#embeddedNodeBindings =
+      deepFreeze(
+        cloneJson(
+          data.embeddedNodeBindings ?? {
+            anchors: {},
+            portals: {}
+          }
+        )
+      );
     this.#placement = data.placement;
     this.#metadata = deepFreeze(
       cloneJson(data.metadata ?? null)
@@ -69,6 +79,9 @@ export class PlaceInstance {
   get parentId() { return this.#parentId; }
   get layerDomains() { return this.#layerDomainsView; }
   get attachments() { return this.#attachmentsView; }
+  get embeddedNodeBindings() {
+    return this.#embeddedNodeBindings;
+  }
   get placement() { return this.#placement; }
   get metadata() { return this.#metadata; }
   get portalOverrides() { return this.#portalOverridesView; }

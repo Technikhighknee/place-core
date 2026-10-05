@@ -17,7 +17,7 @@ import {
 function twoLayerDefinition() {
   return {
     id: "two-layer-travel",
-    layers: [{ id: "a" }, { id: "b" }],
+    layers: [{ spatialMode: "owned", id: "a" }, { spatialMode: "owned", id: "b" }],
     portals: [{
       id: "stairs",
       a: {
@@ -245,7 +245,7 @@ test("anchor predicates survive eager replanning", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "service-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       a: { kind: "external", slot: "street" },
@@ -392,7 +392,7 @@ test("snapshotting refuses to silently drop function predicates", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "predicate-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "target",
       layerId: "inside",
@@ -481,7 +481,7 @@ test("maxCost zero still permits a zero-cost semantic target", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "zero-cost-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "here",
       layerId: "inside",
@@ -531,7 +531,7 @@ test("immediate travel completion synchronizes live occupancy", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "immediate-complete-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "here",
       layerId: "inside",

@@ -18,6 +18,7 @@ function definition() {
   return {
     id: "transaction-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -188,6 +189,7 @@ test("derived exterior overflow cannot leave a partially created place", () => {
   places.registerDefinition({
     id: "overflow-footprint-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside"
     }],
     footprint: {

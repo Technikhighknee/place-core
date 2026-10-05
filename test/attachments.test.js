@@ -10,7 +10,7 @@ import {
 function buildingDefinition() {
   return {
     id: "detachable-building",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
@@ -35,6 +35,7 @@ function attachmentThresholdDefinition() {
   return {
     id: "attachment-thresholds",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -286,7 +287,7 @@ test("attachment rollback attempts every affected portal after restore errors", 
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "multi-attachment-portals",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [
       {
         id: "one",
