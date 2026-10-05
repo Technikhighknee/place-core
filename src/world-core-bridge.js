@@ -757,7 +757,7 @@ export class WorldCoreBridge {
     const receipt = {
       domains: definition.layers
         .filter((layer) =>
-          layer.spatialMode !== "embedded"
+          layer.spatialMode === "owned"
         )
         .map((layer) =>
           this.#captureDomainMaterializationState(
@@ -1088,7 +1088,7 @@ export class WorldCoreBridge {
     // Embedded layers borrow an existing world domain and are never
     // created, removed, or topology-bound by place-core.
     for (const layer of definition.layers) {
-      if (layer.spatialMode !== "embedded") {
+      if (layer.spatialMode === "owned") {
         continue;
       }
       const domainId =
@@ -2064,7 +2064,7 @@ export class WorldCoreBridge {
     const domains =
       definition.layers
         .filter((layer) =>
-          layer.spatialMode !== "embedded"
+          layer.spatialMode === "owned"
         )
         .map((layer) =>
           instance.layerDomains.get(layer.id)
