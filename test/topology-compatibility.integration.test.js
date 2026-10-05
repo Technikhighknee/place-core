@@ -720,6 +720,7 @@ test("definition topology release rolls back partial removal failures", () => {
     id,
     topologyId
   ) => ({
+    spatialMode: "owned",
     id,
     topologyId,
     navigation: {
