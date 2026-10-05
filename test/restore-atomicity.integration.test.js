@@ -24,6 +24,7 @@ function definition() {
   return compilePlace({
     id: "restore-atomic-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -323,6 +324,7 @@ test("failed adopt restore preserves pre-existing domains bindings and road over
   const compiled = compilePlace({
     id: "adopt-rollback-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -983,7 +985,7 @@ test("resume preserves eager stale-plan semantics across snapshots", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "stale-resume-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
