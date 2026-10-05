@@ -67,6 +67,7 @@ export interface PlaceNavigationSpec {
 export interface PlaceLayerInput {
   id: string;
   kind?: string;
+  spatialMode?: "owned" | "embedded";
   tags?: readonly string[];
   topologyId?: string | null;
   navigation?: PlaceNavigationSpec | null;
@@ -257,6 +258,7 @@ export interface CanonicalPlaceNavigationSpec {
 export interface CompiledPlaceLayer {
   readonly id: string;
   readonly kind: string;
+  readonly spatialMode: "owned" | "embedded";
   readonly tags: readonly string[];
   readonly topologyId: string | null;
   readonly navigation: CanonicalPlaceNavigationSpec | null;
