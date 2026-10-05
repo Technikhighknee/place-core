@@ -1445,6 +1445,9 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       if (typeof domainId !== "string" || !domainId) {
         throw new Error(`instance ${String(item.id)} missing domain for layer ${layer.id}`);
       }
+      if (layer.spatialMode !== "owned") {
+        continue;
+      }
       if (domains.has(domainId)) {
         throw new Error(
           `duplicate bound domain: ${domainId}`
