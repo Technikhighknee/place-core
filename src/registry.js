@@ -1243,6 +1243,7 @@ export class PlaceRegistry {
       "parentId",
       "layerDomains",
       "attachments",
+      "embeddedNodeBindings",
       "placement",
       "memberships",
       "metadata"
@@ -1340,6 +1341,121 @@ export class PlaceRegistry {
       layerDomains.set(layer.id, domainId);
     }
 
+    const embeddedNodeBindingsInput =
+      input.embeddedNodeBindings == null
+        ? {}
+        : assertPlainObject(
+            input.embeddedNodeBindings,
+            "embeddedNodeBindings"
+          );
+    assertPatchKeys(
+      embeddedNodeBindingsInput,
+      ["anchors", "portals"],
+      "embeddedNodeBindings"
+    );
+
+    const embeddedNodeBindings =
+      new Map();
+
+    const anchorBindings =
+      embeddedNodeBindingsInput.anchors == null
+        ? {}
+        : assertPlainObject(
+            embeddedNodeBindingsInput.anchors,
+            "embeddedNodeBindings.anchors"
+          );
+    for (const [anchorId, nodeId] of
+      Object.entries(anchorBindings)) {
+      assertStringId(
+        anchorId,
+        "embeddedNodeBindings anchor id"
+      );
+      assertStringId(
+        nodeId,
+        `embeddedNodeBindings.anchors.${anchorId}`
+      );
+      const anchor =
+        definition.getAnchor(anchorId);
+      if (!anchor) {
+        throw new Error(
+          `embeddedNodeBindings references unknown anchor ${anchorId}`
+        );
+      }
+      const layer =
+        definition.getLayer(anchor.layerId);
+      if (layer?.spatialMode !== "embedded") {
+        throw new Error(
+          `embeddedNodeBindings anchor ${anchorId} is not on an embedded layer`
+        );
+      }
+      embeddedNodeBindings.set(
+        tupleKey("anchor", anchorId),
+        nodeId
+      );
+    }
+
+    const portalBindings =
+      embeddedNodeBindingsInput.portals == null
+        ? {}
+        : assertPlainObject(
+            embeddedNodeBindingsInput.portals,
+            "embeddedNodeBindings.portals"
+          );
+    for (const [portalId, sidesInput] of
+      Object.entries(portalBindings)) {
+      assertStringId(
+        portalId,
+        "embeddedNodeBindings portal id"
+      );
+      const portal =
+        definition.getPortal(portalId);
+      if (!portal) {
+        throw new Error(
+          `embeddedNodeBindings references unknown portal ${portalId}`
+        );
+      }
+      const sides = assertPlainObject(
+        sidesInput,
+        `embeddedNodeBindings.portals.${portalId}`
+      );
+      assertPatchKeys(
+        sides,
+        ["a", "b"],
+        `embeddedNodeBindings.portals.${portalId}`
+      );
+      for (const side of ["a", "b"]) {
+        if (sides[side] == null) continue;
+        const nodeId = sides[side];
+        assertStringId(
+          nodeId,
+          `embeddedNodeBindings.portals.${portalId}.${side}`
+        );
+        const endpoint = portal[side];
+        const layer =
+          endpoint?.kind === "local"
+            ? definition.getLayer(
+                endpoint.layerId
+              )
+            : null;
+        if (
+          endpoint?.kind !== "local" ||
+          layer?.spatialMode !== "embedded"
+        ) {
+          throw new Error(
+            `embeddedNodeBindings portal ${portalId} endpoint ${side} is not local to an embedded layer`
+          );
+        }
+        embeddedNodeBindings.set(
+          tupleKey(
+            "portal",
+            portalId,
+            side
+          ),
+          nodeId
+        );
+      }
+    }
+
     const attachmentsInput = input.attachments == null
       ? {}
       : assertPlainObject(input.attachments, "attachments");
@@ -1407,6 +1523,7 @@ export class PlaceRegistry {
       parentId: input.parentId ?? null,
       layerDomains,
       attachments,
+      embeddedNodeBindings,
       placement,
       memberships,
       metadata: input.metadata
@@ -1683,8 +1800,47 @@ export class PlaceRegistry {
     if (!source) return null;
     const override = dynamic ? null : instance.getPortalOverride(portalId);
     const merged = override ? { ...source, ...override } : source;
-    const a = this.resolveEndpoint(instanceId, merged.a);
-    const b = this.resolveEndpoint(instanceId, merged.b);
+    const endpointForSide = (
+      endpoint,
+      side
+    ) => {
+      if (
+        dynamic ||
+        endpoint.kind !== "local"
+      ) {
+        return endpoint;
+      }
+      const layer =
+        definition.getLayer(
+          endpoint.layerId
+        );
+      if (
+        layer?.spatialMode !== "embedded"
+      ) {
+        return endpoint;
+      }
+      return {
+        ...endpoint,
+        nodeId:
+          instance.embeddedNodeBindings
+            .get(
+              tupleKey(
+                "portal",
+                portalId,
+                side
+              )
+            ) ?? null
+      };
+    };
+
+    const a = this.resolveEndpoint(
+      instanceId,
+      endpointForSide(merged.a, "a")
+    );
+    const b = this.resolveEndpoint(
+      instanceId,
+      endpointForSide(merged.b, "b")
+    );
     const connected = Boolean(a && b);
     const localEndpointSpacesEnabled =
       dynamic ||
@@ -4261,6 +4417,16 @@ export class PlaceRegistry {
     return {
       ...anchor,
       position,
+      nodeId:
+        layer?.spatialMode === "embedded"
+          ? instance.embeddedNodeBindings
+              .get(
+                tupleKey(
+                  "anchor",
+                  anchor.id
+                )
+              ) ?? null
+          : anchor.nodeId,
       placeId: instance.id,
       domainId
     };
