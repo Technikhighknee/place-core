@@ -552,7 +552,7 @@ test("pending travel snapshots remain canonical after active intents become pend
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "pending-order-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "target",
       layerId: "inside",
@@ -883,7 +883,7 @@ test("state hash is independent of dynamic portal insertion order", () => {
 test("serialized snapshots are byte-stable across irrelevant insertion order", () => {
   const blueprint = {
     id: "canonical-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [
       {
         id: "alpha-door",
@@ -1136,7 +1136,7 @@ test("snapshot validation rejects malformed active travel state", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "travel-snapshot-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "target",
       layerId: "inside",
@@ -1317,6 +1317,7 @@ test("snapshot validation rejects static attachment threshold mismatch before re
   places.registerDefinition({
     id: "snapshot-threshold-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -1381,6 +1382,7 @@ test("snapshot validation rejects dynamic threshold node mismatch", () => {
   places.registerDefinition({
     id: "dynamic-snapshot-threshold",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -1616,7 +1618,7 @@ test("active travel snapshots reject ignored or contradictory plan state", () =>
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "strict-travel-snapshot",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "target",
       layerId: "inside",
@@ -1796,6 +1798,7 @@ test("snapshot validation treats prototype-shadowing layer IDs as own dictionary
   places.registerDefinition({
     id: "prototype-threshold",
     layers: [{
+      spatialMode: "owned",
       id: "constructor",
       navigation: {
         nodes: [
@@ -1874,6 +1877,7 @@ test("snapshot validation rejects duplicate same-domain threshold road ownership
     compilePlace({
       id: "threshold-place",
       layers: [{
+        spatialMode: "owned",
         id: "ground",
         navigation: {
           nodes: [
@@ -1946,7 +1950,7 @@ test("snapshot validation rejects active travel portal identity drift", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "travel-portal-integrity",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [
       {
         id: "door-a",
@@ -2155,6 +2159,7 @@ test("fresh snapshots accept explicit descendant anchors for parent space target
   places.registerDefinition({
     id: "explicit-descendant-target",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -2264,7 +2269,7 @@ test("fresh snapshots preserve deterministic implicit anchor selection", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "fresh-request-binding",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [
       {
         id: "alpha",
@@ -2375,8 +2380,8 @@ test("fresh direct snapshots reject invented null-context fields", () => {
   places.registerDefinition({
     id: "direct-portal-target",
     layers: [
-      { id: "a" },
-      { id: "b" }
+      { spatialMode: "owned", id: "a" },
+      { spatialMode: "owned", id: "b" }
     ],
     portals: [{
       id: "door",
@@ -2465,8 +2470,8 @@ test("fresh snapshots bind portal-only plan endings to the resolved target", () 
   places.registerDefinition({
     id: "portal-exit-target",
     layers: [
-      { id: "a" },
-      { id: "b" }
+      { spatialMode: "owned", id: "a" },
+      { spatialMode: "owned", id: "b" }
     ],
     portals: [
       {
@@ -2624,7 +2629,7 @@ test("pending saved travel state uses full active-state validation", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "pending-state-validation",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "target",
       layerId: "inside",
@@ -2711,7 +2716,7 @@ test("fresh travel snapshots cannot reference a missing target place", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "fresh-target-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "target",
       layerId: "inside",
@@ -2868,8 +2873,8 @@ test("fresh travel snapshots require every portal step to still resolve", () => 
   places.registerDefinition({
     id: "fresh-portal-plan",
     layers: [
-      { id: "a" },
-      { id: "b" }
+      { spatialMode: "owned", id: "a" },
+      { spatialMode: "owned", id: "b" }
     ],
     portals: [{
       id: "door",
@@ -3184,7 +3189,7 @@ test("fresh semantic travel target must still match its anchor", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "fresh-anchor-target",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "target",
       layerId: "inside",
@@ -3266,7 +3271,7 @@ test("fresh semantic travel target cannot remain in a disabled ancestor space", 
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "fresh-space-target",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [
       {
         id: "floor",
@@ -3364,7 +3369,7 @@ test("fresh nearest travel target must still satisfy anchor filters", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "nearest-filter-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [
       {
         id: "goal",
@@ -3455,6 +3460,7 @@ test("snapshot validation rejects portal road bindings in unrelated domains", ()
     id: "snapshot-binding-domain-place",
     layers: [
       {
+        spatialMode: "owned",
         id: "ground",
         navigation: {
           nodes: [
@@ -3469,6 +3475,7 @@ test("snapshot validation rejects portal road bindings in unrelated domains", ()
         }
       },
       {
+        spatialMode: "owned",
         id: "cellar",
         navigation: {
           nodes: [
