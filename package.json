@@ -31,7 +31,8 @@
     "bench:nearest-target": "node --expose-gc benchmark/nearest-target.js",
     "bench:explicit-travel": "node --expose-gc benchmark/explicit-travel.js",
     "bench:portal-spatial": "node --expose-gc benchmark/portal-spatial.js",
-    "bench:luebeck": "node --expose-gc benchmark/luebeck.js"
+    "bench:luebeck": "node --expose-gc benchmark/luebeck.js",
+    "typecheck": "tsc -p tsconfig.types.json"
   },
   "keywords": [
     "simulation",
@@ -42,6 +43,7 @@
   ],
   "license": "ISC",
   "devDependencies": {
-    "world-core": "github:Technikhighknee/world-core#3257f0bb75ab000649f4e3ecc0660359c6d0c6f3"
+    "world-core": "github:Technikhighknee/world-core#3257f0bb75ab000649f4e3ecc0660359c6d0c6f3",
+    "typescript": "^5.9.0"
   }
 }

@@ -529,18 +529,7 @@ export class PlaceInstance {
   readonly parentId: PlaceId | null;
   readonly layerDomains: ReadonlyMap<string, string>;
   readonly attachments: ReadonlyMap<string, ResolvedPlaceAttachment>;
-  readonly embeddedNodeBindings: Readonly<{
-    anchors: Readonly<Record<string, NavigationId>>;
-    portals: Readonly<
-      Record<
-        string,
-        Readonly<{
-          a?: NavigationId;
-          b?: NavigationId;
-        }>
-      >
-    >;
-  }>;
+  readonly embeddedNodeBindings: EmbeddedNodeBindingsState;
   readonly placement: NormalizedPlacePlacement | null;
   readonly metadata: JsonValue;
   readonly portalOverrides: ReadonlyMap<
@@ -590,6 +579,21 @@ export interface PlaceRegistryOptions {
   captureEvents?: boolean;
   eventQueueLimit?: number;
   eventOverflowPolicy?: "drop-newest" | "drop-oldest";
+}
+
+export interface EmbeddedNodeBindingsState {
+  readonly anchors: Readonly<
+    Record<string, NavigationId>
+  >;
+  readonly portals: Readonly<
+    Record<
+      string,
+      Readonly<{
+        a?: NavigationId;
+        b?: NavigationId;
+      }>
+    >
+  >;
 }
 
 export interface EmbeddedNodeBindingsInput {
@@ -1185,6 +1189,7 @@ export interface PlaceCoreSnapshot {
     memberships: PlaceMembership[];
     layerDomains: Record<string, string>;
     attachments: Record<string, ResolvedPlaceAttachment>;
+    embeddedNodeBindings: EmbeddedNodeBindingsState;
     placement: NormalizedPlacePlacement | null;
     metadata: JsonValue;
     portalOverrides: Record<string, PortalStateOverride>;
