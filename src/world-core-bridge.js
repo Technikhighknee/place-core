@@ -215,6 +215,21 @@ export class WorldCoreBridge {
     return true;
   }
 
+  validateHostNavigationPoint(
+    domainId,
+    nodeId,
+    position,
+    label = "embedded point"
+  ) {
+    this.#assertEmbeddedHostNode(
+      domainId,
+      nodeId,
+      position,
+      label
+    );
+    return true;
+  }
+
   #navigationMethod(name) {
     const method = this.navigation?.[name];
     if (typeof method !== "function") {
