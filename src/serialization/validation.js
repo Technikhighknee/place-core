@@ -1276,6 +1276,7 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
       "memberships",
       "layerDomains",
       "attachments",
+      "embeddedNodeBindings",
       "placement",
       "metadata",
       "portalOverrides",
@@ -1410,6 +1411,23 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
 
     assertObject(item.layerDomains, `instance ${String(item.id)}.layerDomains`);
     assertObject(item.attachments, `instance ${String(item.id)}.attachments`);
+    assertObject(
+      item.embeddedNodeBindings,
+      `instance ${String(item.id)}.embeddedNodeBindings`
+    );
+    for (const [bindingKey, nodeId] of
+      Object.entries(
+        item.embeddedNodeBindings
+      )) {
+      assertStringId(
+        bindingKey,
+        `instance ${String(item.id)} embedded node binding key`
+      );
+      assertStringId(
+        nodeId,
+        `instance ${String(item.id)} embedded node binding ${bindingKey}`
+      );
+    }
     assertObject(item.portalOverrides, `instance ${String(item.id)}.portalOverrides`);
     assertObject(item.boundaryOverrides, `instance ${String(item.id)}.boundaryOverrides`);
     assertObject(item.spaceOverrides, `instance ${String(item.id)}.spaceOverrides`);
