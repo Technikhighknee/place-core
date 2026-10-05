@@ -109,7 +109,8 @@ function roomDoorDefinition() {
       layerId: "ground",
       spaceId: "kitchen",
       position: { x: 6, y: 0 },
-      nodeId: "target"
+      nodeId: "target",
+      tags: ["work"]
     }]
   };
 }
@@ -494,6 +495,138 @@ test("reverse same-domain room traversal reports reversed semantic direction", (
     assert.equal(event.fromSpaceId, "kitchen");
     assert.equal(event.toSpaceId, "taproom");
   }
+});
+
+test("disabling a room hides its anchors and physically closes its access portal", () => {
+  const {
+    world,
+    navigation,
+    bridge,
+    places,
+    place
+  } = setup();
+
+  const domainId =
+    place.layerDomains.get("ground");
+  const nav =
+    navigation.navigationForDomain(
+      domainId
+    );
+
+  assert.ok(
+    places.resolveAnchor(
+      "inn",
+      "kitchen-target"
+    )
+  );
+  assert.deepEqual(
+    places.findAnchorsByTag(
+      "inn",
+      "work"
+    ).map((anchor) => anchor.id),
+    ["kitchen-target"]
+  );
+  assert.equal(
+    places.resolvePortal(
+      "inn",
+      "kitchen-door"
+    )?.traversable,
+    true
+  );
+
+  places.setSpaceState(
+    "inn",
+    "kitchen",
+    { enabled: false }
+  );
+
+  assert.equal(
+    places.getSpace(
+      "inn",
+      "kitchen"
+    )?.enabled,
+    false
+  );
+  assert.equal(
+    places.resolveAnchor(
+      "inn",
+      "kitchen-target"
+    ),
+    null
+  );
+  assert.deepEqual(
+    places.findAnchorsByTag(
+      "inn",
+      "work"
+    ),
+    []
+  );
+  assert.equal(
+    places.resolvePortal(
+      "inn",
+      "kitchen-door"
+    )?.traversable,
+    false
+  );
+  assert.equal(
+    places.getPortalsForRoad(
+      domainId,
+      "room-threshold"
+    )[0]?.traversable,
+    false
+  );
+  assert.equal(
+    nav.findRoute(
+      "start",
+      "target",
+      world.getEntity("hans").mobility
+    ),
+    null
+  );
+  assert.throws(
+    () =>
+      startTravel(
+        places,
+        bridge,
+        "hans",
+        {
+          placeId: "inn",
+          anchorId: "kitchen-target"
+        }
+      ),
+    (error) =>
+      error?.code ===
+      "PLACE_TRAVEL_TARGET_UNAVAILABLE"
+  );
+
+  places.setSpaceState(
+    "inn",
+    "kitchen",
+    { enabled: true }
+  );
+
+  assert.ok(
+    places.resolveAnchor(
+      "inn",
+      "kitchen-target"
+    )
+  );
+  assert.equal(
+    places.resolvePortal(
+      "inn",
+      "kitchen-door"
+    )?.traversable,
+    true
+  );
+  assert.ok(
+    nav.findRoute(
+      "start",
+      "target",
+      world.getEntity("hans").mobility
+    )
+  );
+
+  places.assertInternalConsistency();
 });
 
 test("locking a same-domain room door blocks the bound world-core threshold road", () => {
