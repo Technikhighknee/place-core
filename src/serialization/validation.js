@@ -1517,7 +1517,9 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
     for (const [spaceId, patch] of Object.entries(
       item.spaceOverrides
     )) {
-      if (!definition.getSpace(spaceId)) {
+      const space =
+        definition.getSpace(spaceId);
+      if (!space) {
         throw new Error(
           `instance ${String(item.id)} has orphan space override ${spaceId}`
         );
@@ -1534,9 +1536,9 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
           `${label} must contain enabled`
         );
       }
-      if (patch.enabled !== false) {
+      if (patch.enabled === space.enabled) {
         throw new Error(
-          `${label}.enabled redundantly matches the default enabled state`
+          `${label}.enabled redundantly matches the definition state`
         );
       }
     }
@@ -2000,12 +2002,12 @@ export function validatePlaceCoreSnapshot(snapshot, options = {}) {
               );
 
         while (current) {
-          if (
+          const localEnabled =
             ownValue(
               item.spaceOverrides,
               current.id
-            )?.enabled === false
-          ) {
+            )?.enabled ?? current.enabled;
+          if (!localEnabled) {
             return false;
           }
 
