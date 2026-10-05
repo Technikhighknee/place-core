@@ -82,6 +82,7 @@ export interface PlaceSpaceInput {
   parentSpaceId?: string | null;
   defaultAnchorId?: string | null;
   priority?: number;
+  enabled?: boolean;
   metadata?: JsonValue;
 }
 
@@ -271,6 +272,7 @@ export interface CompiledPlaceSpace {
   readonly parentSpaceId: string | null;
   readonly defaultAnchorId: string | null;
   readonly priority: number;
+  readonly enabled: boolean;
   readonly metadata: JsonValue;
 }
 
