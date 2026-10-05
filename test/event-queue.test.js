@@ -61,7 +61,7 @@ test("full captured-event queue cannot turn a committed mutation into an error",
 
   places.registerDefinition({
     id: "event-place",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
 
   places.createPlace({
@@ -92,7 +92,7 @@ test("zero-sized event queue records drops without affecting simulation", () => 
 
   places.registerDefinition({
     id: "zero-event-place",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
 
   assert.doesNotThrow(() =>
