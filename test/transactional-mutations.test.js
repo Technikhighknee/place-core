@@ -55,6 +55,7 @@ function roadDefinition(extra = {}) {
   return {
     id: "road-place",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -405,7 +406,7 @@ test("failed placement reindex rolls back placement and exterior indexes", () =>
       maxX: 10,
       maxY: 10
     },
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
   places.createPlace({
     id: "place",
