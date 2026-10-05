@@ -1135,11 +1135,15 @@ export class PlaceRegistry {
   placesInBounds(domainId, bounds) {
     assertStringId(domainId, "placesInBounds.domainId");
     assertBounds(bounds, "placesInBounds.bounds");
-    const index = this.#exteriorIndexes.get(domainId);
-    if (!index) return [];
-    const result = [];
-    for (const instanceId of index.queryBounds(bounds)) {
-      const instance = this.#instances.get(instanceId);
+
+    const resultById = new Map();
+
+    const exteriorIndex =
+      this.#exteriorIndexes.get(domainId);
+    for (const instanceId of
+      exteriorIndex?.queryBounds(bounds) ?? []) {
+      const instance =
+        this.#instances.get(instanceId);
       if (!instance) continue;
       const definition =
         this.#definitions.get(
@@ -1162,10 +1166,72 @@ export class PlaceRegistry {
       ) {
         continue;
       }
-      result.push(instance);
+      resultById.set(instance.id, instance);
     }
-    result.sort((a, b) => compareStrings(typedIdKey(a.id), typedIdKey(b.id)));
-    return result;
+
+    const embeddedIndex =
+      this.#embeddedSpaceIndexes.get(
+        domainId
+      );
+    for (const key of
+      embeddedIndex?.queryBounds(bounds) ?? []) {
+      const record =
+        this.#embeddedSpaceRecords.get(
+          key
+        );
+      if (!record) continue;
+      const instance =
+        this.#instances.get(
+          record.instanceId
+        );
+      if (!instance) continue;
+      const definition =
+        this.#definitions.get(
+          instance.definitionId
+        );
+      const layer = definition
+        ?.getLayer(record.layerId);
+      const space = definition
+        ?.getSpace(record.spaceId);
+      if (
+        !definition ||
+        layer?.spatialMode !== "embedded" ||
+        !space ||
+        !this.#spaceEnabled(
+          instance,
+          definition,
+          space
+        )
+      ) {
+        continue;
+      }
+
+      const transform =
+        this.#embeddedTransform(
+          instance,
+          definition,
+          layer
+        );
+      if (
+        !footprintIntersectsBounds(
+          space.geometry,
+          transform,
+          bounds
+        )
+      ) {
+        continue;
+      }
+
+      resultById.set(instance.id, instance);
+    }
+
+    return [...resultById.values()]
+      .sort((a, b) =>
+        compareStrings(
+          typedIdKey(a.id),
+          typedIdKey(b.id)
+        )
+      );
   }
 
   createPlace(input) {
@@ -3361,6 +3427,109 @@ export class PlaceRegistry {
             `embedded domain binding drift for ${domainId}`
           );
         }
+      }
+    }
+
+    let expectedEmbeddedSpaceCount = 0;
+    for (const instance of this.#instances.values()) {
+      const definition =
+        this.#definitions.get(
+          instance.definitionId
+        );
+      for (const layer of
+        definition?.layers ?? []) {
+        if (
+          layer.spatialMode !== "embedded"
+        ) {
+          continue;
+        }
+        const domainId =
+          instance.layerDomains.get(
+            layer.id
+          );
+        const index =
+          this.#embeddedSpaceIndexes.get(
+            domainId
+          );
+        for (const space of
+          definition.spaces) {
+          if (space.layerId !== layer.id) {
+            continue;
+          }
+          expectedEmbeddedSpaceCount += 1;
+          const key =
+            this.#embeddedSpaceKey(
+              instance.id,
+              layer.id,
+              space.id
+            );
+          const record =
+            this.#embeddedSpaceRecords.get(
+              key
+            );
+          if (
+            !record ||
+            record.instanceId !== instance.id ||
+            record.layerId !== layer.id ||
+            record.spaceId !== space.id ||
+            record.domainId !== domainId ||
+            !index?.getBounds(key)
+          ) {
+            throw new Error(
+              `embedded space index drift for ${String(instance.id)}:${layer.id}:${space.id}`
+            );
+          }
+        }
+      }
+    }
+
+    let indexedEmbeddedSpaceCount = 0;
+    for (const index of
+      this.#embeddedSpaceIndexes.values()) {
+      indexedEmbeddedSpaceCount +=
+        index.size;
+    }
+    if (
+      this.#embeddedSpaceRecords.size !==
+        expectedEmbeddedSpaceCount ||
+      indexedEmbeddedSpaceCount !==
+        expectedEmbeddedSpaceCount
+    ) {
+      throw new Error(
+        "embedded space index count drift"
+      );
+    }
+
+    for (const [key, record] of
+      this.#embeddedSpaceRecords) {
+      const instance =
+        this.#instances.get(
+          record.instanceId
+        );
+      const definition = instance
+        ? this.#definitions.get(
+            instance.definitionId
+          )
+        : null;
+      const layer = definition
+        ?.getLayer(record.layerId);
+      const space = definition
+        ?.getSpace(record.spaceId);
+      if (
+        !instance ||
+        layer?.spatialMode !== "embedded" ||
+        !space ||
+        space.layerId !== record.layerId ||
+        instance.layerDomains.get(
+          record.layerId
+        ) !== record.domainId ||
+        !this.#embeddedSpaceIndexes
+          .get(record.domainId)
+          ?.getBounds(key)
+      ) {
+        throw new Error(
+          `stale embedded space record ${key}`
+        );
       }
     }
 
