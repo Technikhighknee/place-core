@@ -9,7 +9,7 @@ import {
 function sameLayerDefinition(portal = {}) {
   return {
     id: "same-domain-enforcement",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "passage",
       a: {
@@ -104,7 +104,7 @@ test("dynamic same-domain portals enforce the same physical rules", () => {
   const places = new PlaceRegistry();
   places.registerDefinition(compilePlace({
     id: "dynamic-enforcement",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   }));
   const place = places.createPlace({
     id: "hall",
@@ -147,7 +147,7 @@ test("attachment cannot create unenforceable same-domain delay", () => {
   const places = new PlaceRegistry();
   places.registerDefinition(compilePlace({
     id: "attachment-enforcement",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "gangway",
       transitionCost: 3,
@@ -196,6 +196,7 @@ test("dynamic road bindings reject unknown embedded roads and wrong endpoint con
   places.registerDefinition({
     id: "dynamic-road-validation",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -284,7 +285,7 @@ test("dynamic road bindings require a topology-backed owner layer", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "no-topology-dynamic",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
   const place = places.createPlace({
     id: "hall",
@@ -318,6 +319,7 @@ test("same-domain attachment binding must connect the actual resolved endpoint n
   places.registerDefinition({
     id: "attachment-threshold-integrity",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -375,6 +377,7 @@ test("same-domain attachment with a threshold binding requires both endpoint nod
   places.registerDefinition({
     id: "attachment-threshold-node-ids",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
@@ -426,6 +429,7 @@ test("bidirectional portal rejects a one-way threshold road", () => {
     () => compilePlace({
       id: "bad-bidirectional-threshold",
       layers: [{
+        spatialMode: "owned",
         id: "inside",
         navigation: {
           nodes: [
@@ -469,6 +473,7 @@ test("unidirectional portal rejects a threshold road that permits reverse traver
     () => compilePlace({
       id: "bad-one-way-threshold",
       layers: [{
+        spatialMode: "owned",
         id: "inside",
         navigation: {
           nodes: [
@@ -512,6 +517,7 @@ test("bidirectional portal can use opposite one-way threshold roads", () => {
   const definition = compilePlace({
     id: "paired-one-way-thresholds",
     layers: [{
+      spatialMode: "owned",
       id: "inside",
       navigation: {
         nodes: [
