@@ -26,6 +26,58 @@ test("compilePlace produces immutable shared definition state", () => {
   }, TypeError);
 });
 
+test("spatial layer mode defaults to owned and canonicalizes explicitly", () => {
+  const omitted = compilePlace({
+    id: "owned-default",
+    layers: [{ id: "ground" }]
+  });
+  const explicit = compilePlace({
+    id: "owned-default",
+    layers: [{
+      id: "ground",
+      spatialMode: "owned"
+    }]
+  });
+
+  assert.equal(
+    omitted.getLayer("ground")?.spatialMode,
+    "owned"
+  );
+  assert.equal(
+    omitted.contentHash,
+    explicit.contentHash
+  );
+});
+
+test("embedded layers cannot define or bind their own navigation topology", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "embedded-navigation",
+      layers: [{
+        id: "market",
+        spatialMode: "embedded",
+        navigation: {
+          nodes: [],
+          roads: []
+        }
+      }]
+    }),
+    /cannot define its own navigation topology/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "embedded-topology",
+      layers: [{
+        id: "market",
+        spatialMode: "embedded",
+        topologyId: "city"
+      }]
+    }),
+    /cannot bind a navigation topology/
+  );
+});
+
 test("definition hash is canonical for equivalent input", () => {
   const a = compilePlace(tavernBlueprint());
   const b = compilePlace(structuredClone(tavernBlueprint()));
