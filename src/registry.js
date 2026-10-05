@@ -663,7 +663,11 @@ export class PlaceRegistry {
         return null;
       }
     }
-    return { ...anchor, placeId: instanceId, domainId: instance.layerDomains.get(anchor.layerId) };
+    return this.#resolveAnchorForInstance(
+      instance,
+      definition,
+      anchor
+    );
   }
 
   findAnchorsByTag(instanceId, tag) {
@@ -677,9 +681,13 @@ export class PlaceRegistry {
         return !space ||
           this.#spaceEnabled(instance, definition, space);
       })
-      .map((anchor) => ({
-        ...anchor, placeId: instanceId, domainId: instance.layerDomains.get(anchor.layerId)
-      }));
+      .map((anchor) =>
+        this.#resolveAnchorForInstance(
+          instance,
+          definition,
+          anchor
+        )
+      );
   }
 
   findNearestAnchor(instanceId, position, options = {}) {
@@ -709,7 +717,13 @@ export class PlaceRegistry {
         const space = definition.getSpace(anchor.spaceId);
         if (space && !this.#spaceEnabled(instance, definition, space)) continue;
       }
-      eligible.push(anchor);
+      eligible.push(
+        this.#resolveAnchorForInstance(
+          instance,
+          definition,
+          anchor
+        )
+      );
     }
 
     if (options.layerId == null) {
@@ -731,11 +745,6 @@ export class PlaceRegistry {
 
     return nearest ? {
       ...nearest.anchor,
-      placeId: instanceId,
-      domainId:
-        instance.layerDomains.get(
-          nearest.anchor.layerId
-        ),
       distance: nearest.distance
     } : null;
   }
@@ -750,30 +759,84 @@ export class PlaceRegistry {
     assertOptionalString(options.tag, "getAnchorsForDomain.tag");
     assertOptionalString(options.kind, "getAnchorsForDomain.kind");
     assertOptionalString(options.spaceId, "getAnchorsForDomain.spaceId");
-    const binding = this.#domainBindings.get(domainId);
-    if (!binding) return [];
-    const instance = this.#instances.get(binding.instanceId);
-    if (!instance) return [];
-    const definition = this.#definitions.get(instance.definitionId);
-    const candidates = options.tag ? definition.getAnchorsByTag(options.tag) : definition.anchors;
-    const result = [];
 
-    for (const anchor of candidates) {
-      if (anchor.layerId !== binding.layerId) continue;
-      if (options.kind != null && anchor.kind !== options.kind) continue;
-      if (options.spaceId != null && anchor.spaceId !== options.spaceId) continue;
-      if (anchor.spaceId != null) {
-        const space = definition.getSpace(anchor.spaceId);
-        if (space && !this.#spaceEnabled(instance, definition, space)) continue;
-      }
-      result.push({
-        ...anchor,
-        placeId: instance.id,
-        domainId
-      });
+    const layerRefs = [];
+    const owned =
+      this.#domainBindings.get(domainId);
+    if (owned) {
+      layerRefs.push(owned);
+    }
+    for (const ref of
+      this.#embeddedLayerBindings
+        .get(domainId)?.values?.() ?? []) {
+      layerRefs.push(ref);
     }
 
-    result.sort((a, b) => compareStrings(a.id, b.id));
+    const result = [];
+    for (const ref of layerRefs) {
+      const instance =
+        this.#instances.get(ref.instanceId);
+      if (!instance) continue;
+      const definition =
+        this.#definitions.get(
+          instance.definitionId
+        );
+      if (!definition) continue;
+      const candidates = options.tag
+        ? definition.getAnchorsByTag(
+            options.tag
+          )
+        : definition.anchors;
+
+      for (const anchor of candidates) {
+        if (anchor.layerId !== ref.layerId) {
+          continue;
+        }
+        if (
+          options.kind != null &&
+          anchor.kind !== options.kind
+        ) {
+          continue;
+        }
+        if (
+          options.spaceId != null &&
+          anchor.spaceId !== options.spaceId
+        ) {
+          continue;
+        }
+        if (anchor.spaceId != null) {
+          const space =
+            definition.getSpace(
+              anchor.spaceId
+            );
+          if (
+            space &&
+            !this.#spaceEnabled(
+              instance,
+              definition,
+              space
+            )
+          ) {
+            continue;
+          }
+        }
+        result.push(
+          this.#resolveAnchorForInstance(
+            instance,
+            definition,
+            anchor
+          )
+        );
+      }
+    }
+
+    result.sort((a, b) =>
+      compareStrings(
+        typedIdKey(a.placeId),
+        typedIdKey(b.placeId)
+      ) ||
+      compareStrings(a.id, b.id)
+    );
     return result;
   }
 
@@ -1429,9 +1492,22 @@ export class PlaceRegistry {
     if (endpoint.kind === "local") {
       const domainId = instance.layerDomains.get(endpoint.layerId);
       if (!domainId) throw new Error(`place ${String(instanceId)} has no domain for layer ${endpoint.layerId}`);
+      const layer =
+        definition.getLayer(endpoint.layerId);
+      const position =
+        layer?.spatialMode === "embedded"
+          ? transformPoint(
+              endpoint.position,
+              this.#embeddedTransform(
+                instance,
+                definition,
+                layer
+              )
+            )
+          : endpoint.position;
       return {
         domainId,
-        position: endpoint.position,
+        position,
         nodeId: endpoint.nodeId,
         placeId: instanceId,
         spaceId: endpoint.spaceId,
