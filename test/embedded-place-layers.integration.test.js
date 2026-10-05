@@ -229,6 +229,30 @@ test("embedded routable anchors bind explicitly to host navigation nodes", () =>
   );
 
   assert.throws(
+    () => places.setPlacement(
+      "market",
+      {
+        domainId: "default",
+        containment: "none",
+        transform: {
+          x: 20,
+          y: 5,
+          rotation: 0,
+          scale: 1
+        }
+      }
+    ),
+    /position does not match host navigation node stall-node/
+  );
+  assert.deepEqual(
+    places.resolveAnchor(
+      "market",
+      "stall"
+    )?.position,
+    { x: 12, y: 8 }
+  );
+
+  assert.throws(
     () => places.createPlace({
       id: "misaligned-market",
       definitionId: "routable-market",
