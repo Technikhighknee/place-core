@@ -5,6 +5,7 @@ import {
   Navigation,
   NavigationRegistry,
   World,
+  mobilityProfile,
   startJourney,
   stopJourney
 } from "world-core";
@@ -12,6 +13,7 @@ import {
 import {
   PlaceRegistry,
   WorldCoreBridge,
+  planTravel,
   serializePlaceCore,
   deserializePlaceCore
 } from "../src/index.js";
@@ -122,6 +124,137 @@ test("embedded layers require explicit existing host domains and roll back clean
     places.getPlace("missing-host"),
     null
   );
+  places.assertInternalConsistency();
+});
+
+test("embedded routable anchors bind explicitly to host navigation nodes", () => {
+  const world = new World();
+  const navigation =
+    new NavigationRegistry();
+  const city = new Navigation();
+
+  city.addNode({
+    id: "start",
+    x: 0,
+    y: 0
+  });
+  city.addNode({
+    id: "stall-node",
+    x: 12,
+    y: 8
+  });
+  city.addRoad({
+    id: "market-road",
+    from: "start",
+    to: "stall-node",
+    width: 2
+  });
+  navigation.registerTopology(
+    "city",
+    city
+  );
+  navigation.bindDomain(
+    "default",
+    "city"
+  );
+
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    Navigation,
+    startJourney,
+    stopJourney
+  });
+  const places =
+    new PlaceRegistry({ bridge });
+
+  places.registerDefinition({
+    id: "routable-market",
+    layers: [{
+      id: "market",
+      spatialMode: "embedded"
+    }],
+    anchors: [{
+      id: "stall",
+      layerId: "market",
+      position: { x: 2, y: 3 },
+      nodeId: "stall-node"
+    }]
+  });
+
+  places.createPlace({
+    id: "market",
+    definitionId: "routable-market",
+    layerDomains: {
+      market: "default"
+    },
+    placement: {
+      domainId: "default",
+      containment: "none",
+      transform: {
+        x: 10,
+        y: 5,
+        rotation: 0,
+        scale: 1
+      }
+    }
+  });
+
+  world.addEntity({
+    id: "buyer",
+    domainId: "default",
+    position: { x: 0, y: 0 },
+    mobility:
+      mobilityProfile("pedestrian")
+  });
+
+  const plan = planTravel(
+    places,
+    bridge,
+    "buyer",
+    {
+      placeId: "market",
+      anchorId: "stall"
+    }
+  );
+
+  assert.ok(plan);
+  assert.deepEqual(
+    plan.resolvedTarget.position,
+    { x: 12, y: 8 }
+  );
+  assert.equal(
+    plan.resolvedTarget.nodeId,
+    "stall-node"
+  );
+
+  assert.throws(
+    () => places.createPlace({
+      id: "misaligned-market",
+      definitionId: "routable-market",
+      layerDomains: {
+        market: "default"
+      },
+      placement: {
+        domainId: "default",
+        containment: "none",
+        transform: {
+          x: 20,
+          y: 5,
+          rotation: 0,
+          scale: 1
+        }
+      }
+    }),
+    /position does not match host navigation node stall-node/
+  );
+  assert.equal(
+    places.getPlace(
+      "misaligned-market"
+    ),
+    null
+  );
+
   places.assertInternalConsistency();
 });
 
