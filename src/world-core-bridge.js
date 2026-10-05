@@ -156,11 +156,33 @@ export class WorldCoreBridge {
   ) {
     if (!this.#registry) return;
 
+    const resolvedAnchors =
+      typeof this.#registry.findAnchors ===
+        "function"
+        ? this.#registry.findAnchors({
+            placeId: instance.id,
+            enabledOnly: false
+          })
+        : [];
+
+    const resolvedAnchorsById =
+      new Map(
+        resolvedAnchors.map(
+          (anchor) => [
+            anchor.id,
+            anchor
+          ]
+        )
+      );
+
     for (const anchor of definition.anchors) {
       if (anchor.layerId !== layer.id) {
         continue;
       }
       const resolved =
+        resolvedAnchorsById.get(
+          anchor.id
+        ) ??
         this.#registry.resolveAnchor(
           instance.id,
           anchor.id
