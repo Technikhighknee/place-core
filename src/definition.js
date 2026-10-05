@@ -353,7 +353,7 @@ function normalizeLayer(layer, definitionId) {
   );
   assertStringId(layer.id, "layer.id");
   const spatialMode =
-    layer.spatialMode ?? "owned";
+    layer.spatialMode;
   if (
     spatialMode !== "owned" &&
     spatialMode !== "embedded"
