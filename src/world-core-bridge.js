@@ -757,7 +757,7 @@ export class WorldCoreBridge {
     const receipt = {
       domains: definition.layers
         .filter((layer) =>
-          layer.spatialMode === "owned"
+          layer.spatialMode !== "embedded"
         )
         .map((layer) =>
           this.#captureDomainMaterializationState(
@@ -2064,7 +2064,7 @@ export class WorldCoreBridge {
     const domains =
       definition.layers
         .filter((layer) =>
-          layer.spatialMode === "owned"
+          layer.spatialMode !== "embedded"
         )
         .map((layer) =>
           instance.layerDomains.get(layer.id)
