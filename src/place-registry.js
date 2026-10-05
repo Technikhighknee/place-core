@@ -187,6 +187,14 @@ export class PlaceRegistry extends CorePlaceRegistry {
         result.push({
           ...anchor,
           position,
+          nodeId:
+            layer?.spatialMode ===
+            "embedded"
+              ? instance
+                  .embeddedNodeBindings
+                  .anchors?.[anchor.id] ??
+                null
+              : anchor.nodeId,
           placeId: instance.id,
           domainId:
             instance.layerDomains.get(
