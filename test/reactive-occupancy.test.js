@@ -7,7 +7,7 @@ function definition() {
   return {
     id: "reactive-place",
     footprint: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 10 },
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     spaces: [{
       id: "room",
       layerId: "ground",
@@ -151,7 +151,7 @@ test("creating a place refreshes tracked entities in newly bound layer domains",
 
   places.registerDefinition({
     id: "adopted-domain-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
@@ -286,7 +286,7 @@ test("internal consistency covers occupancy spatial and membership indexes", () 
       maxX: 10,
       maxY: 10
     },
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
