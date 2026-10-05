@@ -1102,7 +1102,7 @@ export class WorldCoreBridge {
 
     // Preflight ownership and existing bindings before mutating either core.
     for (const layer of definition.layers) {
-      if (layer.spatialMode !== "owned") {
+      if (layer.spatialMode === "embedded") {
         continue;
       }
       const domainId = instance.layerDomains.get(layer.id);
@@ -1154,7 +1154,7 @@ export class WorldCoreBridge {
 
     try {
       for (const layer of definition.layers) {
-        if (layer.spatialMode !== "owned") {
+        if (layer.spatialMode === "embedded") {
           continue;
         }
         if (
