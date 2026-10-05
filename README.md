@@ -387,6 +387,14 @@ The suite exercises:
 
 CI runs tests, the real mini-city consumer, reduced regression guardrails and a reduced Lübeck integration workload. Full-scale 100k-instance, 20k-retention and multi-thousand-traveler workloads remain available for dedicated/manual performance runs.
 
+## CI workflow policy
+
+Normal development branches, pull requests and pushes to `main` do not run CI automatically. The repository workflow is `workflow_dispatch` only.
+
+When a CI run is wanted, create a temporary `ci/<purpose>` branch from the exact commit or branch to validate. On that CI branch only, add a `push` trigger scoped to that branch, push the CI-only workflow commit, and let GitHub Actions validate the code. Do not merge the CI-only workflow change into `main`; delete the temporary CI branch after the result has been inspected.
+
+This keeps feature branches free of one-run-per-commit CI noise while still making the tested code revision explicit.
+
 ## Responsibility boundary
 
 `place-core` owns semantic spatial structure, structural reachability, occupancy and cross-domain travel orchestration.
