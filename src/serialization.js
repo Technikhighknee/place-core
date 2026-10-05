@@ -282,6 +282,10 @@ export function serializePlaceCore(registry) {
           ),
         layerDomains: mapToObject(instance.layerDomains),
         attachments: mapToObject(instance.attachments),
+        embeddedNodeBindings:
+          mapToObject(
+            instance.embeddedNodeBindings
+          ),
         placement: canonicalClone(instance.placement),
         metadata: canonicalClone(instance.metadata),
         portalOverrides: mapToObject(instance.portalOverrides),
@@ -387,6 +391,8 @@ export function deserializePlaceCore(snapshot, options = {}) {
       memberships: [],
       layerDomains: item.layerDomains,
       attachments: item.attachments,
+      embeddedNodeBindings:
+        item.embeddedNodeBindings,
       placement: null,
       metadata: item.metadata
     });
