@@ -384,16 +384,28 @@ export function resolveTravelTarget(registry, target) {
       `place ${String(target.placeId)} has no enabled routable anchor`
     );
   }
+
+  const resolvedAnchor =
+    registry.resolveAnchor(
+      target.placeId,
+      anchor.id
+    );
+  if (!resolvedAnchor) {
+    throw travelTargetUnavailable(
+      `anchor ${anchor.id} on place ${String(target.placeId)} is unavailable`
+    );
+  }
+
   return deepFreeze({
     placeId: target.placeId,
-    anchorId: anchor.id,
+    anchorId: resolvedAnchor.id,
     spaceId:
       target.spaceId ??
-      anchor.spaceId,
-    layerId: anchor.layerId,
-    domainId: instance.layerDomains.get(anchor.layerId),
-    position: anchor.position,
-    nodeId: anchor.nodeId
+      resolvedAnchor.spaceId,
+    layerId: resolvedAnchor.layerId,
+    domainId: resolvedAnchor.domainId,
+    position: resolvedAnchor.position,
+    nodeId: resolvedAnchor.nodeId
   });
 }
 
