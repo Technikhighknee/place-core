@@ -337,6 +337,194 @@ test("embedded routable anchors bind explicitly to host navigation nodes", () =>
   places.assertInternalConsistency();
 });
 
+test("late bridge attach validates embedded bindings even in disabled spaces", () => {
+  const places = new PlaceRegistry();
+
+  places.registerDefinition({
+    id: "disabled-routable-market",
+    layers: [{
+      id: "market",
+      spatialMode: "embedded"
+    }],
+    spaces: [{
+      id: "closed-wing",
+      layerId: "market",
+      enabled: false,
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 4,
+        maxY: 4
+      }
+    }],
+    anchors: [{
+      id: "stall",
+      layerId: "market",
+      spaceId: "closed-wing",
+      position: { x: 2, y: 3 }
+    }]
+  });
+
+  places.createPlace({
+    id: "market",
+    definitionId:
+      "disabled-routable-market",
+    layerDomains: {
+      market: "default"
+    },
+    embeddedNodeBindings: {
+      anchors: {
+        stall: "stall-node"
+      }
+    },
+    placement: {
+      domainId: "default",
+      containment: "none",
+      transform: {
+        x: 20,
+        y: 5,
+        rotation: 0,
+        scale: 1
+      }
+    }
+  });
+
+  const world = new World();
+  const navigation =
+    new NavigationRegistry();
+  const city = new Navigation();
+  city.addNode({
+    id: "stall-node",
+    x: 12,
+    y: 8
+  });
+  navigation.registerTopology(
+    "city",
+    city
+  );
+  navigation.bindDomain(
+    "default",
+    "city"
+  );
+  const bridge = new WorldCoreBridge({
+    world,
+    navigation,
+    Navigation,
+    startJourney,
+    stopJourney
+  });
+
+  assert.throws(
+    () =>
+      places.attachWorldCoreBridge(
+        bridge
+      ),
+    /position does not match host navigation node stall-node/
+  );
+  assert.equal(
+    places.bridge,
+    null
+  );
+  assert.equal(
+    places.getSpace(
+      "market",
+      "closed-wing"
+    )?.enabled,
+    false
+  );
+  places.assertInternalConsistency();
+});
+
+test("embedded portal host nodes are bound per instance and survive snapshots", () => {
+  const places = new PlaceRegistry();
+
+  places.registerDefinition({
+    id: "embedded-gate",
+    layers: [{
+      id: "market",
+      spatialMode: "embedded"
+    }],
+    portals: [{
+      id: "gate",
+      a: {
+        kind: "local",
+        layerId: "market",
+        position: { x: 1, y: 2 }
+      },
+      b: {
+        kind: "external",
+        slot: "outside"
+      }
+    }]
+  });
+
+  places.createPlace({
+    id: "gate-place",
+    definitionId: "embedded-gate",
+    layerDomains: {
+      market: "city"
+    },
+    embeddedNodeBindings: {
+      portals: {
+        gate: {
+          a: "market-gate-node"
+        }
+      }
+    },
+    attachments: {
+      outside: {
+        domainId: "outside",
+        position: { x: 0, y: 0 },
+        nodeId: "outside-node"
+      }
+    },
+    placement: {
+      domainId: "city",
+      containment: "none",
+      transform: {
+        x: 10,
+        y: 20,
+        rotation: 0,
+        scale: 1
+      }
+    }
+  });
+
+  const portal =
+    places.resolvePortal(
+      "gate-place",
+      "gate"
+    );
+  assert.equal(
+    portal?.a?.nodeId,
+    "market-gate-node"
+  );
+  assert.deepEqual(
+    portal?.a?.position,
+    { x: 11, y: 22 }
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+  const restored =
+    deserializePlaceCore(snapshot);
+  const restoredPortal =
+    restored.resolvePortal(
+      "gate-place",
+      "gate"
+    );
+  assert.equal(
+    restoredPortal?.a?.nodeId,
+    "market-gate-node"
+  );
+  assert.deepEqual(
+    restoredPortal?.a?.position,
+    { x: 11, y: 22 }
+  );
+  restored.assertInternalConsistency();
+});
+
 test("embedded places share a host domain without owning it", () => {
   const { world, places } = setup();
   const host =
