@@ -4310,10 +4310,7 @@ export class PlaceRegistry {
       }
 
       for (const anchor of definition.anchors) {
-        if (
-          anchor.layerId !== layer.id ||
-          anchor.nodeId == null
-        ) {
+        if (anchor.layerId !== layer.id) {
           continue;
         }
         const resolved =
@@ -4322,6 +4319,9 @@ export class PlaceRegistry {
             definition,
             anchor
           );
+        if (resolved.nodeId == null) {
+          continue;
+        }
         validatePoint.call(
           this.#bridge,
           resolved.domainId,
