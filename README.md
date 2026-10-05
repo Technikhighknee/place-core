@@ -24,7 +24,7 @@ First-class concepts:
 
 - **PlaceDefinition** — reusable immutable blueprint.
 - **PlaceInstance** — concrete occurrence with sparse mutable state.
-- **SpatialLayer** — one local metric frame, normally backed by one `world-core` domain.
+- **SpatialLayer** — a metric layer that explicitly either owns a `world-core` domain or is embedded into an existing one.
 - **Space** — semantic region such as room, hall, courtyard, deck or cellar.
 - **Boundary** — wall, fence, partition or other separator.
 - **Portal** — door, gate, stairs, ladder, hatch, bridge, gangplank or breach.
@@ -78,6 +78,7 @@ const house = compilePlace({
 
   layers: [{
     id: "ground",
+    spatialMode: "owned",
     navigation: {
       nodes: [
         { id: "front", x: 0, y: 5 },
@@ -125,9 +126,68 @@ const house = compilePlace({
 });
 ```
 
-Embedded navigation becomes one shared `world-core` topology per layer. Thousands of place instances bind their domains to the same topology instead of cloning nodes, roads, static indexes and route caches.
+Navigation declared by an `owned` layer becomes one shared `world-core` topology per definition layer. Thousands of place instances bind their owned domains to the same topology instead of cloning nodes, roads, static indexes and route caches.
 
 Compilation validates IDs, containment cycles, portal/anchor references and embedded navigation references. Definitions receive a canonical content hash.
+
+## Spatial ownership modes
+
+Every spatial layer declares its ownership mode explicitly:
+
+- `spatialMode: "owned"` means the place owns a dedicated world-core domain. This is the normal model for interiors, decks and other local coordinate spaces.
+- `spatialMode: "embedded"` means the layer lives directly inside an existing world-core domain. This is for open places such as marketplaces, parks, yards, fields and harbor areas.
+
+Embedded layers require an explicit `layerDomains` host binding when an instance is created. They do not create, adopt, topology-bind or remove that host domain, and multiple embedded places may share the same domain.
+
+An embedded layer does not define its own navigation topology. Its spaces, boundaries and anchors are authored in place-local coordinates and projected through the instance placement into host-domain coordinates.
+
+```js
+const market = compilePlace({
+  id: "marketplace",
+  layers: [{
+    id: "market",
+    spatialMode: "embedded"
+  }],
+  spaces: [{
+    id: "market-square",
+    layerId: "market",
+    geometry: {
+      type: "aabb",
+      minX: 0,
+      minY: 0,
+      maxX: 20,
+      maxY: 14
+    }
+  }],
+  anchors: [{
+    id: "food-stall",
+    layerId: "market",
+    spaceId: "market-square",
+    position: { x: 4, y: 5 },
+    nodeId: "market-food"
+  }]
+});
+
+places.createPlace({
+  id: "luebeck-market",
+  definitionId: "marketplace",
+  layerDomains: {
+    market: "luebeck"
+  },
+  placement: {
+    domainId: "luebeck",
+    containment: "footprint",
+    transform: {
+      x: 120,
+      y: 80,
+      rotation: 0,
+      scale: 1
+    }
+  }
+});
+```
+
+For routable embedded anchors or portal endpoints, `nodeId` refers to a node in the host domain's navigation topology. The bridge validates that the node exists and that its host position exactly matches the transformed semantic position. Anchors without a host node remain valid semantic targets for queries but are not independently routable.
 
 ## world-core integration
 
