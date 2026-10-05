@@ -11,7 +11,7 @@ function simpleDefinition() {
   return {
     id: "revision-place",
     footprint: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 10 },
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
@@ -244,7 +244,7 @@ test("state-only portal and boundary changes do not invalidate travel", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "state-only",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     boundaries: [{
       id: "painted-line",
       layerId: "inside",
