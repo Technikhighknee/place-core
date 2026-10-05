@@ -528,7 +528,18 @@ export class PlaceInstance {
   readonly parentId: PlaceId | null;
   readonly layerDomains: ReadonlyMap<string, string>;
   readonly attachments: ReadonlyMap<string, ResolvedPlaceAttachment>;
-  readonly embeddedNodeBindings: ReadonlyMap<string, NavigationId>;
+  readonly embeddedNodeBindings: Readonly<{
+    anchors: Readonly<Record<string, NavigationId>>;
+    portals: Readonly<
+      Record<
+        string,
+        Readonly<{
+          a?: NavigationId;
+          b?: NavigationId;
+        }>
+      >
+    >;
+  }>;
   readonly placement: NormalizedPlacePlacement | null;
   readonly metadata: JsonValue;
   readonly portalOverrides: ReadonlyMap<
