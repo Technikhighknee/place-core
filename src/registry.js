@@ -1354,7 +1354,9 @@ export class PlaceRegistry {
       "embeddedNodeBindings"
     );
 
-    const embeddedNodeBindings =
+    const normalizedAnchorBindings =
+      new Map();
+    const normalizedPortalBindings =
       new Map();
 
     const anchorBindings =
@@ -1388,8 +1390,8 @@ export class PlaceRegistry {
           `embeddedNodeBindings anchor ${anchorId} is not on an embedded layer`
         );
       }
-      embeddedNodeBindings.set(
-        tupleKey("anchor", anchorId),
+      normalizedAnchorBindings.set(
+        anchorId,
         nodeId
       );
     }
@@ -1445,16 +1447,34 @@ export class PlaceRegistry {
             `embeddedNodeBindings portal ${portalId} endpoint ${side} is not local to an embedded layer`
           );
         }
-        embeddedNodeBindings.set(
-          tupleKey(
-            "portal",
+        let normalizedSides =
+          normalizedPortalBindings.get(
+            portalId
+          );
+        if (!normalizedSides) {
+          normalizedSides = {};
+          normalizedPortalBindings.set(
             portalId,
-            side
-          ),
-          nodeId
-        );
+            normalizedSides
+          );
+        }
+        normalizedSides[side] = nodeId;
       }
     }
+
+    const embeddedNodeBindings =
+      deepFreeze({
+        anchors: Object.fromEntries(
+          normalizedAnchorBindings
+        ),
+        portals: Object.fromEntries(
+          [...normalizedPortalBindings]
+            .map(([portalId, sides]) => [
+              portalId,
+              deepFreeze({ ...sides })
+            ])
+        )
+      });
 
     const attachmentsInput = input.attachments == null
       ? {}
@@ -1823,13 +1843,8 @@ export class PlaceRegistry {
         ...endpoint,
         nodeId:
           instance.embeddedNodeBindings
-            .get(
-              tupleKey(
-                "portal",
-                portalId,
-                side
-              )
-            ) ?? null
+            .portals?.[portalId]?.[side] ??
+          null
       };
     };
 
@@ -4420,12 +4435,8 @@ export class PlaceRegistry {
       nodeId:
         layer?.spatialMode === "embedded"
           ? instance.embeddedNodeBindings
-              .get(
-                tupleKey(
-                  "anchor",
-                  anchor.id
-                )
-              ) ?? null
+              .anchors?.[anchor.id] ??
+            null
           : anchor.nodeId,
       placeId: instance.id,
       domainId
