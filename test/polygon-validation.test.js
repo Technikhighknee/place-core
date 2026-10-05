@@ -12,7 +12,7 @@ import {
 function compileWithPolygon(id, points) {
   return compilePlace({
     id,
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     spaces: [{
       id: "room",
       layerId: "ground",
@@ -176,7 +176,7 @@ test("collinear huge finite polygon cannot bypass zero-area validation", () => {
   assert.throws(
     () => compilePlace({
       id: "huge-collinear-polygon",
-      layers: [{ id: "inside" }],
+      layers: [{ spatialMode: "owned", id: "inside" }],
       spaces: [{
         id: "line",
         layerId: "inside",
