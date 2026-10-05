@@ -163,8 +163,7 @@ const market = compilePlace({
     id: "food-stall",
     layerId: "market",
     spaceId: "market-square",
-    position: { x: 4, y: 5 },
-    nodeId: "market-food"
+    position: { x: 4, y: 5 }
   }]
 });
 
@@ -173,6 +172,11 @@ places.createPlace({
   definitionId: "marketplace",
   layerDomains: {
     market: "luebeck"
+  },
+  embeddedNodeBindings: {
+    anchors: {
+      "food-stall": "market-food"
+    }
   },
   placement: {
     domainId: "luebeck",
@@ -187,7 +191,7 @@ places.createPlace({
 });
 ```
 
-For routable embedded anchors or portal endpoints, `nodeId` refers to a node in the host domain's navigation topology. The bridge validates that the node exists and that its host position exactly matches the transformed semantic position. Anchors without a host node remain valid semantic targets for queries but are not independently routable.
+Host navigation nodes are instance-specific. Embedded definitions therefore do not hard-code `nodeId` values. A concrete place instance supplies `embeddedNodeBindings` for anchors or portal endpoints that should be routable in its host domain. The bridge validates that each bound node exists and that its host position exactly matches the transformed semantic position. Unbound anchors remain valid semantic targets for queries but are not independently routable.
 
 ## world-core integration
 
