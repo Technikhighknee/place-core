@@ -67,6 +67,42 @@ function setup() {
   return { world, navigation, bridge, places };
 }
 
+test("embedded layers require explicit existing host domains and roll back cleanly", () => {
+  const { places } = setup();
+
+  assert.throws(
+    () => places.createPlace({
+      id: "missing-binding",
+      definitionId: "embedded-market"
+    }),
+    /requires an explicit layerDomains binding/
+  );
+  assert.equal(
+    places.getPlace("missing-binding"),
+    null
+  );
+
+  assert.throws(
+    () => places.createPlace({
+      id: "missing-host",
+      definitionId: "embedded-market",
+      layerDomains: {
+        market: "does-not-exist"
+      },
+      placement: {
+        domainId: "does-not-exist",
+        containment: "footprint"
+      }
+    }),
+    /requires existing world-core domain does-not-exist/
+  );
+  assert.equal(
+    places.getPlace("missing-host"),
+    null
+  );
+  places.assertInternalConsistency();
+});
+
 test("embedded places share a host domain without owning it", () => {
   const { world, places } = setup();
   const host =
@@ -168,6 +204,71 @@ test("embedded places share a host domain without owning it", () => {
     world.getDomain("default"),
     host
   );
+});
+
+test("moving an embedded place updates resolved anchors and spatial lookup", () => {
+  const { places } = setup();
+
+  places.createPlace({
+    id: "moving-market",
+    definitionId: "embedded-market",
+    layerDomains: {
+      market: "default"
+    },
+    placement: {
+      domainId: "default",
+      containment: "footprint",
+      transform: {
+        x: 10,
+        y: 20,
+        rotation: 0,
+        scale: 1
+      }
+    }
+  });
+
+  const revision =
+    places.travelRevision;
+
+  places.setPlacement(
+    "moving-market",
+    {
+      domainId: "default",
+      containment: "footprint",
+      transform: {
+        x: 40,
+        y: 60,
+        rotation: 0,
+        scale: 1
+      }
+    }
+  );
+
+  assert.ok(
+    places.travelRevision > revision
+  );
+  assert.deepEqual(
+    places.resolveAnchor(
+      "moving-market",
+      "food-stall"
+    )?.position,
+    { x: 42, y: 63 }
+  );
+  assert.deepEqual(
+    places.locate(
+      "default",
+      { x: 12, y: 23 }
+    ).places,
+    []
+  );
+  assert.deepEqual(
+    places.locate(
+      "default",
+      { x: 42, y: 63 }
+    ).places,
+    ["moving-market"]
+  );
+  places.assertInternalConsistency();
 });
 
 test("embedded host-domain sharing survives place-core snapshots", () => {
