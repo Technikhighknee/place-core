@@ -48,6 +48,49 @@ test("spatial layer mode is explicit and required", () => {
   );
 });
 
+test("embedded semantic targets cannot hard-code host navigation nodes", () => {
+  assert.throws(
+    () => compilePlace({
+      id: "embedded-anchor-node",
+      layers: [{
+        id: "market",
+        spatialMode: "embedded"
+      }],
+      anchors: [{
+        id: "stall",
+        layerId: "market",
+        position: { x: 1, y: 1 },
+        nodeId: "city-node"
+      }]
+    }),
+    /cannot define a host navigation node/
+  );
+
+  assert.throws(
+    () => compilePlace({
+      id: "embedded-portal-node",
+      layers: [{
+        id: "market",
+        spatialMode: "embedded"
+      }],
+      portals: [{
+        id: "gate",
+        a: {
+          kind: "local",
+          layerId: "market",
+          position: { x: 1, y: 1 },
+          nodeId: "city-node"
+        },
+        b: {
+          kind: "external",
+          slot: "outside"
+        }
+      }]
+    }),
+    /cannot define a host navigation node/
+  );
+});
+
 test("embedded layers cannot define or bind their own navigation topology", () => {
   assert.throws(
     () => compilePlace({
