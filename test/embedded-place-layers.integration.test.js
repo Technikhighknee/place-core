@@ -64,14 +64,24 @@ const MARKET = {
     b: { x: 10, y: 8 },
     tags: ["market-edge"]
   }],
-  anchors: [{
-    id: "food-stall",
-    kind: "market-stall",
-    layerId: "market",
-    spaceId: "square",
-    position: { x: 2, y: 3 },
-    tags: ["market", "food"]
-  }]
+  anchors: [
+    {
+      id: "food-stall",
+      kind: "market-stall",
+      layerId: "market",
+      spaceId: "square",
+      position: { x: 2, y: 3 },
+      tags: ["market", "food"]
+    },
+    {
+      id: "annex-stall",
+      kind: "market-stall",
+      layerId: "market",
+      spaceId: "annex",
+      position: { x: 14, y: 2 },
+      tags: ["market", "annex"]
+    }
+  ]
 };
 
 function setup() {
@@ -372,6 +382,23 @@ test("embedded places share a host domain without owning it", () => {
         { x: 102, y: 53 }
       ]
     ]
+  );
+  assert.deepEqual(
+    places.findAnchors({
+      placeId: "north-market",
+      tag: "annex"
+    }).map((anchor) =>
+      anchor.position
+    ),
+    [{ x: 114, y: 52 }]
+  );
+  assert.deepEqual(
+    places.findAnchors({
+      placeId: "north-market",
+      tag: "annex",
+      enabledOnly: true
+    }),
+    []
   );
 
   assert.deepEqual(
