@@ -755,11 +755,15 @@ export class WorldCoreBridge {
     }
 
     const receipt = {
-      domains: definition.layers.map((layer) =>
-        this.#captureDomainMaterializationState(
-          instance.layerDomains.get(layer.id)
+      domains: definition.layers
+        .filter((layer) =>
+          layer.spatialMode === "owned"
         )
-      ),
+        .map((layer) =>
+          this.#captureDomainMaterializationState(
+            instance.layerDomains.get(layer.id)
+          )
+        ),
       newTopologyIds,
       attemptedTopologyIds:
         new Set(),
@@ -1081,8 +1085,26 @@ export class WorldCoreBridge {
       }
     }
 
+    // Embedded layers borrow an existing world domain and are never
+    // created, removed, or topology-bound by place-core.
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "embedded") {
+        continue;
+      }
+      const domainId =
+        instance.layerDomains.get(layer.id);
+      if (!this.world.getDomain(domainId)) {
+        throw new Error(
+          `embedded place layer ${definition.id}:${layer.id} requires existing world-core domain ${domainId}`
+        );
+      }
+    }
+
     // Preflight ownership and existing bindings before mutating either core.
     for (const layer of definition.layers) {
+      if (layer.spatialMode !== "owned") {
+        continue;
+      }
       const domainId = instance.layerDomains.get(layer.id);
       const domainState =
         domainStateById.get(domainId);
@@ -1132,6 +1154,9 @@ export class WorldCoreBridge {
 
     try {
       for (const layer of definition.layers) {
+        if (layer.spatialMode !== "owned") {
+          continue;
+        }
         if (
           layer.topologyId != null &&
           newTopologyIds.includes(
@@ -2037,7 +2062,13 @@ export class WorldCoreBridge {
     }
 
     const domains =
-      [...instance.layerDomains.values()];
+      definition.layers
+        .filter((layer) =>
+          layer.spatialMode === "owned"
+        )
+        .map((layer) =>
+          instance.layerDomains.get(layer.id)
+        );
     for (const domainId of domains) {
       const domain =
         this.world.getDomain?.(domainId);
