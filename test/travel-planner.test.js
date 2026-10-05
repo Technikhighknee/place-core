@@ -1203,6 +1203,7 @@ test("planner considers every equally short domain path before choosing by cost"
   const layers = Array.from(
     { length: 8 },
     (_, index) => ({
+      spatialMode: "owned",
       id: `d${index}`
     })
   );
@@ -1335,6 +1336,7 @@ function buildFiveShortestPathFixture() {
   const layers = Array.from(
     { length: 8 },
     (_, index) => ({
+      spatialMode: "owned",
       id: `d${index}`
     })
   );
