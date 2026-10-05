@@ -1522,7 +1522,7 @@ export class PlaceRegistry {
     const space = definition.getSpace(spaceId);
     if (!space) throw new Error(`unknown space ${spaceId} on place ${String(instanceId)}`);
     const affectedEntities = [...this.#occupancyIndex.entitiesInPlace(instanceId)];
-    const baseEnabled = true;
+    const baseEnabled = space.enabled;
     const currentEnabled = instance.getSpaceOverride(spaceId)?.enabled ?? baseEnabled;
     const enabled = normalizeBoolean(
       patch.enabled,
@@ -3406,10 +3406,6 @@ export class PlaceRegistry {
   }
 
   #spaceEnabled(instance, definition, space) {
-    if (instance.spaceOverrides.size === 0) {
-      return true;
-    }
-
     let cache =
       this.#spaceEnabledCache.get(instance.id);
     if (!cache) {
@@ -3435,10 +3431,10 @@ export class PlaceRegistry {
       }
 
       path.push(current);
-      if (
+      const localEnabled =
         instance.getSpaceOverride(current.id)
-          ?.enabled === false
-      ) {
+          ?.enabled ?? current.enabled;
+      if (!localEnabled) {
         enabled = false;
         break;
       }
@@ -3453,13 +3449,11 @@ export class PlaceRegistry {
 
     while (path.length) {
       const candidate = path.pop();
-      if (
+      const localEnabled =
         instance.getSpaceOverride(
           candidate.id
-        )?.enabled === false
-      ) {
-        enabled = false;
-      }
+        )?.enabled ?? candidate.enabled;
+      enabled = enabled && localEnabled;
       cache.set(candidate.id, enabled);
     }
 

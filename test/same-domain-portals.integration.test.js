@@ -22,7 +22,7 @@ import {
   deserializePlaceCore
 } from "../src/index.js";
 
-function roomDoorDefinition() {
+function roomDoorDefinition({ kitchenEnabled = true } = {}) {
   return {
     id: "same-domain-rooms",
     layers: [{
@@ -78,7 +78,8 @@ function roomDoorDefinition() {
           maxX: 7,
           maxY: 2
         },
-        defaultAnchorId: "kitchen-target"
+        defaultAnchorId: "kitchen-target",
+        enabled: kitchenEnabled
       }
     ],
     portals: [{
@@ -115,7 +116,7 @@ function roomDoorDefinition() {
   };
 }
 
-function setup() {
+function setup(options = {}) {
   const world = new World({
     captureEvents: false
   });
@@ -131,7 +132,7 @@ function setup() {
     bridge,
     captureEvents: true
   });
-  places.registerDefinition(roomDoorDefinition());
+  places.registerDefinition(roomDoorDefinition(options));
   const place = places.createPlace({
     id: "inn",
     definitionId: "same-domain-rooms"
@@ -495,6 +496,121 @@ test("reverse same-domain room traversal reports reversed semantic direction", (
     assert.equal(event.fromSpaceId, "kitchen");
     assert.equal(event.toSpaceId, "taproom");
   }
+});
+
+test("definition-disabled room starts inaccessible and can be unlocked per instance", () => {
+  const {
+    world,
+    navigation,
+    places,
+    place
+  } = setup({ kitchenEnabled: false });
+
+  const domainId =
+    place.layerDomains.get("ground");
+  const nav =
+    navigation.navigationForDomain(
+      domainId
+    );
+
+  assert.equal(
+    places.getDefinition(
+      "same-domain-rooms"
+    ).getSpace("kitchen")?.enabled,
+    false
+  );
+  assert.equal(
+    places.getSpace(
+      "inn",
+      "kitchen"
+    )?.enabled,
+    false
+  );
+  assert.equal(
+    places.resolveAnchor(
+      "inn",
+      "kitchen-target"
+    ),
+    null
+  );
+  assert.equal(
+    places.resolvePortal(
+      "inn",
+      "kitchen-door"
+    )?.traversable,
+    false
+  );
+  assert.equal(
+    nav.findRoute(
+      "start",
+      "target",
+      world.getEntity("hans").mobility
+    ),
+    null
+  );
+  assert.equal(
+    place.spaceOverrides.size,
+    0
+  );
+
+  places.setSpaceState(
+    "inn",
+    "kitchen",
+    { enabled: true }
+  );
+
+  assert.equal(
+    places.getSpace(
+      "inn",
+      "kitchen"
+    )?.enabled,
+    true
+  );
+  assert.ok(
+    places.resolveAnchor(
+      "inn",
+      "kitchen-target"
+    )
+  );
+  assert.equal(
+    places.resolvePortal(
+      "inn",
+      "kitchen-door"
+    )?.traversable,
+    true
+  );
+  assert.ok(
+    nav.findRoute(
+      "start",
+      "target",
+      world.getEntity("hans").mobility
+    )
+  );
+  assert.deepEqual(
+    place.spaceOverrides.get(
+      "kitchen"
+    ),
+    { enabled: true }
+  );
+
+  places.setSpaceState(
+    "inn",
+    "kitchen",
+    { enabled: false }
+  );
+  assert.equal(
+    place.spaceOverrides.size,
+    0
+  );
+  assert.equal(
+    places.getSpace(
+      "inn",
+      "kitchen"
+    )?.enabled,
+    false
+  );
+
+  places.assertInternalConsistency();
 });
 
 test("disabling a room hides its anchors and physically closes its access portal", () => {

@@ -607,6 +607,71 @@ test("embedded navigation canonicalizes world-core defaults", () => {
 });
 
 
+test("space enabled state is canonical and defaults to true", () => {
+  const omitted = compilePlace({
+    id: "canonical-space-state",
+    layers: [{ id: "ground" }],
+    spaces: [{
+      id: "room",
+      layerId: "ground",
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 1,
+        maxY: 1
+      }
+    }]
+  });
+
+  const explicit = compilePlace({
+    id: "canonical-space-state",
+    layers: [{ id: "ground" }],
+    spaces: [{
+      id: "room",
+      layerId: "ground",
+      enabled: true,
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 1,
+        maxY: 1
+      }
+    }]
+  });
+
+  assert.equal(
+    omitted.getSpace("room")?.enabled,
+    true
+  );
+  assert.equal(
+    omitted.contentHash,
+    explicit.contentHash
+  );
+
+  const disabled = compilePlace({
+    id: "disabled-space-state",
+    layers: [{ id: "ground" }],
+    spaces: [{
+      id: "room",
+      layerId: "ground",
+      enabled: false,
+      geometry: {
+        type: "aabb",
+        minX: 0,
+        minY: 0,
+        maxX: 1,
+        maxY: 1
+      }
+    }]
+  });
+  assert.equal(
+    disabled.getSpace("room")?.enabled,
+    false
+  );
+});
+
 test("definition identity canonicalizes top-level semantic defaults", () => {
   const omitted = compilePlace({
     id: "canonical-top-level",
