@@ -7,6 +7,7 @@ export function tavernBlueprint() {
     footprint: { type: "aabb", minX: -1, minY: -1, maxX: 12, maxY: 6 },
     layers: [
       {
+        spatialMode: "owned",
         id: "ground",
         navigation: {
           nodes: [
@@ -21,6 +22,7 @@ export function tavernBlueprint() {
         }
       },
       {
+        spatialMode: "owned",
         id: "cellar",
         navigation: {
           nodes: [
