@@ -267,6 +267,7 @@ test("failed multi-layer materialization removes newly registered topologies", (
   const { world, navigation, places } = setup();
 
   const layer = (id, topologyId) => ({
+    spatialMode: "owned",
     id,
     topologyId,
     navigation: {
