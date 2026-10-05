@@ -241,6 +241,42 @@ test("embedded routable anchors bind explicitly to host navigation nodes", () =>
     plan.resolvedTarget.nodeId,
     "stall-node"
   );
+  assert.equal(
+    places.findAnchors({
+      placeId: "market"
+    })[0]?.nodeId,
+    "stall-node"
+  );
+
+  const snapshot =
+    serializePlaceCore(places);
+  assert.deepEqual(
+    snapshot.instances[0]
+      .embeddedNodeBindings,
+    {
+      anchors: {
+        stall: "stall-node"
+      },
+      portals: {}
+    }
+  );
+  const restored =
+    deserializePlaceCore(snapshot);
+  assert.equal(
+    restored.resolveAnchor(
+      "market",
+      "stall"
+    )?.nodeId,
+    "stall-node"
+  );
+  assert.deepEqual(
+    restored.resolveAnchor(
+      "market",
+      "stall"
+    )?.position,
+    { x: 12, y: 8 }
+  );
+  restored.assertInternalConsistency();
 
   assert.throws(
     () => places.setPlacement(
