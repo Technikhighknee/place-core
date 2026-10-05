@@ -191,6 +191,30 @@ export class WorldCoreBridge {
     }
   }
 
+  validateEmbeddedHostNavigation(
+    instance,
+    definition
+  ) {
+    for (const layer of definition.layers) {
+      if (layer.spatialMode !== "embedded") {
+        continue;
+      }
+      const domainId =
+        instance.layerDomains.get(layer.id);
+      if (!this.world.getDomain(domainId)) {
+        throw new Error(
+          `embedded place layer ${definition.id}:${layer.id} requires existing world-core domain ${domainId}`
+        );
+      }
+      this.#validateEmbeddedHostNavigation(
+        instance,
+        definition,
+        layer
+      );
+    }
+    return true;
+  }
+
   #navigationMethod(name) {
     const method = this.navigation?.[name];
     if (typeof method !== "function") {
@@ -1174,23 +1198,10 @@ export class WorldCoreBridge {
 
     // Embedded layers borrow an existing world domain and are never
     // created, removed, or topology-bound by place-core.
-    for (const layer of definition.layers) {
-      if (layer.spatialMode === "owned") {
-        continue;
-      }
-      const domainId =
-        instance.layerDomains.get(layer.id);
-      if (!this.world.getDomain(domainId)) {
-        throw new Error(
-          `embedded place layer ${definition.id}:${layer.id} requires existing world-core domain ${domainId}`
-        );
-      }
-      this.#validateEmbeddedHostNavigation(
-        instance,
-        definition,
-        layer
-      );
-    }
+    this.validateEmbeddedHostNavigation(
+      instance,
+      definition
+    );
 
     // Preflight ownership and existing bindings before mutating either core.
     for (const layer of definition.layers) {
