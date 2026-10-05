@@ -4130,6 +4130,10 @@ export class PlaceRegistry {
         layer
       );
     }
+
+    this.#bridge
+      ?.validateEmbeddedHostNavigation
+      ?.(instance, definition);
   }
 
   #resolveBoundaryForInstance(
