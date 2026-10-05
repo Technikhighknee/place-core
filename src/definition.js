@@ -1021,6 +1021,37 @@ export function compilePlace(input, options = {}) {
   const portals = Object.freeze(portalsInput.map((x) => normalizePortal(x, layersById, spacesById)));
   const portalsById = new Map(portals.map((x) => [x.id, x]));
 
+  for (const anchor of anchors) {
+    const layer = layersById.get(anchor.layerId);
+    if (
+      layer?.spatialMode === "embedded" &&
+      anchor.nodeId != null
+    ) {
+      throw new Error(
+        `embedded anchor ${anchor.id} cannot define a host navigation node; bind it on the place instance`
+      );
+    }
+  }
+
+  for (const portal of portals) {
+    for (const [side, endpoint] of [
+      ["a", portal.a],
+      ["b", portal.b]
+    ]) {
+      if (endpoint.kind !== "local") continue;
+      const layer =
+        layersById.get(endpoint.layerId);
+      if (
+        layer?.spatialMode === "embedded" &&
+        endpoint.nodeId != null
+      ) {
+        throw new Error(
+          `embedded portal ${portal.id} endpoint ${side} cannot define a host navigation node; bind it on the place instance`
+        );
+      }
+    }
+  }
+
   const navigationNodeMaps = new Map();
   const navigationRoadMaps = new Map();
   for (const layer of layers) {
