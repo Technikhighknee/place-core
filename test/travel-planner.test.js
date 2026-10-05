@@ -11,7 +11,7 @@ function buildPlannerFixture() {
   places.registerDefinition({
     id: "two-door-house",
     defaultAnchorId: "target",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
@@ -144,7 +144,7 @@ test("planner chooses the cheapest among multiple equally short domain paths", (
   places.registerDefinition({
     id: "dual-route-house",
     defaultAnchorId: "target",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
@@ -237,7 +237,7 @@ test("nearest semantic target chooses the cheapest reachable anchor, not lexical
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "bed-house",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     spaces: [{
       id: "room",
       layerId: "inside",
@@ -343,7 +343,7 @@ test("nearest semantic target supports external availability predicates", () => 
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "service-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       a: { kind: "external", slot: "street" },
@@ -421,7 +421,7 @@ test("nearest semantic target batches thousands of portal costs per domain", () 
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "batch-house",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     portals: [{
       id: "door",
       a: { kind: "external", slot: "street" },
@@ -516,7 +516,7 @@ test("all travel plan shapes expose the current travel revision", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "revision-place",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "target",
       layerId: "inside",
@@ -971,7 +971,7 @@ test("planner validates batched local route costs", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "batched-costs",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "goal",
       layerId: "inside",
@@ -1119,7 +1119,7 @@ test("zero-cost local routes still produce movement steps when positions differ"
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "zero-cost-route",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [{
       id: "target",
       layerId: "inside",
@@ -1490,11 +1490,11 @@ test("explicit target planning respects maxCost and can choose a longer hop deto
   places.registerDefinition({
     id: "budget-paths",
     layers: [
-      { id: "start" },
-      { id: "fast" },
-      { id: "cheap-a" },
-      { id: "cheap-b" },
-      { id: "target" }
+      { spatialMode: "owned", id: "start" },
+      { spatialMode: "owned", id: "fast" },
+      { spatialMode: "owned", id: "cheap-a" },
+      { spatialMode: "owned", id: "cheap-b" },
+      { spatialMode: "owned", id: "target" }
     ],
     portals: [
       {
@@ -1668,7 +1668,7 @@ test("batch route-cost bridges cannot mutate the planner destination set", () =>
 
   places.registerDefinition({
     id: "batch-mutation-isolation",
-    layers: [{ id: "inside" }],
+    layers: [{ spatialMode: "owned", id: "inside" }],
     anchors: [
       {
         id: "near",
