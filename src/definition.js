@@ -344,6 +344,7 @@ function normalizeLayer(layer, definitionId) {
       "id",
       "kind",
       "tags",
+      "spatialMode",
       "topologyId",
       "navigation",
       "metadata"
@@ -351,12 +352,48 @@ function normalizeLayer(layer, definitionId) {
     "layer"
   );
   assertStringId(layer.id, "layer.id");
+  const spatialMode =
+    layer.spatialMode ?? "owned";
+  if (
+    spatialMode !== "owned" &&
+    spatialMode !== "embedded"
+  ) {
+    throw new TypeError(
+      `layer(${layer.id}).spatialMode must be "owned" or "embedded"`
+    );
+  }
+
   const navigation = normalizeNavigationSpec(
     layer.navigation,
     `layer(${layer.id}).navigation`
   );
-  const topologyId = layer.topologyId ??
-    (navigation ? defaultTopologyId(definitionId, layer.id) : null);
+  if (
+    spatialMode === "embedded" &&
+    navigation != null
+  ) {
+    throw new Error(
+      `embedded layer ${layer.id} cannot define its own navigation topology`
+    );
+  }
+  if (
+    spatialMode === "embedded" &&
+    layer.topologyId != null
+  ) {
+    throw new Error(
+      `embedded layer ${layer.id} cannot bind a navigation topology`
+    );
+  }
+
+  const topologyId =
+    spatialMode === "owned"
+      ? layer.topologyId ??
+        (navigation
+          ? defaultTopologyId(
+              definitionId,
+              layer.id
+            )
+          : null)
+      : null;
   if (topologyId != null) {
     assertStringId(topologyId, `layer(${layer.id}).topologyId`);
   }
@@ -368,6 +405,7 @@ function normalizeLayer(layer, definitionId) {
       `layer(${layer.id}).kind`,
       "spatial-layer"
     ),
+    spatialMode,
     tags: normalizeStringList(layer.tags, `layer(${layer.id}).tags`, { defaultValue: [] }),
     topologyId,
     navigation,
