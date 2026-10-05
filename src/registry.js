@@ -648,7 +648,11 @@ export class PlaceRegistry {
     const definition = this.#definitions.get(instance.definitionId);
     const boundary = definition.getBoundary(boundaryId);
     if (!boundary) return null;
-    return { ...boundary, enabled: instance.getBoundaryOverride(boundaryId)?.enabled ?? boundary.enabled };
+    return this.#resolveBoundaryForInstance(
+      instance,
+      definition,
+      boundary
+    );
   }
 
   resolveAnchor(instanceId, anchorId) {
@@ -1032,21 +1036,79 @@ export class PlaceRegistry {
     );
     assertOptionalString(options.kind, "getBoundariesForDomain.kind");
     assertOptionalString(options.tag, "getBoundariesForDomain.tag");
-    const binding = this.#domainBindings.get(domainId);
-    if (!binding) return [];
-    const instance = this.#instances.get(binding.instanceId);
-    if (!instance) return [];
-    const definition = this.#definitions.get(instance.definitionId);
+
+    const layerRefs = [];
+    const owned =
+      this.#domainBindings.get(domainId);
+    if (owned) {
+      layerRefs.push(owned);
+    }
+    for (const ref of
+      this.#embeddedLayerBindings
+        .get(domainId)?.values?.() ?? []) {
+      layerRefs.push(ref);
+    }
 
     const result = [];
-    for (const boundary of definition.boundaries) {
-      if (boundary.layerId !== binding.layerId) continue;
-      const resolved = this.resolveBoundary(instance.id, boundary.id);
-      if (enabledOnly && !resolved.enabled) continue;
-      if (options.kind != null && resolved.kind !== options.kind) continue;
-      if (options.tag != null && !resolved.tags?.includes(options.tag)) continue;
-      result.push({ ...resolved, placeId: instance.id, domainId });
+    for (const ref of layerRefs) {
+      const instance =
+        this.#instances.get(ref.instanceId);
+      if (!instance) continue;
+      const definition =
+        this.#definitions.get(
+          instance.definitionId
+        );
+      if (!definition) continue;
+
+      for (const boundary of
+        definition.boundaries) {
+        if (
+          boundary.layerId !==
+          ref.layerId
+        ) {
+          continue;
+        }
+        const resolved =
+          this.#resolveBoundaryForInstance(
+            instance,
+            definition,
+            boundary
+          );
+        if (
+          enabledOnly &&
+          !resolved.enabled
+        ) {
+          continue;
+        }
+        if (
+          options.kind != null &&
+          resolved.kind !== options.kind
+        ) {
+          continue;
+        }
+        if (
+          options.tag != null &&
+          !resolved.tags?.includes(
+            options.tag
+          )
+        ) {
+          continue;
+        }
+        result.push({
+          ...resolved,
+          placeId: instance.id,
+          domainId
+        });
+      }
     }
+
+    result.sort((a, b) =>
+      compareStrings(
+        typedIdKey(a.placeId),
+        typedIdKey(b.placeId)
+      ) ||
+      compareStrings(a.id, b.id)
+    );
     return result;
   }
 
@@ -3765,6 +3827,46 @@ export class PlaceRegistry {
         layer
       );
     }
+  }
+
+  #resolveBoundaryForInstance(
+    instance,
+    definition,
+    boundary
+  ) {
+    const layer =
+      definition.getLayer(
+        boundary.layerId
+      );
+    const transform =
+      this.#embeddedTransform(
+        instance,
+        definition,
+        layer
+      );
+    const embedded =
+      layer?.spatialMode === "embedded";
+
+    return {
+      ...boundary,
+      a: embedded
+        ? transformPoint(
+            boundary.a,
+            transform
+          )
+        : boundary.a,
+      b: embedded
+        ? transformPoint(
+            boundary.b,
+            transform
+          )
+        : boundary.b,
+      enabled:
+        instance.getBoundaryOverride(
+          boundary.id
+        )?.enabled ??
+        boundary.enabled
+    };
   }
 
   #resolveAnchorForInstance(
