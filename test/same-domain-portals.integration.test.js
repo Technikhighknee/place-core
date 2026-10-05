@@ -583,17 +583,20 @@ test("disabling a room hides its anchors and physically closes its access portal
     ),
     null
   );
-  assert.equal(
-    startTravel(
-      places,
-      bridge,
-      "hans",
-      {
-        placeId: "inn",
-        anchorId: "kitchen-target"
-      }
-    ),
-    null
+  assert.throws(
+    () =>
+      startTravel(
+        places,
+        bridge,
+        "hans",
+        {
+          placeId: "inn",
+          anchorId: "kitchen-target"
+        }
+      ),
+    (error) =>
+      error?.code ===
+      "PLACE_TRAVEL_TARGET_UNAVAILABLE"
   );
 
   places.setSpaceState(
