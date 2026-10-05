@@ -7,7 +7,7 @@ function roomDefinition() {
   return {
     id: "room-box",
     footprint: { type: "aabb", minX: 0, minY: 0, maxX: 10, maxY: 10 },
-    layers: [{ id: "ground" }],
+    layers: [{ spatialMode: "owned", id: "ground" }],
     spaces: [
       {
         id: "whole",
@@ -132,7 +132,7 @@ test("numeric and string place IDs do not collide in portal or occupancy indexes
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "id-place",
-    layers: [{ id: "a" }, { id: "b" }],
+    layers: [{ spatialMode: "owned", id: "a" }, { spatialMode: "owned", id: "b" }],
     spaces: [{
       id: "room",
       layerId: "a",
@@ -340,7 +340,7 @@ test("default layer domain IDs distinguish numeric and string place IDs", () => 
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "default-domain-place",
-    layers: [{ id: "ground" }]
+    layers: [{ spatialMode: "owned", id: "ground" }]
   });
 
   const numeric = places.createPlace({
@@ -370,7 +370,7 @@ test("default layer domain IDs escape delimiter characters deterministically", (
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "escaped-domain-place",
-    layers: [{ id: "upper:deck" }]
+    layers: [{ spatialMode: "owned", id: "upper:deck" }]
   });
 
   const place = places.createPlace({
@@ -390,8 +390,8 @@ test("one place instance cannot assign the same domain to multiple layers", () =
   places.registerDefinition({
     id: "two-layer-domain-place",
     layers: [
-      { id: "ground" },
-      { id: "cellar" }
+      { spatialMode: "owned", id: "ground" },
+      { spatialMode: "owned", id: "cellar" }
     ]
   });
 
@@ -424,7 +424,7 @@ test("createPlace rejects unknown layer-domain keys before mutation", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "known-layer-place",
-    layers: [{ id: "ground" }]
+    layers: [{ spatialMode: "owned", id: "ground" }]
   });
 
   assert.throws(
@@ -448,7 +448,7 @@ test("createPlace collection inputs must be plain objects", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "plain-input-place",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
 
   assert.throws(
@@ -476,7 +476,7 @@ test("createPlace rejects unknown top-level fields instead of silently ignoring 
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "strict-place-input",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
 
   assert.throws(
@@ -495,7 +495,7 @@ test("createPlace validates parent IDs before structural mutation", () => {
   const places = new PlaceRegistry();
   places.registerDefinition({
     id: "parent-id-place",
-    layers: [{ id: "inside" }]
+    layers: [{ spatialMode: "owned", id: "inside" }]
   });
 
   assert.throws(
