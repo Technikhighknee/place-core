@@ -473,3 +473,9 @@ This keeps one stable CI branch per repository while making the tested revision 
 `place-core` owns semantic spatial structure, structural reachability, occupancy and cross-domain travel orchestration.
 
 It does **not** own cognition, property law, inventory, production, economy, relationships or rendering. Those systems can reference places, spaces, portals and anchors without reimplementing spatial meaning.
+
+## License and usage
+
+This project is publicly viewable but is not open source.
+
+No license is granted for reuse, modification, redistribution, or incorporation into other works. All rights are reserved. See [`RIGHTS.md`](RIGHTS.md) for details.

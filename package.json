@@ -1,6 +1,7 @@
 {
   "name": "place-core",
   "version": "0.1.0",
+  "private": true,
   "description": "Semantic place, interior, portal and travel simulation core",
   "main": "./src/index.js",
   "types": "./src/index.d.ts",
@@ -41,7 +42,7 @@
     "navigation",
     "world"
   ],
-  "license": "ISC",
+  "license": "UNLICENSED",
   "devDependencies": {
     "world-core": "github:Technikhighknee/world-core#3257f0bb75ab000649f4e3ecc0660359c6d0c6f3",
     "typescript": "^5.9.0"
